@@ -183,7 +183,8 @@ export async function processWebhookEvent(input: {
   const { data, error } = await supabaseAdmin.rpc("ingest_inbound_message", {
     _connection_id: connectionId,
     _remote_jid: parsed.jid,
-    ...opt("_external_message_id", externalId),
+    // o parâmetro aceita nulo no banco (mensagem sem id externo)
+    _external_message_id: externalId ?? (null as unknown as string),
     ...opt("_push_name", firstString(body, ["pushName", "pushname", "notifyName", "senderName"])),
     _message_type: messageType,
     ...opt("_content", content),
