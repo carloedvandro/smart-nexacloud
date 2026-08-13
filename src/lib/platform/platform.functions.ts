@@ -161,22 +161,33 @@ export const provisionInstanceForCompany = createServerFn({ method: "POST" })
     return { id: id as string };
   });
 
-/** URL de webhook de uma instância (super administrador). */
+/**
+ * URL CENTRAL do webhook (super administrador).
+ * A mesma URL serve todas as instâncias — a MEGA envia a instance_key no payload.
+ */
 export const getPlatformWebhookUrl = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertPlatformAdmin(context.supabase as never);
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const origin = new URL(getRequest().url).origin;
+    return { url: `${origin}/api/public/whatsapp/webhook` };
+  });
+
+/** Configura o webhook central na MEGA para uma instância (super administrador). */
+export const configurePlatformWebhook = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     await assertPlatformAdmin(context.supabase as never);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin
-      .from("whatsapp_connections")
-      .select("webhook_token")
-      .eq("id", data.connectionId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!row) throw new Error("Instância inexistente.");
-
     const { getRequest } = await import("@tanstack/react-start/server");
-    const origin = new URL(getRequest().url).origin;
-    return { url: `${origin}/api/public/whatsapp/webhook/${row.webhook_token}` };
+    const url = `${new URL(getRequest().url).origin}/api/public/whatsapp/webhook`;
+
+    const { readInstanceWebhook, writeInstanceWebhook } = await import(
+      "@/lib/whatsapp/actions.server"
+    );
+    const applied = await writeInstanceWebhook(data.connectionId, url);
+    if (!applied.ok) throw new Error(applied.error ?? "Falha ao configurar o webhook.");
+    const current = await readInstanceWebhook(data.connectionId);
+    return { ok: true, url, current: current.url ?? null };
   });
