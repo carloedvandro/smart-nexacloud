@@ -4,7 +4,7 @@
  * do cliente jamais é considerado.
  * Browser-safe (sem segredos): apenas leitura do payload.
  */
-const KEY_NAMES = /^(instance_?key|instancekey|instance|instance_?id|instanceName|instance_?name|key)$/i;
+const KEY_NAMES = /^(instance_?key|instance|instance_?id|instance_?name)$/i;
 
 export function extractInstanceKey(payload: unknown): string | null {
   const stack: Array<{ node: unknown; depth: number }> = [{ node: payload, depth: 0 }];
