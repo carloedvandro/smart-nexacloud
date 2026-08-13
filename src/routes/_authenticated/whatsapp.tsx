@@ -492,52 +492,95 @@ function HistoryDialog({
 
 function WebhookCard({ instances }: { instances: WhatsAppInstance[] }) {
   const fetchUrl = useServerFn(getWhatsAppWebhookUrl);
+  const configure = useServerFn(configureInstanceWebhook);
+  const checkConfig = useServerFn(getInstanceWebhookConfig);
   const [selected, setSelected] = useState<string>("");
   const [url, setUrl] = useState<string>("");
+  const [current, setCurrent] = useState<string | null>(null);
 
   return (
     <Card className="shadow-panel">
       <CardHeader>
-        <CardTitle className="text-base">Webhook da instância</CardTitle>
+        <CardTitle className="text-base">Webhook central</CardTitle>
         <CardDescription>
-          Cadastre esta URL na MEGA API para receber mensagens, status de entrega e eventos de
-          conexão. Cada instância tem uma URL própria e secreta.
+          O NexaAtende usa uma única URL de webhook para todas as instâncias. A MEGA API envia a
+          instance_key no payload e o sistema identifica sozinho a conexão, a empresa e o lead.
+          Eventos a habilitar: mensagens recebidas, enviadas, atualizadas, status de envio, receipt
+          e QR Code. Deixe desativados grupos, participantes, contatos e reações.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-wrap items-end gap-2">
-        <div className="min-w-56 flex-1 space-y-1.5">
-          <Label>Instância</Label>
-          <Select value={selected} onValueChange={setSelected}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-            <SelectContent>
-              {instances.map((instance) => (
-                <SelectItem key={instance.id} value={instance.id}>
-                  {instance.name ?? instance.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                const result = await fetchUrl({});
+                setUrl(result.url);
+                await navigator.clipboard.writeText(result.url).catch(() => undefined);
+                toast.success("URL do webhook copiada.");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Falha ao obter a URL.");
+              }
+            }}
+          >
+            Mostrar e copiar URL
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          disabled={!selected}
-          onClick={async () => {
-            try {
-              const result = await fetchUrl({ data: { connectionId: selected } });
-              setUrl(result.url);
-              await navigator.clipboard.writeText(result.url).catch(() => undefined);
-              toast.success("URL do webhook copiada.");
-            } catch (error) {
-              toast.error(error instanceof Error ? error.message : "Falha ao gerar a URL.");
-            }
-          }}
-        >
-          Mostrar e copiar
-        </Button>
         {url ? (
           <p className="w-full break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">{url}</p>
+        ) : null}
+
+        <div className="flex flex-wrap items-end gap-2 border-t pt-3">
+          <div className="min-w-56 flex-1 space-y-1.5">
+            <Label>Configurar automaticamente na MEGA</Label>
+            <Select value={selected} onValueChange={setSelected}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a instância" />
+              </SelectTrigger>
+              <SelectContent>
+                {instances.map((instance) => (
+                  <SelectItem key={instance.id} value={instance.id}>
+                    {instance.name ?? instance.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="outline"
+            disabled={!selected}
+            onClick={async () => {
+              try {
+                const result = await checkConfig({ data: { connectionId: selected } });
+                if (!result.ok) throw new Error(result.error ?? "Falha na consulta.");
+                setCurrent(result.url ?? "nenhum webhook configurado");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Falha ao consultar.");
+              }
+            }}
+          >
+            Consultar
+          </Button>
+          <Button
+            disabled={!selected}
+            onClick={async () => {
+              try {
+                const result = await configure({ data: { connectionId: selected } });
+                setCurrent(result.url);
+                toast.success("Webhook configurado na MEGA API.");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Falha ao configurar.");
+              }
+            }}
+          >
+            Configurar
+          </Button>
+        </div>
+        {current ? (
+          <p className="w-full break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">
+            Webhook atual: {current}
+          </p>
         ) : null}
       </CardContent>
     </Card>
