@@ -28,7 +28,9 @@ import { WHATSAPP_INSTANCE_STATUS_LABEL } from "@/lib/nexa/domain";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
   assignWhatsAppInstance,
+  configureInstanceWebhook,
   connectWhatsAppInstance,
+  getInstanceWebhookConfig,
   getWhatsAppWebhookUrl,
   listInstanceHistory,
   listWhatsAppInstances,
