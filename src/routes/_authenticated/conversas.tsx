@@ -1,8 +1,45 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Bot, Check, Search, Send, UserCheck, X } from "lucide-react";
+import { toast } from "sonner";
 
-import { ModulePage } from "@/components/nexa/module-page";
+import { AppShell } from "@/components/nexa/app-shell";
+import { ConversationStatusBadge } from "@/components/nexa/status-badge";
+import { LeadDetailSheet } from "@/components/nexa/lead-detail-sheet";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  CONVERSATION_STATUS_LABEL,
+  OPEN_CONVERSATION_STATUSES,
+  type ConversationStatus,
+} from "@/lib/nexa/domain";
+import {
+  assignConversation,
+  listConsultants,
+  listConversations,
+  listMessages,
+  markConversationRead,
+  sendMessage,
+  setConversationStatus,
+  type ConversationListItem,
+  type MessageRow,
+} from "@/lib/nexa/crm";
+import { PhoneNormalizationService } from "@/lib/nexa/phone";
+import { cn } from "@/lib/utils";
+
+type ConversasSearch = { c?: string };
 
 export const Route = createFileRoute("/_authenticated/conversas")({
+  validateSearch: (search: Record<string, unknown>): ConversasSearch =>
+    typeof search["c"] === "string" ? { c: search["c"] } : {},
   head: () => ({
     meta: [
       { title: "Conversas — NexaAtende" },
@@ -15,19 +52,363 @@ export const Route = createFileRoute("/_authenticated/conversas")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: () => (
-    <ModulePage
-      title="Conversas"
-      description="Central de atendimento em tempo real"
-      phase="Fase 3 e 4"
-      scope={[
-        "Lista de conversas por situação (IA, fila, atribuída, humano ativo, encerrada)",
-        "Thread de mensagens com paginação e mídias privadas",
-        "Envio de texto e áudio pela camada de serviço do WhatsApp",
-        "Resumo da IA e memória do lead no painel lateral",
-        "Assumir, transferir e encerrar atendimento com registro de eventos",
-        "Atualização automática via tempo real, sem recarregar a página",
-      ]}
-    />
-  ),
+  component: ConversasPage,
 });
+
+const FILTERS: { key: string; label: string; statuses: ConversationStatus[] }[] = [
+  { key: "OPEN", label: "Abertas", statuses: OPEN_CONVERSATION_STATUSES },
+  { key: "AI_ACTIVE", label: "IA", statuses: ["AI_ACTIVE"] },
+  { key: "QUEUE", label: "Fila", statuses: ["WAITING_HUMAN", "QUEUED"] },
+  { key: "MINE", label: "Minhas", statuses: OPEN_CONVERSATION_STATUSES },
+  { key: "CLOSED", label: "Encerradas", statuses: ["CLOSED"] },
+];
+
+function ConversasPage() {
+  const { companyId, user, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { c: selectedId } = Route.useSearch();
+
+  const [filter, setFilter] = useState("OPEN");
+  const [search, setSearch] = useState("");
+  const [leadSheet, setLeadSheet] = useState<string | null>(null);
+
+  const active = FILTERS.find((f) => f.key === filter) ?? FILTERS[0]!;
+
+  const listKey = ["conversations", companyId, filter, search];
+  const { data: conversations, isLoading } = useQuery({
+    queryKey: listKey,
+    queryFn: () =>
+      listConversations({
+        companyId: companyId as string,
+        statuses: active.statuses,
+        assignedTo: filter === "MINE" ? (user?.id ?? null) : null,
+        search,
+      }),
+    enabled: Boolean(companyId),
+  });
+
+  const selected = useMemo(
+    () => (conversations ?? []).find((c) => c.id === selectedId) ?? null,
+    [conversations, selectedId],
+  );
+
+  useEffect(() => {
+    if (!companyId) return;
+    const channel = supabase
+      .channel("conversations-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["conversations", companyId] });
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        void queryClient.invalidateQueries({ queryKey: ["conversations", companyId] });
+        const convId = (payload.new as { conversation_id?: string }).conversation_id;
+        if (convId) void queryClient.invalidateQueries({ queryKey: ["messages", convId] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [companyId, queryClient]);
+
+  function select(id: string) {
+    void navigate({ to: "/conversas", search: { c: id } });
+    void markConversationRead(id);
+  }
+
+  return (
+    <AppShell title="Conversas" description="Central de atendimento em tempo real">
+      <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
+        <Card className="flex h-[calc(100vh-10rem)] flex-col shadow-panel">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar lead ou telefone"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {FILTERS.map((f) => (
+                <Button
+                  key={f.key}
+                  size="sm"
+                  variant={filter === f.key ? "default" : "outline"}
+                  onClick={() => setFilter(f.key)}
+                >
+                  {f.label}
+                </Button>
+              ))}
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+              {isLoading ? (
+                Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
+              ) : (conversations ?? []).length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  Nenhuma conversa neste filtro.
+                </p>
+              ) : (
+                (conversations ?? []).map((conv) => (
+                  <button
+                    key={conv.id}
+                    onClick={() => select(conv.id)}
+                    className={cn(
+                      "w-full rounded-lg border border-transparent p-3 text-left transition-colors hover:bg-muted",
+                      selectedId === conv.id && "border-border bg-muted",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium">
+                        {conv.lead?.name ?? PhoneNormalizationService.format(conv.lead?.whatsapp)}
+                      </span>
+                      {conv.unread_count > 0 ? (
+                        <Badge className="shrink-0">{conv.unread_count}</Badge>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <ConversationStatusBadge status={conv.status as ConversationStatus} />
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {conv.last_message_at
+                          ? new Date(conv.last_message_at).toLocaleTimeString("pt-BR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ""}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {conv.consultant?.full_name ?? conv.consultant?.email ?? "Sem consultor"}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {selected ? (
+          <ConversationThread
+            key={selected.id}
+            conversation={selected}
+            isAdmin={isAdmin}
+            currentUserId={user?.id ?? null}
+            companyId={companyId as string}
+            onOpenLead={() => selected.lead && setLeadSheet(selected.lead.id)}
+          />
+        ) : (
+          <Card className="flex h-[calc(100vh-10rem)] items-center justify-center shadow-panel">
+            <p className="text-sm text-muted-foreground">Selecione uma conversa para atender.</p>
+          </Card>
+        )}
+      </div>
+
+      <LeadDetailSheet leadId={leadSheet} onOpenChange={(open) => !open && setLeadSheet(null)} />
+    </AppShell>
+  );
+}
+
+function ConversationThread({
+  conversation,
+  isAdmin,
+  currentUserId,
+  companyId,
+  onOpenLead,
+}: {
+  conversation: ConversationListItem;
+  isAdmin: boolean;
+  currentUserId: string | null;
+  companyId: string;
+  onOpenLead: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState("");
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  const { data: messages, isLoading } = useQuery({
+    queryKey: ["messages", conversation.id],
+    queryFn: () => listMessages(conversation.id),
+  });
+
+  const { data: consultants } = useQuery({
+    queryKey: ["consultants", companyId],
+    queryFn: () => listConsultants(companyId),
+  });
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["messages", conversation.id] });
+    void queryClient.invalidateQueries({ queryKey: ["conversations", companyId] });
+  };
+
+  const send = useMutation({
+    mutationFn: () =>
+      sendMessage({
+        conversationId: conversation.id,
+        content: draft.trim(),
+        senderType: isAdmin ? "admin" : "consultant",
+      }),
+    onSuccess: () => {
+      setDraft("");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const assign = useMutation({
+    mutationFn: (consultantId: string) =>
+      assignConversation(conversation.id, consultantId === "NONE" ? null : consultantId),
+    onSuccess: () => {
+      toast.success("Atendimento atualizado");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const changeStatus = useMutation({
+    mutationFn: (status: ConversationStatus) => setConversationStatus(conversation.id, status),
+    onSuccess: refresh,
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const isMine = conversation.assigned_user_id === currentUserId;
+  const canWrite = isAdmin || isMine;
+
+  return (
+    <Card className="flex h-[calc(100vh-10rem)] flex-col shadow-panel">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+        <button className="min-w-0 flex-1 text-left" onClick={onOpenLead}>
+          <p className="truncate text-sm font-semibold">
+            {conversation.lead?.name ?? "Lead sem nome"}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            {PhoneNormalizationService.format(conversation.lead?.whatsapp)}
+          </p>
+        </button>
+        <ConversationStatusBadge status={conversation.status as ConversationStatus} />
+
+        {isAdmin ? (
+          <Select
+            value={conversation.assigned_user_id ?? "NONE"}
+            onValueChange={(v) => assign.mutate(v)}
+          >
+            <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NONE">Sem consultor</SelectItem>
+              {(consultants ?? []).map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.full_name ?? c.email}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        {!isMine && currentUserId ? (
+          <Button size="sm" variant="outline" onClick={() => assign.mutate(currentUserId)}>
+            <UserCheck className="size-4" /> Assumir
+          </Button>
+        ) : null}
+
+        {conversation.status !== "CLOSED" ? (
+          <Button size="sm" variant="outline" onClick={() => changeStatus.mutate("CLOSED")}>
+            <Check className="size-4" /> Encerrar
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => changeStatus.mutate("HUMAN_ACTIVE")}>
+            <X className="size-4" /> Reabrir
+          </Button>
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-muted/30 p-4">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-2/3" />)
+        ) : (messages ?? []).length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Nenhuma mensagem nesta conversa ainda.
+          </p>
+        ) : (
+          (messages ?? []).map((m) => <MessageBubble key={m.id} message={m} />)
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="border-t border-border p-3">
+        {conversation.status === "CLOSED" ? (
+          <p className="text-center text-sm text-muted-foreground">
+            Conversa encerrada. Reabra para responder.
+          </p>
+        ) : !canWrite ? (
+          <p className="text-center text-sm text-muted-foreground">
+            Assuma o atendimento para responder este cliente.
+          </p>
+        ) : (
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (draft.trim()) send.mutate();
+                }
+              }}
+              rows={2}
+              placeholder="Escreva sua mensagem… (Enter envia, Shift+Enter quebra linha)"
+            />
+            <Button disabled={!draft.trim() || send.isPending} onClick={() => send.mutate()}>
+              <Send className="size-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function MessageBubble({ message }: { message: MessageRow }) {
+  const isCustomer = message.sender_type === "customer";
+  const isSystem = message.sender_type === "system";
+  const isAi = message.sender_type === "ai";
+
+  if (isSystem) {
+    return (
+      <p className="text-center text-xs text-muted-foreground">{message.content}</p>
+    );
+  }
+
+  return (
+    <div className={cn("flex", isCustomer ? "justify-start" : "justify-end")}>
+      <div
+        className={cn(
+          "max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm",
+          isCustomer
+            ? "rounded-bl-sm bg-card text-card-foreground"
+            : isAi
+              ? "rounded-br-sm bg-primary/10 text-foreground"
+              : "rounded-br-sm bg-primary text-primary-foreground",
+        )}
+      >
+        {!isCustomer ? (
+          <p className="mb-1 flex items-center gap-1 text-[11px] opacity-80">
+            {isAi ? <Bot className="size-3" /> : null}
+            {isAi ? "IA" : (message.sender_name ?? "Consultor")}
+          </p>
+        ) : null}
+        <p className="whitespace-pre-wrap">{message.content ?? "(mídia)"}</p>
+        <p className="mt-1 text-right text-[10px] opacity-70">
+          {new Date(message.created_at).toLocaleTimeString("pt-BR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export const CONVERSATION_LABELS = CONVERSATION_STATUS_LABEL;
