@@ -73,15 +73,18 @@ export async function upsertLead(input: {
   source?: LeadSource;
   assignedUserId?: string | null;
 }) {
-  const { data, error } = await supabase.rpc("upsert_lead", {
-    _name: input.name || undefined,
-    _phone: input.phone || undefined,
-    _email: input.email || undefined,
-    _city: input.city || undefined,
-    _state: input.state || undefined,
-    _source: input.source ?? "outro",
-    _assigned_user_id: input.assignedUserId ?? undefined,
-  });
+  const args: Record<string, unknown> = { _source: input.source ?? "outro" };
+  if (input.name) args["_name"] = input.name;
+  if (input.phone) args["_phone"] = input.phone;
+  if (input.email) args["_email"] = input.email;
+  if (input.city) args["_city"] = input.city;
+  if (input.state) args["_state"] = input.state;
+  if (input.assignedUserId) args["_assigned_user_id"] = input.assignedUserId;
+
+  const { data, error } = await supabase.rpc(
+    "upsert_lead",
+    args as Parameters<typeof supabase.rpc<"upsert_lead">>[1],
+  );
   if (error) throw new Error(error.message);
   return data as string;
 }
