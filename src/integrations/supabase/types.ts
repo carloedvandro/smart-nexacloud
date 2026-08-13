@@ -1113,10 +1113,13 @@ export type Database = {
       }
       whatsapp_connections: {
         Row: {
+          assigned_at: string | null
+          assigned_by: string | null
           company_id: string
           created_at: string
           id: string
           instance_id: string | null
+          instance_number: number | null
           last_connected_at: string | null
           last_disconnected_at: string | null
           last_event_at: string | null
@@ -1124,6 +1127,8 @@ export type Database = {
           name: string | null
           phone_number: string | null
           provider: string
+          provisioned_at: string
+          provisioned_by: string | null
           qr_code: string | null
           qr_code_status: string | null
           status: Database["public"]["Enums"]["whatsapp_connection_status"]
@@ -1132,10 +1137,13 @@ export type Database = {
           webhook_token: string
         }
         Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
           company_id: string
           created_at?: string
           id?: string
           instance_id?: string | null
+          instance_number?: number | null
           last_connected_at?: string | null
           last_disconnected_at?: string | null
           last_event_at?: string | null
@@ -1143,6 +1151,8 @@ export type Database = {
           name?: string | null
           phone_number?: string | null
           provider?: string
+          provisioned_at?: string
+          provisioned_by?: string | null
           qr_code?: string | null
           qr_code_status?: string | null
           status?: Database["public"]["Enums"]["whatsapp_connection_status"]
@@ -1151,10 +1161,13 @@ export type Database = {
           webhook_token?: string
         }
         Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
           company_id?: string
           created_at?: string
           id?: string
           instance_id?: string | null
+          instance_number?: number | null
           last_connected_at?: string | null
           last_disconnected_at?: string | null
           last_event_at?: string | null
@@ -1162,6 +1175,8 @@ export type Database = {
           name?: string | null
           phone_number?: string | null
           provider?: string
+          provisioned_at?: string
+          provisioned_by?: string | null
           qr_code?: string | null
           qr_code_status?: string | null
           status?: Database["public"]["Enums"]["whatsapp_connection_status"]
@@ -1171,10 +1186,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "whatsapp_connections_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "whatsapp_connections_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_connections_provisioned_by_fkey"
+            columns: ["provisioned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -1285,6 +1314,87 @@ export type Database = {
           },
         ]
       }
+      whatsapp_instance_assignments: {
+        Row: {
+          assigned_by: string | null
+          company_id: string
+          connection_id: string
+          created_at: string
+          ended_at: string | null
+          id: string
+          phone_number: string | null
+          release_reason: string | null
+          released_by: string | null
+          started_at: string
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          assigned_by?: string | null
+          company_id: string
+          connection_id: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          phone_number?: string | null
+          release_reason?: string | null
+          released_by?: string | null
+          started_at?: string
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          assigned_by?: string | null
+          company_id?: string
+          connection_id?: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          phone_number?: string | null
+          release_reason?: string | null
+          released_by?: string | null
+          started_at?: string
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instance_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_instance_assignments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_instance_assignments_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_instance_assignments_released_by_fkey"
+            columns: ["released_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_instance_assignments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1356,6 +1466,7 @@ export type Database = {
         Returns: Json
       }
       is_company_admin: { Args: never; Returns: boolean }
+      is_platform_admin: { Args: never; Returns: boolean }
       mark_conversation_read: {
         Args: { _conversation_id: string }
         Returns: undefined
@@ -1427,7 +1538,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "ADMIN" | "CONSULTANT"
+      app_role: "ADMIN" | "CONSULTANT" | "PLATFORM_ADMIN"
       assignment_attempt_status:
         | "WAITING"
         | "RESPONDED"
@@ -1501,6 +1612,8 @@ export type Database = {
         | "CONNECTED"
         | "ERROR"
         | "LOGGED_OUT"
+        | "AVAILABLE"
+        | "BLOCKED"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1628,7 +1741,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["ADMIN", "CONSULTANT"],
+      app_role: ["ADMIN", "CONSULTANT", "PLATFORM_ADMIN"],
       assignment_attempt_status: [
         "WAITING",
         "RESPONDED",
@@ -1710,6 +1823,8 @@ export const Constants = {
         "CONNECTED",
         "ERROR",
         "LOGGED_OUT",
+        "AVAILABLE",
+        "BLOCKED",
       ],
     },
   },
