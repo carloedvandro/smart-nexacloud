@@ -123,7 +123,40 @@ export const MegaApiService = {
       { method: "DELETE" },
     );
   },
+
+  /** Consulta o webhook configurado atualmente para a instância. */
+  getWebhook(creds: MegaCredentials) {
+    return request<Record<string, unknown>>(creds, `/rest/webhook/${creds.instanceKey}`);
+  },
+
+  /** Configura/reconfigura o webhook central para a instância. */
+  setWebhook(creds: MegaCredentials, webhookUrl: string) {
+    return request<Record<string, unknown>>(
+      creds,
+      `/rest/webhook/${creds.instanceKey}/configWebhook`,
+      {
+        method: "POST",
+        body: { webhookData: { webhookUrl, webhookEnabled: true } },
+      },
+    );
+  },
 };
+
+/** Extrai a URL de webhook informada pela MEGA API em qualquer formato. */
+export function extractWebhookUrl(payload: unknown): string | null {
+  const stack: unknown[] = [payload];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (typeof value === "string" && /webhook.*url|url/i.test(key) && /^https?:\/\//i.test(value)) {
+        return value;
+      }
+      if (value && typeof value === "object") stack.push(value);
+    }
+  }
+  return null;
+}
 
 /** Extrai o número conectado das várias formas de resposta da MEGA API. */
 export function extractConnectedPhone(payload: unknown): string | null {
