@@ -186,24 +186,22 @@ function WhatsAppPage() {
   const available = instances.filter((i) => !i.assignedUserId).length;
 
   return (
-    <AppShell>
-      <div className="space-y-6 p-6">
+    <AppShell
+      title="Instâncias de WhatsApp"
+      description="Conexões contratadas pela empresa. A instância é permanente — o colaborador e o número podem mudar sem perder o histórico."
+      actions={
+        platformAdminQuery.data ? (
+          <Button size="sm" onClick={() => setProvisionOpen(true)}>
+            Provisionar instância
+          </Button>
+        ) : null
+      }
+    >
+      <div className="space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Instâncias de WhatsApp</h1>
-            <p className="text-sm text-muted-foreground">
-              Conexões contratadas pela empresa. A instância é permanente — o colaborador e o número
-              podem mudar sem perder o histórico.
-            </p>
-          </div>
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{instances.length} contratadas</Badge>
             <Badge variant="outline">{available} disponíveis</Badge>
-            {platformAdminQuery.data ? (
-              <Button size="sm" onClick={() => setProvisionOpen(true)}>
-                Provisionar instância
-              </Button>
-            ) : null}
           </div>
         </header>
 
