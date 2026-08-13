@@ -1,24 +1,96 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Bot, ShieldCheck, Timer, Workflow } from "lucide-react";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
+import { NexaLogo } from "@/components/nexa/logo";
+import { Button } from "@/components/ui/button";
+
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "NexaAtende — Atendimento inteligente para leads de WhatsApp" },
+      {
+        name: "description",
+        content:
+          "Plataforma de atendimento com IA, fila automática com SLA e CRM de leads no WhatsApp. Leads nunca mais sem resposta.",
+      },
+      { property: "og:title", content: "NexaAtende — Atendimento inteligente" },
+      {
+        property: "og:description",
+        content:
+          "IA de qualificação, fila automática com SLA e CRM de leads integrados ao WhatsApp.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: Landing,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+const PILLARS = [
+  {
+    icon: Bot,
+    title: "IA que qualifica",
+    text: "Responde na hora, coleta os dados do lead e nunca inventa preço, cobertura ou carência.",
+  },
+  {
+    icon: Timer,
+    title: "SLA de 60 segundos",
+    text: "Contador no servidor, reatribuição automática e nenhum lead esquecido na fila.",
+  },
+  {
+    icon: Workflow,
+    title: "Fila com rodízio",
+    text: "Distribuição justa entre consultores online, respeitando limite de atendimentos.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Seguro por padrão",
+    text: "Isolamento total por empresa, papéis de acesso e trilha de auditoria desde o primeiro dia.",
+  },
+];
+
+function Landing() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="min-h-screen bg-background">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+        <NexaLogo />
+        <Button asChild variant="outline">
+          <Link to="/auth">Entrar</Link>
+        </Button>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-6 pb-24">
+        <section className="py-16 text-center">
+          <p className="text-sm font-medium tracking-widest text-primary uppercase">
+            Plataforma de atendimento
+          </p>
+          <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+            Atendimento inteligente. Leads nunca mais sem resposta.
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground">
+            IA de primeiro atendimento, transferência para consultores humanos com SLA controlado e
+            um CRM que guarda a memória de cada cliente.
+          </p>
+          <div className="mt-8 flex justify-center gap-3">
+            <Button asChild size="lg">
+              <Link to="/auth">Acessar o sistema</Link>
+            </Button>
+          </div>
+        </section>
+
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {PILLARS.map((pillar) => (
+            <article
+              key={pillar.title}
+              className="bg-surface-gradient rounded-xl border border-border p-6 shadow-panel"
+            >
+              <pillar.icon className="size-5 text-primary" />
+              <h2 className="mt-4 text-sm font-semibold">{pillar.title}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">{pillar.text}</p>
+            </article>
+          ))}
+        </section>
+      </main>
     </div>
   );
 }

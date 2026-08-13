@@ -17,6 +17,7 @@ import { Route as AuthenticatedConhecimentoRouteImport } from './routes/_authent
 import { Route as AuthenticatedConsultoresRouteImport } from './routes/_authenticated/consultores'
 import { Route as AuthenticatedConversasRouteImport } from './routes/_authenticated/conversas'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedFilaRouteImport } from './routes/_authenticated/fila'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authenticated/relatorios'
@@ -64,6 +65,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedFilaRoute = AuthenticatedFilaRouteImport.update({
+  id: '/fila',
+  path: '/fila',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/consultores': typeof AuthenticatedConsultoresRoute
   '/conversas': typeof AuthenticatedConversasRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/fila': typeof AuthenticatedFilaRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/relatorios': typeof AuthenticatedRelatoriosRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/consultores': typeof AuthenticatedConsultoresRoute
   '/conversas': typeof AuthenticatedConversasRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/fila': typeof AuthenticatedFilaRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/relatorios': typeof AuthenticatedRelatoriosRoute
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/_authenticated/consultores': typeof AuthenticatedConsultoresRoute
   '/_authenticated/conversas': typeof AuthenticatedConversasRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/fila': typeof AuthenticatedFilaRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/relatorios': typeof AuthenticatedRelatoriosRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/consultores'
     | '/conversas'
     | '/dashboard'
+    | '/fila'
     | '/leads'
     | '/onboarding'
     | '/relatorios'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/consultores'
     | '/conversas'
     | '/dashboard'
+    | '/fila'
     | '/leads'
     | '/onboarding'
     | '/relatorios'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/_authenticated/consultores'
     | '/_authenticated/conversas'
     | '/_authenticated/dashboard'
+    | '/_authenticated/fila'
     | '/_authenticated/leads'
     | '/_authenticated/onboarding'
     | '/_authenticated/relatorios'
@@ -233,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/fila': {
+      id: '/_authenticated/fila'
+      path: '/fila'
+      fullPath: '/fila'
+      preLoaderRoute: typeof AuthenticatedFilaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/leads': {
       id: '/_authenticated/leads'
       path: '/leads'
@@ -270,6 +289,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedConsultoresRoute: typeof AuthenticatedConsultoresRoute
   AuthenticatedConversasRoute: typeof AuthenticatedConversasRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedFilaRoute: typeof AuthenticatedFilaRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedRelatoriosRoute: typeof AuthenticatedRelatoriosRoute
@@ -282,6 +302,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedConsultoresRoute: AuthenticatedConsultoresRoute,
   AuthenticatedConversasRoute: AuthenticatedConversasRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedFilaRoute: AuthenticatedFilaRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedRelatoriosRoute: AuthenticatedRelatoriosRoute,
