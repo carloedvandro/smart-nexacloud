@@ -230,7 +230,9 @@ function PlatformPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Instâncias provisionadas</CardTitle>
             <CardDescription>
-              Copie a URL do webhook de cada instância e cadastre-a na MEGA API.
+              Todas as instâncias usam a MESMA URL central de webhook — a MEGA API envia a
+              instance_key no payload e o sistema identifica a conexão. Use "Configurar" para
+              aplicar a URL automaticamente na instância.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
