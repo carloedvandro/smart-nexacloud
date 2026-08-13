@@ -13,8 +13,9 @@ type MessageType = "text" | "audio" | "image" | "document" | "video" | "system" 
 
 const MEDIA_BUCKET = "conversation-media";
 
-function orUndef<T>(value: T | null | undefined): T | undefined {
-  return value ?? undefined;
+/** Inclui a chave apenas quando há valor (exactOptionalPropertyTypes). */
+function opt<K extends string, T>(key: K, value: T | null | undefined) {
+  return (value === null || value === undefined ? {} : { [key]: value }) as Partial<Record<K, T>>;
 }
 
 function pick(obj: unknown, path: string): unknown {
@@ -128,7 +129,7 @@ export async function processWebhookEvent(input: {
       _company_id: companyId,
       _external_message_id: externalId,
       _status: mappedStatus,
-      _reason: orUndef(firstString(body, ["reason", "error", "message"])),
+      ...opt("_reason", firstString(body, ["reason", "error", "message"])),
     });
     return data ? { status: "processed" } : { status: "ignored", reason: "mensagem desconhecida" };
   }
@@ -182,12 +183,12 @@ export async function processWebhookEvent(input: {
   const { data, error } = await supabaseAdmin.rpc("ingest_inbound_message", {
     _connection_id: connectionId,
     _remote_jid: parsed.jid,
-    _external_message_id: orUndef(externalId),
-    _push_name: orUndef(firstString(body, ["pushName", "pushname", "notifyName", "senderName"])),
+    ...opt("_external_message_id", externalId),
+    ...opt("_push_name", firstString(body, ["pushName", "pushname", "notifyName", "senderName"])),
     _message_type: messageType,
-    _content: orUndef(content),
-    _media_url: orUndef(mediaUrl),
-    _mime_type: orUndef(mimeType),
+    ...opt("_content", content),
+    ...opt("_media_url", mediaUrl),
+    ...opt("_mime_type", mimeType),
     _metadata: { remote_jid: parsed.jid, is_lid: parsed.isLid, event: eventType },
   });
 
@@ -219,8 +220,8 @@ async function handleConnectionEvent(connectionId: string, eventType: string, pa
   await supabaseAdmin.rpc("set_instance_connection_state", {
     _connection_id: connectionId,
     _status: status,
-    _phone_number: orUndef(extractConnectedPhone(payload)),
-    _qr_code_status: raw || undefined,
+    ...opt("_phone_number", extractConnectedPhone(payload)),
+    ...opt("_qr_code_status", raw || null),
   });
 }
 
