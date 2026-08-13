@@ -83,7 +83,7 @@ export async function upsertLead(input: {
 
   const { data, error } = await supabase.rpc(
     "upsert_lead",
-    args as Parameters<typeof supabase.rpc<"upsert_lead">>[1],
+    args as unknown as { _source: LeadSource },
   );
   if (error) throw new Error(error.message);
   return data as string;
