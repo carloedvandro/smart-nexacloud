@@ -4,7 +4,12 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
-import { MegaApiService, extractConnectedPhone, extractQrCode } from "@/lib/whatsapp/mega.server";
+import {
+  MegaApiService,
+  extractConnectedPhone,
+  extractQrCode,
+  extractWebhookUrl,
+} from "@/lib/whatsapp/mega.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
 
 export type InstanceStateResult = {
