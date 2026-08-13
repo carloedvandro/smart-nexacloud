@@ -783,51 +783,81 @@ export type Database = {
       messages: {
         Row: {
           company_id: string
+          connection_id: string | null
           content: string | null
           conversation_id: string
           created_at: string
+          delivered_at: string | null
+          delivery_status: Database["public"]["Enums"]["message_delivery_status"]
           external_message_id: string | null
+          failed_at: string | null
+          failed_reason: string | null
           id: string
+          max_send_attempts: number
           media_url: string | null
           message_type: Database["public"]["Enums"]["message_type"]
           metadata: Json
           mime_type: string | null
+          next_retry_at: string | null
+          read_at: string | null
+          send_attempts: number
           sender_id: string | null
           sender_name: string | null
           sender_type: Database["public"]["Enums"]["sender_type"]
           transcription: string | null
+          transcription_status: Database["public"]["Enums"]["transcription_status"]
         }
         Insert: {
           company_id: string
+          connection_id?: string | null
           content?: string | null
           conversation_id: string
           created_at?: string
+          delivered_at?: string | null
+          delivery_status?: Database["public"]["Enums"]["message_delivery_status"]
           external_message_id?: string | null
+          failed_at?: string | null
+          failed_reason?: string | null
           id?: string
+          max_send_attempts?: number
           media_url?: string | null
           message_type?: Database["public"]["Enums"]["message_type"]
           metadata?: Json
           mime_type?: string | null
+          next_retry_at?: string | null
+          read_at?: string | null
+          send_attempts?: number
           sender_id?: string | null
           sender_name?: string | null
           sender_type: Database["public"]["Enums"]["sender_type"]
           transcription?: string | null
+          transcription_status?: Database["public"]["Enums"]["transcription_status"]
         }
         Update: {
           company_id?: string
+          connection_id?: string | null
           content?: string | null
           conversation_id?: string
           created_at?: string
+          delivered_at?: string | null
+          delivery_status?: Database["public"]["Enums"]["message_delivery_status"]
           external_message_id?: string | null
+          failed_at?: string | null
+          failed_reason?: string | null
           id?: string
+          max_send_attempts?: number
           media_url?: string | null
           message_type?: Database["public"]["Enums"]["message_type"]
           metadata?: Json
           mime_type?: string | null
+          next_retry_at?: string | null
+          read_at?: string | null
+          send_attempts?: number
           sender_id?: string | null
           sender_name?: string | null
           sender_type?: Database["public"]["Enums"]["sender_type"]
           transcription?: string | null
+          transcription_status?: Database["public"]["Enums"]["transcription_status"]
         }
         Relationships: [
           {
@@ -835,6 +865,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
             referencedColumns: ["id"]
           },
           {
@@ -1082,14 +1119,17 @@ export type Database = {
           instance_id: string | null
           last_connected_at: string | null
           last_disconnected_at: string | null
+          last_event_at: string | null
           metadata: Json
           name: string | null
           phone_number: string | null
           provider: string
+          qr_code: string | null
           qr_code_status: string | null
           status: Database["public"]["Enums"]["whatsapp_connection_status"]
           updated_at: string
           user_id: string | null
+          webhook_token: string
         }
         Insert: {
           company_id: string
@@ -1098,14 +1138,17 @@ export type Database = {
           instance_id?: string | null
           last_connected_at?: string | null
           last_disconnected_at?: string | null
+          last_event_at?: string | null
           metadata?: Json
           name?: string | null
           phone_number?: string | null
           provider?: string
+          qr_code?: string | null
           qr_code_status?: string | null
           status?: Database["public"]["Enums"]["whatsapp_connection_status"]
           updated_at?: string
           user_id?: string | null
+          webhook_token?: string
         }
         Update: {
           company_id?: string
@@ -1114,14 +1157,17 @@ export type Database = {
           instance_id?: string | null
           last_connected_at?: string | null
           last_disconnected_at?: string | null
+          last_event_at?: string | null
           metadata?: Json
           name?: string | null
           phone_number?: string | null
           provider?: string
+          qr_code?: string | null
           qr_code_status?: string | null
           status?: Database["public"]["Enums"]["whatsapp_connection_status"]
           updated_at?: string
           user_id?: string | null
+          webhook_token?: string
         }
         Relationships: [
           {
@@ -1136,6 +1182,51 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_credentials: {
+        Row: {
+          api_host: string | null
+          api_key: string | null
+          company_id: string
+          connection_id: string
+          created_at: string
+          instance_key: string
+          updated_at: string
+        }
+        Insert: {
+          api_host?: string | null
+          api_key?: string | null
+          company_id: string
+          connection_id: string
+          created_at?: string
+          instance_key: string
+          updated_at?: string
+        }
+        Update: {
+          api_host?: string | null
+          api_key?: string | null
+          company_id?: string
+          connection_id?: string
+          created_at?: string
+          instance_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_credentials_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_credentials_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: true
+            referencedRelation: "whatsapp_connections"
             referencedColumns: ["id"]
           },
         ]
@@ -1215,7 +1306,30 @@ export type Database = {
         Args: { _document?: string; _legal_name?: string; _name: string }
         Returns: string
       }
+      create_outbound_message: {
+        Args: {
+          _company_id: string
+          _connection_id?: string
+          _content: string
+          _conversation_id: string
+          _media_url?: string
+          _message_type?: Database["public"]["Enums"]["message_type"]
+          _sender_id: string
+          _sender_name: string
+          _sender_type: Database["public"]["Enums"]["sender_type"]
+        }
+        Returns: string
+      }
       current_company_id: { Args: never; Returns: string }
+      finalize_outbound_message: {
+        Args: {
+          _external_message_id: string
+          _message_id: string
+          _reason?: string
+          _status: Database["public"]["Enums"]["message_delivery_status"]
+        }
+        Returns: undefined
+      }
       get_or_create_conversation: {
         Args: { _channel?: string; _lead_id: string }
         Returns: string
@@ -1226,6 +1340,20 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      ingest_inbound_message: {
+        Args: {
+          _connection_id: string
+          _content?: string
+          _external_message_id: string
+          _media_url?: string
+          _message_type?: Database["public"]["Enums"]["message_type"]
+          _metadata?: Json
+          _mime_type?: string
+          _push_name?: string
+          _remote_jid: string
+        }
+        Returns: Json
       }
       is_company_admin: { Args: never; Returns: boolean }
       mark_conversation_read: {
@@ -1264,6 +1392,15 @@ export type Database = {
           _status: Database["public"]["Enums"]["lead_status"]
         }
         Returns: undefined
+      }
+      update_message_delivery: {
+        Args: {
+          _company_id: string
+          _external_message_id: string
+          _reason?: string
+          _status: Database["public"]["Enums"]["message_delivery_status"]
+        }
+        Returns: boolean
       }
       upsert_lead: {
         Args: {
@@ -1337,6 +1474,12 @@ export type Database = {
         | "ARCHIVED"
         | "WAITING_HUMAN"
         | "WAITING_CUSTOMER"
+      message_delivery_status:
+        | "PENDING"
+        | "SENT"
+        | "DELIVERED"
+        | "READ"
+        | "FAILED"
       message_type:
         | "text"
         | "audio"
@@ -1346,6 +1489,12 @@ export type Database = {
         | "system"
         | "other"
       sender_type: "customer" | "ai" | "consultant" | "admin" | "system"
+      transcription_status:
+        | "NONE"
+        | "PENDING"
+        | "PROCESSING"
+        | "COMPLETED"
+        | "FAILED"
       whatsapp_connection_status:
         | "DISCONNECTED"
         | "CONNECTING"
@@ -1531,6 +1680,13 @@ export const Constants = {
         "WAITING_HUMAN",
         "WAITING_CUSTOMER",
       ],
+      message_delivery_status: [
+        "PENDING",
+        "SENT",
+        "DELIVERED",
+        "READ",
+        "FAILED",
+      ],
       message_type: [
         "text",
         "audio",
@@ -1541,6 +1697,13 @@ export const Constants = {
         "other",
       ],
       sender_type: ["customer", "ai", "consultant", "admin", "system"],
+      transcription_status: [
+        "NONE",
+        "PENDING",
+        "PROCESSING",
+        "COMPLETED",
+        "FAILED",
+      ],
       whatsapp_connection_status: [
         "DISCONNECTED",
         "CONNECTING",
