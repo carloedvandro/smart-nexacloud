@@ -209,18 +209,18 @@ export async function getOrCreateConversation(leadId: string) {
   return data as string;
 }
 
+/**
+ * Envia mensagem ao cliente. O envio real acontece no backend (MEGA API):
+ * a mensagem é registrada com status PENDING e atualizada para SENT/FAILED.
+ */
 export async function sendMessage(input: {
   conversationId: string;
   content: string;
-  senderType: Extract<SenderType, "consultant" | "admin">;
+  senderType?: Extract<SenderType, "consultant" | "admin">;
 }) {
-  const { error } = await supabase.rpc("post_message", {
-    _conversation_id: input.conversationId,
-    _sender_type: input.senderType,
-    _content: input.content,
-    _message_type: "text",
+  await sendWhatsAppMessage({
+    data: { conversationId: input.conversationId, content: input.content },
   });
-  if (error) throw new Error(error.message);
 }
 
 export async function assignConversation(conversationId: string, consultantId: string | null) {
