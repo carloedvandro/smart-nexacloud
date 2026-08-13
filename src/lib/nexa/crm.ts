@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import type { ConversationStatus, LeadStatus } from "@/lib/nexa/domain";
+import { sendWhatsAppMessage } from "@/lib/whatsapp/whatsapp.functions";
 
 type Tables = Database["public"]["Tables"];
 export type LeadRow = Tables["leads"]["Row"];
