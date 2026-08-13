@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { WHATSAPP_INSTANCE_STATUS_LABEL } from "@/lib/nexa/domain";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
+  configurePlatformWebhook,
   createPlatformCompany,
   getPlatformWebhookUrl,
   listPlatformCompanies,
