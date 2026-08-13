@@ -8,6 +8,7 @@ import {
   ListOrdered,
   BarChart3,
   Settings,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -84,5 +85,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Settings,
     roles: ["ADMIN"],
     description: "Empresa, horários e LGPD",
+  },
+  {
+    label: "Plataforma",
+    to: "/plataforma",
+    icon: ShieldCheck,
+    roles: ["PLATFORM_ADMIN"],
+    description: "Empresas e instâncias contratadas",
   },
 ];

@@ -117,7 +117,11 @@ export const ASSIGNMENT_ATTEMPT_STATUS = {
 } as const;
 export type AssignmentAttemptStatus = keyof typeof ASSIGNMENT_ATTEMPT_STATUS;
 
-export const APP_ROLE = { ADMIN: "ADMIN", CONSULTANT: "CONSULTANT" } as const;
+export const APP_ROLE = {
+  ADMIN: "ADMIN",
+  CONSULTANT: "CONSULTANT",
+  PLATFORM_ADMIN: "PLATFORM_ADMIN",
+} as const;
 export type AppRole = keyof typeof APP_ROLE;
 
 export const AUDIT_ACTION = {

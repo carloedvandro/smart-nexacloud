@@ -22,7 +22,7 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const { profile, isAdmin, loading, signOut } = useAuth();
+  const { profile, isAdmin, roles, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -37,7 +37,14 @@ export function AppShell({
     setMobileOpen(false);
   }, [pathname]);
 
-  const items = NAV_ITEMS.filter((item) => (isAdmin ? true : item.roles.includes("CONSULTANT")));
+  const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
+  const items = NAV_ITEMS.filter((item) =>
+    item.roles.includes("PLATFORM_ADMIN") && item.roles.length === 1
+      ? isPlatformAdmin
+      : isAdmin
+        ? true
+        : item.roles.includes("CONSULTANT"),
+  );
 
   async function handleSignOut() {
     await signOut();
