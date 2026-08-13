@@ -259,20 +259,39 @@ function PlatformPage() {
                         variant="ghost"
                         onClick={async () => {
                           try {
-                            const result = await webhookFn({ data: { connectionId: instance.id } });
+                            const result = await webhookFn({});
                             setWebhook({ id: instance.id, url: result.url });
                             await navigator.clipboard
                               .writeText(result.url)
                               .catch(() => undefined);
-                            toast.success("URL do webhook copiada.");
+                            toast.success("URL central do webhook copiada.");
                           } catch (error) {
                             toast.error(
-                              error instanceof Error ? error.message : "Falha ao gerar a URL.",
+                              error instanceof Error ? error.message : "Falha ao obter a URL.",
                             );
                           }
                         }}
                       >
                         Webhook
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const result = await configureWebhookFn({
+                              data: { connectionId: instance.id },
+                            });
+                            setWebhook({ id: instance.id, url: result.current ?? result.url });
+                            toast.success("Webhook configurado na MEGA API.");
+                          } catch (error) {
+                            toast.error(
+                              error instanceof Error ? error.message : "Falha ao configurar.",
+                            );
+                          }
+                        }}
+                      >
+                        Configurar
                       </Button>
                     </div>
                   </div>
