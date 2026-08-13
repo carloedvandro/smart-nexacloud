@@ -466,6 +466,7 @@ export type Database = {
           started_at: string
           status: Database["public"]["Enums"]["conversation_status"]
           summary: string | null
+          unread_count: number
           updated_at: string
         }
         Insert: {
@@ -482,6 +483,7 @@ export type Database = {
           started_at?: string
           status?: Database["public"]["Enums"]["conversation_status"]
           summary?: string | null
+          unread_count?: number
           updated_at?: string
         }
         Update: {
@@ -498,6 +500,7 @@ export type Database = {
           started_at?: string
           status?: Database["public"]["Enums"]["conversation_status"]
           summary?: string | null
+          unread_count?: number
           updated_at?: string
         }
         Relationships: [
@@ -1196,11 +1199,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assert_company_member: {
+        Args: { _company_id: string }
+        Returns: undefined
+      }
+      assign_conversation: {
+        Args: { _consultant_id: string; _conversation_id: string }
+        Returns: undefined
+      }
+      assign_lead: {
+        Args: { _consultant_id: string; _lead_id: string }
+        Returns: undefined
+      }
       bootstrap_company: {
         Args: { _document?: string; _legal_name?: string; _name: string }
         Returns: string
       }
       current_company_id: { Args: never; Returns: string }
+      get_or_create_conversation: {
+        Args: { _channel?: string; _lead_id: string }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1209,6 +1228,66 @@ export type Database = {
         Returns: boolean
       }
       is_company_admin: { Args: never; Returns: boolean }
+      mark_conversation_read: {
+        Args: { _conversation_id: string }
+        Returns: undefined
+      }
+      normalize_phone: { Args: { _raw: string }; Returns: string }
+      post_message: {
+        Args: {
+          _content?: string
+          _conversation_id: string
+          _external_message_id?: string
+          _media_url?: string
+          _message_type?: Database["public"]["Enums"]["message_type"]
+          _metadata?: Json
+          _mime_type?: string
+          _sender_name?: string
+          _sender_type: Database["public"]["Enums"]["sender_type"]
+        }
+        Returns: string
+      }
+      set_conversation_status: {
+        Args: {
+          _conversation_id: string
+          _status: Database["public"]["Enums"]["conversation_status"]
+        }
+        Returns: undefined
+      }
+      set_conversation_summary: {
+        Args: { _conversation_id: string; _summary: string }
+        Returns: undefined
+      }
+      set_lead_status: {
+        Args: {
+          _lead_id: string
+          _status: Database["public"]["Enums"]["lead_status"]
+        }
+        Returns: undefined
+      }
+      upsert_lead: {
+        Args: {
+          _assigned_user_id?: string
+          _city?: string
+          _email?: string
+          _metadata?: Json
+          _name?: string
+          _phone?: string
+          _source?: Database["public"]["Enums"]["lead_source"]
+          _state?: string
+        }
+        Returns: string
+      }
+      upsert_lead_memory: {
+        Args: {
+          _confidence?: number
+          _key: string
+          _lead_id: string
+          _source?: Database["public"]["Enums"]["sender_type"]
+          _value: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "ADMIN" | "CONSULTANT"
@@ -1256,6 +1335,8 @@ export type Database = {
         | "WON"
         | "LOST"
         | "ARCHIVED"
+        | "WAITING_HUMAN"
+        | "WAITING_CUSTOMER"
       message_type:
         | "text"
         | "audio"
@@ -1447,6 +1528,8 @@ export const Constants = {
         "WON",
         "LOST",
         "ARCHIVED",
+        "WAITING_HUMAN",
+        "WAITING_CUSTOMER",
       ],
       message_type: [
         "text",
