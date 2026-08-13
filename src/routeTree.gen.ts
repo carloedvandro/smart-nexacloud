@@ -10,33 +10,181 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
+import { Route as AuthenticatedConhecimentoRouteImport } from './routes/_authenticated/conhecimento'
+import { Route as AuthenticatedConsultoresRouteImport } from './routes/_authenticated/consultores'
+import { Route as AuthenticatedConversasRouteImport } from './routes/_authenticated/conversas'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedFilaRouteImport } from './routes/_authenticated/fila'
+import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
+import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
+import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authenticated/relatorios'
+import { Route as AuthenticatedWhatsappRouteImport } from './routes/_authenticated/whatsapp'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedConfiguracoesRoute =
+  AuthenticatedConfiguracoesRouteImport.update({
+    id: '/configuracoes',
+    path: '/configuracoes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedConhecimentoRoute =
+  AuthenticatedConhecimentoRouteImport.update({
+    id: '/conhecimento',
+    path: '/conhecimento',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedConsultoresRoute =
+  AuthenticatedConsultoresRouteImport.update({
+    id: '/consultores',
+    path: '/consultores',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedConversasRoute = AuthenticatedConversasRouteImport.update({
+  id: '/conversas',
+  path: '/conversas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedFilaRoute = AuthenticatedFilaRouteImport.update({
+  id: '/fila',
+  path: '/fila',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRelatoriosRoute = AuthenticatedRelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedWhatsappRoute = AuthenticatedWhatsappRouteImport.update({
+  id: '/whatsapp',
+  path: '/whatsapp',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/configuracoes': typeof AuthenticatedConfiguracoesRoute
+  '/conhecimento': typeof AuthenticatedConhecimentoRoute
+  '/consultores': typeof AuthenticatedConsultoresRoute
+  '/conversas': typeof AuthenticatedConversasRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/fila': typeof AuthenticatedFilaRoute
+  '/leads': typeof AuthenticatedLeadsRoute
+  '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/relatorios': typeof AuthenticatedRelatoriosRoute
+  '/whatsapp': typeof AuthenticatedWhatsappRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/configuracoes': typeof AuthenticatedConfiguracoesRoute
+  '/conhecimento': typeof AuthenticatedConhecimentoRoute
+  '/consultores': typeof AuthenticatedConsultoresRoute
+  '/conversas': typeof AuthenticatedConversasRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/fila': typeof AuthenticatedFilaRoute
+  '/leads': typeof AuthenticatedLeadsRoute
+  '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/relatorios': typeof AuthenticatedRelatoriosRoute
+  '/whatsapp': typeof AuthenticatedWhatsappRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
+  '/_authenticated/conhecimento': typeof AuthenticatedConhecimentoRoute
+  '/_authenticated/consultores': typeof AuthenticatedConsultoresRoute
+  '/_authenticated/conversas': typeof AuthenticatedConversasRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/fila': typeof AuthenticatedFilaRoute
+  '/_authenticated/leads': typeof AuthenticatedLeadsRoute
+  '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
+  '/_authenticated/relatorios': typeof AuthenticatedRelatoriosRoute
+  '/_authenticated/whatsapp': typeof AuthenticatedWhatsappRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/configuracoes'
+    | '/conhecimento'
+    | '/consultores'
+    | '/conversas'
+    | '/dashboard'
+    | '/fila'
+    | '/leads'
+    | '/onboarding'
+    | '/relatorios'
+    | '/whatsapp'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/configuracoes'
+    | '/conhecimento'
+    | '/consultores'
+    | '/conversas'
+    | '/dashboard'
+    | '/fila'
+    | '/leads'
+    | '/onboarding'
+    | '/relatorios'
+    | '/whatsapp'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/configuracoes'
+    | '/_authenticated/conhecimento'
+    | '/_authenticated/consultores'
+    | '/_authenticated/conversas'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/fila'
+    | '/_authenticated/leads'
+    | '/_authenticated/onboarding'
+    | '/_authenticated/relatorios'
+    | '/_authenticated/whatsapp'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +196,126 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/configuracoes': {
+      id: '/_authenticated/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof AuthenticatedConfiguracoesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/conhecimento': {
+      id: '/_authenticated/conhecimento'
+      path: '/conhecimento'
+      fullPath: '/conhecimento'
+      preLoaderRoute: typeof AuthenticatedConhecimentoRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/consultores': {
+      id: '/_authenticated/consultores'
+      path: '/consultores'
+      fullPath: '/consultores'
+      preLoaderRoute: typeof AuthenticatedConsultoresRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/conversas': {
+      id: '/_authenticated/conversas'
+      path: '/conversas'
+      fullPath: '/conversas'
+      preLoaderRoute: typeof AuthenticatedConversasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/fila': {
+      id: '/_authenticated/fila'
+      path: '/fila'
+      fullPath: '/fila'
+      preLoaderRoute: typeof AuthenticatedFilaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/leads': {
+      id: '/_authenticated/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof AuthenticatedLeadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/onboarding': {
+      id: '/_authenticated/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/relatorios': {
+      id: '/_authenticated/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof AuthenticatedRelatoriosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/whatsapp': {
+      id: '/_authenticated/whatsapp'
+      path: '/whatsapp'
+      fullPath: '/whatsapp'
+      preLoaderRoute: typeof AuthenticatedWhatsappRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
+  AuthenticatedConhecimentoRoute: typeof AuthenticatedConhecimentoRoute
+  AuthenticatedConsultoresRoute: typeof AuthenticatedConsultoresRoute
+  AuthenticatedConversasRoute: typeof AuthenticatedConversasRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedFilaRoute: typeof AuthenticatedFilaRoute
+  AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
+  AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
+  AuthenticatedRelatoriosRoute: typeof AuthenticatedRelatoriosRoute
+  AuthenticatedWhatsappRoute: typeof AuthenticatedWhatsappRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
+  AuthenticatedConhecimentoRoute: AuthenticatedConhecimentoRoute,
+  AuthenticatedConsultoresRoute: AuthenticatedConsultoresRoute,
+  AuthenticatedConversasRoute: AuthenticatedConversasRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedFilaRoute: AuthenticatedFilaRoute,
+  AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
+  AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
+  AuthenticatedRelatoriosRoute: AuthenticatedRelatoriosRoute,
+  AuthenticatedWhatsappRoute: AuthenticatedWhatsappRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
