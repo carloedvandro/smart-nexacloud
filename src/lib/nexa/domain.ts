@@ -84,6 +84,31 @@ export const AVAILABILITY_LABEL: Record<Availability, string> = {
   BUSY: "Ocupado",
 };
 
+/**
+ * Instâncias de WhatsApp são RECURSOS CONTRATADOS pela empresa.
+ * Uma instância é permanente; o colaborador e o número podem mudar.
+ */
+export const WHATSAPP_INSTANCE_STATUS = {
+  AVAILABLE: "AVAILABLE",
+  CONNECTING: "CONNECTING",
+  CONNECTED: "CONNECTED",
+  DISCONNECTED: "DISCONNECTED",
+  LOGGED_OUT: "LOGGED_OUT",
+  BLOCKED: "BLOCKED",
+  ERROR: "ERROR",
+} as const;
+export type WhatsAppInstanceStatus = keyof typeof WHATSAPP_INSTANCE_STATUS;
+
+export const WHATSAPP_INSTANCE_STATUS_LABEL: Record<string, string> = {
+  AVAILABLE: "Disponível",
+  CONNECTING: "Conectando",
+  CONNECTED: "Conectada",
+  DISCONNECTED: "Desconectada",
+  LOGGED_OUT: "Deslogada",
+  BLOCKED: "Bloqueada",
+  ERROR: "Erro",
+};
+
 export const ASSIGNMENT_ATTEMPT_STATUS = {
   WAITING: "WAITING",
   RESPONDED: "RESPONDED",
