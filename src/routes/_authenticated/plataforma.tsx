@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { WHATSAPP_INSTANCE_STATUS_LABEL } from "@/lib/nexa/domain";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
+  configurePlatformWebhook,
   createPlatformCompany,
   getPlatformWebhookUrl,
   listPlatformCompanies,
@@ -58,6 +59,7 @@ function PlatformPage() {
   const createCompanyFn = useServerFn(createPlatformCompany);
   const provisionFn = useServerFn(provisionInstanceForCompany);
   const webhookFn = useServerFn(getPlatformWebhookUrl);
+  const configureWebhookFn = useServerFn(configurePlatformWebhook);
 
   const [companyOpen, setCompanyOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
@@ -228,7 +230,9 @@ function PlatformPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Instâncias provisionadas</CardTitle>
             <CardDescription>
-              Copie a URL do webhook de cada instância e cadastre-a na MEGA API.
+              Todas as instâncias usam a MESMA URL central de webhook — a MEGA API envia a
+              instance_key no payload e o sistema identifica a conexão. Use "Configurar" para
+              aplicar a URL automaticamente na instância.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -259,20 +263,39 @@ function PlatformPage() {
                         variant="ghost"
                         onClick={async () => {
                           try {
-                            const result = await webhookFn({ data: { connectionId: instance.id } });
+                            const result = await webhookFn({});
                             setWebhook({ id: instance.id, url: result.url });
                             await navigator.clipboard
                               .writeText(result.url)
                               .catch(() => undefined);
-                            toast.success("URL do webhook copiada.");
+                            toast.success("URL central do webhook copiada.");
                           } catch (error) {
                             toast.error(
-                              error instanceof Error ? error.message : "Falha ao gerar a URL.",
+                              error instanceof Error ? error.message : "Falha ao obter a URL.",
                             );
                           }
                         }}
                       >
                         Webhook
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const result = await configureWebhookFn({
+                              data: { connectionId: instance.id },
+                            });
+                            setWebhook({ id: instance.id, url: result.current ?? result.url });
+                            toast.success("Webhook configurado na MEGA API.");
+                          } catch (error) {
+                            toast.error(
+                              error instanceof Error ? error.message : "Falha ao configurar.",
+                            );
+                          }
+                        }}
+                      >
+                        Configurar
                       </Button>
                     </div>
                   </div>

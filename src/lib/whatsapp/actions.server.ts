@@ -4,7 +4,12 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
-import { MegaApiService, extractConnectedPhone, extractQrCode } from "@/lib/whatsapp/mega.server";
+import {
+  MegaApiService,
+  extractConnectedPhone,
+  extractQrCode,
+  extractWebhookUrl,
+} from "@/lib/whatsapp/mega.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
 
 export type InstanceStateResult = {
@@ -79,6 +84,29 @@ export async function syncInstanceStatus(connectionId: string): Promise<Instance
 
   await persistState(connectionId, status, { phone, qrStatus: status.toLowerCase() });
   return { status, phoneNumber: phone };
+}
+
+/** Consulta o webhook atualmente configurado na MEGA para a instância. */
+export async function readInstanceWebhook(
+  connectionId: string,
+): Promise<{ ok: boolean; url?: string | null; error?: string }> {
+  const creds = await loadMegaCredentials(connectionId);
+  if (!creds) return { ok: false, error: "Credenciais da instância não configuradas." };
+  const result = await MegaApiService.getWebhook(creds);
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true, url: extractWebhookUrl(result.data) };
+}
+
+/** Configura/reconfigura o webhook central da instância na MEGA. */
+export async function writeInstanceWebhook(
+  connectionId: string,
+  webhookUrl: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const creds = await loadMegaCredentials(connectionId);
+  if (!creds) return { ok: false, error: "Credenciais da instância não configuradas." };
+  const result = await MegaApiService.setWebhook(creds, webhookUrl);
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true };
 }
 
 /** Logout do número na MEGA. A instância continua contratada pela empresa. */

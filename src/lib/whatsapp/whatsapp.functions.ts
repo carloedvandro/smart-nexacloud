@@ -176,6 +176,18 @@ export const refreshWhatsAppInstance = createServerFn({ method: "POST" })
 /** URL do webhook da instância — visível apenas para administradores. */
 export const getWhatsAppWebhookUrl = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+    if (!isAdmin) throw new Error("Acesso negado.");
+
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const origin = new URL(getRequest().url).origin;
+    return { url: `${origin}/api/public/whatsapp/webhook` };
+  });
+
+/** Consulta o webhook configurado na MEGA para a instância (administradores). */
+export const getInstanceWebhookConfig = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
@@ -183,14 +195,37 @@ export const getWhatsAppWebhookUrl = createServerFn({ method: "GET" })
 
     const { data: connection } = await context.supabase
       .from("whatsapp_connections")
-      .select("webhook_token")
+      .select("id")
+      .eq("id", data.connectionId)
+      .maybeSingle();
+    if (!connection) throw new Error("Instância inexistente.");
+
+    const { readInstanceWebhook } = await import("@/lib/whatsapp/actions.server");
+    return readInstanceWebhook(data.connectionId);
+  });
+
+/** Configura o webhook central na MEGA para a instância (administradores). */
+export const configureInstanceWebhook = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+    if (!isAdmin) throw new Error("Acesso negado.");
+
+    const { data: connection } = await context.supabase
+      .from("whatsapp_connections")
+      .select("id")
       .eq("id", data.connectionId)
       .maybeSingle();
     if (!connection) throw new Error("Instância inexistente.");
 
     const { getRequest } = await import("@tanstack/react-start/server");
-    const origin = new URL(getRequest().url).origin;
-    return { url: `${origin}/api/public/whatsapp/webhook/${connection.webhook_token}` };
+    const url = `${new URL(getRequest().url).origin}/api/public/whatsapp/webhook`;
+
+    const { writeInstanceWebhook } = await import("@/lib/whatsapp/actions.server");
+    const result = await writeInstanceWebhook(data.connectionId, url);
+    if (!result.ok) throw new Error(result.error ?? "Falha ao configurar o webhook.");
+    return { ok: true, url };
   });
 
 /** Envio de mensagem pelo painel via WhatsApp. */
