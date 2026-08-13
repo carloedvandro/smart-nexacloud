@@ -59,6 +59,7 @@ function PlatformPage() {
   const createCompanyFn = useServerFn(createPlatformCompany);
   const provisionFn = useServerFn(provisionInstanceForCompany);
   const webhookFn = useServerFn(getPlatformWebhookUrl);
+  const configureWebhookFn = useServerFn(configurePlatformWebhook);
 
   const [companyOpen, setCompanyOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
