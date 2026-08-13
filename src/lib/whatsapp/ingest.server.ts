@@ -13,6 +13,10 @@ type MessageType = "text" | "audio" | "image" | "document" | "video" | "system" 
 
 const MEDIA_BUCKET = "conversation-media";
 
+function orUndef<T>(value: T | null | undefined): T | undefined {
+  return value ?? undefined;
+}
+
 function pick(obj: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((acc, part) => {
     if (acc && typeof acc === "object") return (acc as Json)[part];
@@ -124,7 +128,7 @@ export async function processWebhookEvent(input: {
       _company_id: companyId,
       _external_message_id: externalId,
       _status: mappedStatus,
-      _reason: firstString(body, ["reason", "error", "message"]),
+      _reason: orUndef(firstString(body, ["reason", "error", "message"])),
     });
     return data ? { status: "processed" } : { status: "ignored", reason: "mensagem desconhecida" };
   }
@@ -146,7 +150,6 @@ export async function processWebhookEvent(input: {
         _company_id: companyId,
         _external_message_id: externalId,
         _status: "SENT",
-        _reason: null,
       });
     }
     return { status: "ignored", reason: "fromMe" };
@@ -179,12 +182,12 @@ export async function processWebhookEvent(input: {
   const { data, error } = await supabaseAdmin.rpc("ingest_inbound_message", {
     _connection_id: connectionId,
     _remote_jid: parsed.jid,
-    _external_message_id: externalId,
-    _push_name: firstString(body, ["pushName", "pushname", "notifyName", "senderName"]),
+    _external_message_id: orUndef(externalId),
+    _push_name: orUndef(firstString(body, ["pushName", "pushname", "notifyName", "senderName"])),
     _message_type: messageType,
-    _content: content,
-    _media_url: mediaUrl,
-    _mime_type: mimeType,
+    _content: orUndef(content),
+    _media_url: orUndef(mediaUrl),
+    _mime_type: orUndef(mimeType),
     _metadata: { remote_jid: parsed.jid, is_lid: parsed.isLid, event: eventType },
   });
 
@@ -216,9 +219,8 @@ async function handleConnectionEvent(connectionId: string, eventType: string, pa
   await supabaseAdmin.rpc("set_instance_connection_state", {
     _connection_id: connectionId,
     _status: status,
-    _phone_number: extractConnectedPhone(payload),
-    _qr_code: null,
-    _qr_code_status: raw || null,
+    _phone_number: orUndef(extractConnectedPhone(payload)),
+    _qr_code_status: raw || undefined,
   });
 }
 
