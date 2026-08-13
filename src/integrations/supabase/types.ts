@@ -1412,6 +1412,10 @@ export type Database = {
         Args: { _consultant_id: string; _lead_id: string }
         Returns: undefined
       }
+      assign_whatsapp_instance: {
+        Args: { _connection_id: string; _user_id: string }
+        Returns: undefined
+      }
       bootstrap_company: {
         Args: { _document?: string; _legal_name?: string; _name: string }
         Returns: string
@@ -1486,6 +1490,21 @@ export type Database = {
         }
         Returns: string
       }
+      provision_whatsapp_instance: {
+        Args: {
+          _api_host?: string
+          _api_key?: string
+          _company_id: string
+          _instance_key: string
+          _instance_number?: number
+          _name?: string
+        }
+        Returns: string
+      }
+      release_whatsapp_instance: {
+        Args: { _connection_id: string; _reason?: string }
+        Returns: undefined
+      }
       set_conversation_status: {
         Args: {
           _conversation_id: string
@@ -1495,6 +1514,16 @@ export type Database = {
       }
       set_conversation_summary: {
         Args: { _conversation_id: string; _summary: string }
+        Returns: undefined
+      }
+      set_instance_connection_state: {
+        Args: {
+          _connection_id: string
+          _phone_number?: string
+          _qr_code?: string
+          _qr_code_status?: string
+          _status: Database["public"]["Enums"]["whatsapp_connection_status"]
+        }
         Returns: undefined
       }
       set_lead_status: {
