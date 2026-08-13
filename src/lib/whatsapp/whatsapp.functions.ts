@@ -1,0 +1,225 @@
+import { createServerFn } from "@tanstack/react-start";
+
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
+export type WhatsAppInstance = {
+  id: string;
+  name: string | null;
+  instanceNumber: number | null;
+  status: string;
+  phoneNumber: string | null;
+  qrCode: string | null;
+  assignedUserId: string | null;
+  assignedUserName: string | null;
+  assignedAt: string | null;
+  lastConnectedAt: string | null;
+  lastEventAt: string | null;
+  hasCredentials: boolean;
+};
+
+/** Lista as instâncias contratadas pela empresa. Nunca devolve a instance_key. */
+export const listWhatsAppInstances = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<WhatsAppInstance[]> => {
+    const { data, error } = await context.supabase
+      .from("whatsapp_connections")
+      .select(
+        "id, name, instance_number, status, phone_number, qr_code, user_id, assigned_at, last_connected_at, last_event_at, profile:profiles!whatsapp_connections_user_id_fkey(full_name, email)",
+      )
+      .order("instance_number", { ascending: true });
+
+    if (error) throw new Error(error.message);
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const ids = (data ?? []).map((row) => row.id);
+    const { data: creds } = ids.length
+      ? await supabaseAdmin.from("whatsapp_credentials").select("connection_id").in("connection_id", ids)
+      : { data: [] as { connection_id: string }[] };
+    const withCreds = new Set((creds ?? []).map((row) => row.connection_id));
+
+    return (data ?? []).map((row) => {
+      const profile = row.profile as { full_name: string | null; email: string | null } | null;
+      return {
+        id: row.id,
+        name: row.name,
+        instanceNumber: row.instance_number,
+        status: row.status,
+        phoneNumber: row.phone_number,
+        qrCode: row.qr_code,
+        assignedUserId: row.user_id,
+        assignedUserName: profile?.full_name ?? profile?.email ?? null,
+        assignedAt: row.assigned_at,
+        lastConnectedAt: row.last_connected_at,
+        lastEventAt: row.last_event_at,
+        hasCredentials: withCreds.has(row.id),
+      };
+    });
+  });
+
+/** Histórico de vinculações de uma instância (quem usou, qual número, quando). */
+export const listInstanceHistory = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { data: rows, error } = await context.supabase
+      .from("whatsapp_instance_assignments")
+      .select("id, user_name, phone_number, started_at, ended_at, release_reason")
+      .eq("connection_id", data.connectionId)
+      .order("started_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return rows ?? [];
+  });
+
+/** Provisionamento manual — somente administrador da plataforma. */
+export const provisionWhatsAppInstance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { instanceKey: string; name?: string; instanceNumber?: number }) => {
+    if (!data.instanceKey?.trim()) throw new Error("Informe a instance_key.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const { data: profile } = await context.supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!profile?.company_id) throw new Error("Usuário sem empresa.");
+
+    const { data: id, error } = await context.supabase.rpc("provision_whatsapp_instance", {
+      _company_id: profile.company_id,
+      _instance_key: data.instanceKey.trim(),
+      ...(data.name ? { _name: data.name } : {}),
+      ...(typeof data.instanceNumber === "number" ? { _instance_number: data.instanceNumber } : {}),
+    });
+    if (error) throw new Error(error.message);
+    return { id: id as string };
+  });
+
+/** Vincula um colaborador a uma instância disponível. */
+export const assignWhatsAppInstance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string; userId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("assign_whatsapp_instance", {
+      _connection_id: data.connectionId,
+      _user_id: data.userId,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Libera a instância: logout na MEGA, encerra o vínculo e preserva o histórico. */
+export const releaseWhatsAppInstance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string; reason?: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+    if (!isAdmin) throw new Error("Somente administradores podem liberar instâncias.");
+
+    const { data: connection } = await context.supabase
+      .from("whatsapp_connections")
+      .select("id")
+      .eq("id", data.connectionId)
+      .maybeSingle();
+    if (!connection) throw new Error("Instância inexistente.");
+
+    const { logoutInstance } = await import("@/lib/whatsapp/actions.server");
+    const logout = await logoutInstance(data.connectionId);
+
+    const { error } = await context.supabase.rpc("release_whatsapp_instance", {
+      _connection_id: data.connectionId,
+      ...(data.reason ? { _reason: data.reason } : {}),
+    });
+    if (error) throw new Error(error.message);
+
+    return { ok: true, logout: logout.ok, logoutError: logout.error ?? null };
+  });
+
+/** Gera o QR Code para o colaborador vinculado conectar o WhatsApp. */
+export const connectWhatsAppInstance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { data: connection } = await context.supabase
+      .from("whatsapp_connections")
+      .select("id, user_id, status")
+      .eq("id", data.connectionId)
+      .maybeSingle();
+    if (!connection) throw new Error("Instância inexistente.");
+    if (!connection.user_id) throw new Error("Vincule um colaborador antes de conectar.");
+
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+    if (!isAdmin && connection.user_id !== context.userId) {
+      throw new Error("Somente o colaborador vinculado ou um administrador pode conectar.");
+    }
+
+    const { requestQrCode } = await import("@/lib/whatsapp/actions.server");
+    return requestQrCode(data.connectionId);
+  });
+
+/** Sincroniza a situação real da instância e o número conectado. */
+export const refreshWhatsAppInstance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { data: connection } = await context.supabase
+      .from("whatsapp_connections")
+      .select("id")
+      .eq("id", data.connectionId)
+      .maybeSingle();
+    if (!connection) throw new Error("Instância inexistente.");
+
+    const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
+    return syncInstanceStatus(data.connectionId);
+  });
+
+/** URL do webhook da instância — visível apenas para administradores. */
+export const getWhatsAppWebhookUrl = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+    if (!isAdmin) throw new Error("Acesso negado.");
+
+    const { data: connection } = await context.supabase
+      .from("whatsapp_connections")
+      .select("webhook_token")
+      .eq("id", data.connectionId)
+      .maybeSingle();
+    if (!connection) throw new Error("Instância inexistente.");
+
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const origin = new URL(getRequest().url).origin;
+    return { url: `${origin}/api/public/whatsapp/webhook/${connection.webhook_token}` };
+  });
+
+/** Envio de mensagem pelo painel via WhatsApp. */
+export const sendWhatsAppMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { conversationId: string; content: string }) => {
+    if (!data.content?.trim()) throw new Error("Mensagem vazia.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const { data: profile } = await context.supabase
+      .from("profiles")
+      .select("company_id, full_name, email")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!profile?.company_id) throw new Error("Usuário sem empresa.");
+
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+
+    const { sendWhatsAppText } = await import("@/lib/whatsapp/actions.server");
+    const result = await sendWhatsAppText({
+      companyId: profile.company_id,
+      conversationId: data.conversationId,
+      userId: context.userId,
+      senderName: profile.full_name ?? profile.email ?? null,
+      senderType: isAdmin ? "admin" : "consultant",
+      content: data.content.trim(),
+    });
+
+    if (!result.ok) throw new Error(result.error);
+    return { messageId: result.messageId };
+  });
