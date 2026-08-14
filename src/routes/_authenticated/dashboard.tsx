@@ -145,6 +145,17 @@ function DashboardPage() {
     { label: "Timeouts hoje", value: data?.timeouts, icon: TimerReset },
   ];
 
+  if (isPlatformAdmin) {
+    return (
+      <AppShell
+        title="Painel da plataforma"
+        description={`Visão geral de todas as empresas — ${profile?.full_name ?? profile?.email ?? ""}`}
+      >
+        <PlatformDashboard />
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell
       title="Dashboard"
