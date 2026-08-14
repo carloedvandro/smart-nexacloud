@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { Link2, Loader2, Plug, QrCode, RefreshCw, Unplug, User } from "lucide-react";
+import { Link2, Loader2, Plug, QrCode, RefreshCw, Star, Unplug, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/nexa/app-shell";
@@ -37,6 +37,8 @@ import {
   provisionWhatsAppInstance,
   refreshWhatsAppInstance,
   releaseWhatsAppInstance,
+  setTrunkWhatsAppInstance,
+
   type WhatsAppInstance,
 } from "@/lib/whatsapp/whatsapp.functions";
 
@@ -73,6 +75,8 @@ function WhatsAppPage() {
   const fetchInstances = useServerFn(listWhatsAppInstances);
   const assignFn = useServerFn(assignWhatsAppInstance);
   const releaseFn = useServerFn(releaseWhatsAppInstance);
+  const setTrunkFn = useServerFn(setTrunkWhatsAppInstance);
+
   const connectFn = useServerFn(connectWhatsAppInstance);
   const refreshFn = useServerFn(refreshWhatsAppInstance);
   const provisionFn = useServerFn(provisionWhatsAppInstance);
@@ -131,6 +135,17 @@ function WhatsAppPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const trunkMutation = useMutation({
+    mutationFn: (connectionId: string) => setTrunkFn({ data: { connectionId } }),
+    onSuccess: () => {
+      toast.success("Instância definida como número tronco da empresa.");
+      void invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+
 
   const connectMutation = useMutation({
     mutationFn: (connectionId: string) => connectFn({ data: { connectionId } }),
@@ -222,14 +237,26 @@ function WhatsAppPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {instances.map((instance) => (
-              <Card key={instance.id} className="shadow-panel">
+              <Card
+                key={instance.id}
+                className={instance.isTrunk ? "shadow-panel border-primary/60" : "shadow-panel"}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base">{instance.name ?? "Instância"}</CardTitle>
+                    <div className="space-y-1">
+                      <CardTitle className="text-base">{instance.name ?? "Instância"}</CardTitle>
+                      {instance.isTrunk ? (
+                        <Badge className="gap-1">
+                          <Star className="size-3" />
+                          Número tronco
+                        </Badge>
+                      ) : null}
+                    </div>
                     <Badge variant={statusTone(instance.status)}>
                       {WHATSAPP_INSTANCE_STATUS_LABEL[instance.status] ?? instance.status}
                     </Badge>
                   </div>
+
                   <CardDescription className="flex items-center gap-1.5">
                     <User className="size-3.5" />
                     {instance.assignedUserName ?? "Sem colaborador vinculado"}
@@ -289,6 +316,20 @@ function WhatsAppPage() {
                     <Button size="sm" variant="ghost" onClick={() => setHistoryTarget(instance)}>
                       Histórico
                     </Button>
+
+                    {isAdmin && !instance.isTrunk ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => trunkMutation.mutate(instance.id)}
+                        disabled={trunkMutation.isPending}
+                      >
+                        <Star className="mr-1.5 size-3.5" />
+                        Definir como tronco
+                      </Button>
+                    ) : null}
+
+
 
                     {isAdmin && instance.assignedUserId ? (
                       <Button
