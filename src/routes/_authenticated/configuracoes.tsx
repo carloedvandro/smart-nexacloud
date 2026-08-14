@@ -639,6 +639,11 @@ function TeamCard({
                         <SelectItem value="ADMIN">Administrador</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Button asChild variant="ghost" size="icon" aria-label="Ver como usuário">
+                      <Link to="/ver-como/$userId" params={{ userId: member.id }}>
+                        <Eye className="size-4" />
+                      </Link>
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
