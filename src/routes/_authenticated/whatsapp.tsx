@@ -349,7 +349,7 @@ function WhatsAppPage() {
           </div>
         )}
 
-        {isAdmin ? <WebhookCard instances={instances} /> : null}
+        {platformAdminQuery.data ? <WebhookCard instances={instances} /> : null}
       </div>
 
       {/* Vincular colaborador */}
