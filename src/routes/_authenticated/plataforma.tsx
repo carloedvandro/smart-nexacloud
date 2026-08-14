@@ -90,6 +90,25 @@ function PlatformPage() {
   const [membersTarget, setMembersTarget] = useState<{ id: string; name: string } | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("ADMIN");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  const linkMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc("create_invite_link", {
+        _role: inviteRole,
+        _company_id: membersTarget?.id ?? "",
+        _expires_hours: 168,
+      });
+      if (error) throw error;
+      return data as { token: string };
+    },
+    onSuccess: (result) => {
+      setInviteLink(`${window.location.origin}/convite/${result.token}`);
+      void refreshMembers();
+      toast.success("Link de convite gerado (uso único, 7 dias)");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const membersQuery = useQuery({
     queryKey: ["company-members", membersTarget?.id],
