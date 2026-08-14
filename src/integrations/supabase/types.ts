@@ -1120,6 +1120,7 @@ export type Database = {
           id: string
           instance_id: string | null
           instance_number: number | null
+          is_trunk: boolean
           last_connected_at: string | null
           last_disconnected_at: string | null
           last_event_at: string | null
@@ -1144,6 +1145,7 @@ export type Database = {
           id?: string
           instance_id?: string | null
           instance_number?: number | null
+          is_trunk?: boolean
           last_connected_at?: string | null
           last_disconnected_at?: string | null
           last_event_at?: string | null
@@ -1168,6 +1170,7 @@ export type Database = {
           id?: string
           instance_id?: string | null
           instance_number?: number | null
+          is_trunk?: boolean
           last_connected_at?: string | null
           last_disconnected_at?: string | null
           last_event_at?: string | null
@@ -1531,6 +1534,10 @@ export type Database = {
           _lead_id: string
           _status: Database["public"]["Enums"]["lead_status"]
         }
+        Returns: undefined
+      }
+      set_trunk_whatsapp_instance: {
+        Args: { _connection_id: string }
         Returns: undefined
       }
       update_message_delivery: {
