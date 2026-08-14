@@ -193,8 +193,8 @@ export const refreshWhatsAppInstance = createServerFn({ method: "POST" })
 export const getWhatsAppWebhookUrl = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
-    if (!isAdmin) throw new Error("Acesso negado.");
+    const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin");
+    if (!isPlatformAdmin) throw new Error("Acesso restrito ao administrador da plataforma.");
 
     const { getRequest } = await import("@tanstack/react-start/server");
     const origin = new URL(getRequest().url).origin;
@@ -206,8 +206,8 @@ export const getInstanceWebhookConfig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
-    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
-    if (!isAdmin) throw new Error("Acesso negado.");
+    const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin");
+    if (!isPlatformAdmin) throw new Error("Acesso restrito ao administrador da plataforma.");
 
     const { data: connection } = await context.supabase
       .from("whatsapp_connections")
@@ -225,8 +225,8 @@ export const configureInstanceWebhook = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
-    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
-    if (!isAdmin) throw new Error("Acesso negado.");
+    const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin");
+    if (!isPlatformAdmin) throw new Error("Acesso restrito ao administrador da plataforma.");
 
     const { data: connection } = await context.supabase
       .from("whatsapp_connections")

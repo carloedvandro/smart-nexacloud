@@ -129,7 +129,7 @@ function WhatsAppPage() {
       toast.success(
         result.logout
           ? "Instância liberada e WhatsApp deslogado. O histórico foi preservado."
-          : "Instância liberada. O logout na MEGA API não pôde ser confirmado.",
+          : "Instância liberada. O logout do WhatsApp não pôde ser confirmado.",
       );
       void invalidate();
     },
@@ -229,8 +229,8 @@ function WhatsAppPage() {
             <CardHeader>
               <CardTitle className="text-base">Nenhuma instância provisionada</CardTitle>
               <CardDescription>
-                As instâncias são contratadas na MEGA API e provisionadas manualmente pela operação da
-                plataforma. Assim que forem cadastradas, aparecerão aqui.
+                As instâncias são liberadas pela operação da plataforma conforme o contrato da
+                empresa. Assim que forem liberadas, aparecerão aqui.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -349,7 +349,7 @@ function WhatsAppPage() {
           </div>
         )}
 
-        {isAdmin ? <WebhookCard instances={instances} /> : null}
+        {platformAdminQuery.data ? <WebhookCard instances={instances} /> : null}
       </div>
 
       {/* Vincular colaborador */}
