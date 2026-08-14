@@ -134,6 +134,7 @@ function PlatformPage() {
           companyId: targetCompany,
           instanceKey,
           ...(instanceName.trim() ? { name: instanceName.trim() } : {}),
+          ...(instanceToken.trim() ? { apiToken: instanceToken.trim() } : {}),
         },
       }),
     onSuccess: () => {
@@ -141,10 +142,26 @@ function PlatformPage() {
       setInstanceOpen(false);
       setInstanceKey("");
       setInstanceName("");
+      setInstanceToken("");
       invalidate();
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const tokenMutation = useMutation({
+    mutationFn: () =>
+      updateCredentialsFn({
+        data: { connectionId: tokenTarget?.id ?? "", apiToken: tokenValue.trim() },
+      }),
+    onSuccess: () => {
+      toast.success("Token da MEGA API atualizado para esta instância.");
+      setTokenTarget(null);
+      setTokenValue("");
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
 
   if (platformAdminQuery.isLoading) {
     return (
