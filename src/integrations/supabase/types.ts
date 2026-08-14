@@ -1489,6 +1489,25 @@ export type Database = {
         Returns: string
       }
       claim_company_invite: { Args: never; Returns: string }
+      company_cancel_invite: {
+        Args: { _invite_id: string }
+        Returns: undefined
+      }
+      company_invite_member: {
+        Args: {
+          _email: string
+          _role?: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: Json
+      }
+      company_remove_member: { Args: { _user_id: string }; Returns: undefined }
+      company_set_member_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: undefined
+      }
       create_outbound_message: {
         Args: {
           _company_id: string
