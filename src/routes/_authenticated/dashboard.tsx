@@ -107,13 +107,14 @@ async function fetchMetrics(companyId: string): Promise<Metrics> {
 }
 
 function DashboardPage() {
-  const { companyId, profile } = useAuth();
+  const { companyId, profile, roles } = useAuth();
   const queryClient = useQueryClient();
+  const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
 
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-metrics", companyId],
     queryFn: () => fetchMetrics(companyId as string),
-    enabled: Boolean(companyId),
+    enabled: Boolean(companyId) && !isPlatformAdmin,
     refetchInterval: 60_000,
   });
 
