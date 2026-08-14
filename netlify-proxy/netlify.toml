@@ -1,0 +1,23 @@
+# NexaAtende — proxy de domínio via Netlify
+#
+# Este site Netlify NÃO hospeda a aplicação: ele apenas repassa
+# (proxy) todo o tráfego de nexaatende.yrwentechnology.com.br
+# para o app publicado no Lovable.
+
+[build]
+  publish = "public"
+  command = "echo 'proxy only'"
+
+# Proxy transparente de todas as rotas (inclui /api/public/* dos webhooks)
+[[redirects]]
+  from = "/*"
+  to = "https://smart-nexacloud.lovable.app/:splat"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
