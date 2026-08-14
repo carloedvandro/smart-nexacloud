@@ -271,7 +271,7 @@ export type CompanyMember = {
 
 export type CompanyInvite = {
   id: string;
-  email: string;
+  email: string | null;
   role: string;
   status: string;
   createdAt: string;
