@@ -6,6 +6,7 @@ export type WhatsAppInstance = {
   id: string;
   name: string | null;
   instanceNumber: number | null;
+  isTrunk: boolean;
   status: string;
   phoneNumber: string | null;
   qrCode: string | null;
@@ -24,8 +25,9 @@ export const listWhatsAppInstances = createServerFn({ method: "GET" })
     const { data, error } = await context.supabase
       .from("whatsapp_connections")
       .select(
-        "id, name, instance_number, status, phone_number, qr_code, user_id, assigned_at, last_connected_at, last_event_at, profile:profiles!whatsapp_connections_user_id_fkey(full_name, email)",
+        "id, name, instance_number, is_trunk, status, phone_number, qr_code, user_id, assigned_at, last_connected_at, last_event_at, profile:profiles!whatsapp_connections_user_id_fkey(full_name, email)",
       )
+      .order("is_trunk", { ascending: false })
       .order("instance_number", { ascending: true });
 
     if (error) throw new Error(error.message);
@@ -43,6 +45,7 @@ export const listWhatsAppInstances = createServerFn({ method: "GET" })
         id: row.id,
         name: row.name,
         instanceNumber: row.instance_number,
+        isTrunk: row.is_trunk,
         status: row.status,
         phoneNumber: row.phone_number,
         qrCode: row.qr_code,
@@ -55,6 +58,19 @@ export const listWhatsAppInstances = createServerFn({ method: "GET" })
       };
     });
   });
+
+/** Define a instância tronco (número principal) da empresa — somente administrador da empresa. */
+export const setTrunkWhatsAppInstance = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("set_trunk_whatsapp_instance", {
+      _connection_id: data.connectionId,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 
 /** Histórico de vinculações de uma instância (quem usou, qual número, quando). */
 export const listInstanceHistory = createServerFn({ method: "GET" })
