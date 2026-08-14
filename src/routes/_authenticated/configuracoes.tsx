@@ -1,3 +1,4 @@
+import { buildInviteUrl } from "@/lib/nexa/public-url";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -474,7 +475,7 @@ function TeamCard({
       return data as unknown as { token: string; expires_at: string };
     },
     onSuccess: (result) => {
-      setInviteLink(`${window.location.origin}/convite/${result.token}`);
+      setInviteLink(buildInviteUrl(result.token));
       invalidate();
       toast.success("Link de convite gerado (uso único)");
     },
