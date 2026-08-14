@@ -450,6 +450,43 @@ function ConsultantsPage() {
                               <SelectItem value="ADMIN">Administrador</SelectItem>
                             </SelectContent>
                           </Select>
+                          <div className="flex items-center gap-1">
+                            <Label
+                              htmlFor={`limit-${member.id}`}
+                              className="text-xs text-muted-foreground"
+                            >
+                              Limite
+                            </Label>
+                            <Input
+                              id={`limit-${member.id}`}
+                              type="number"
+                              min={0}
+                              className="w-20"
+                              title="Limite de atendimentos simultâneos"
+                              defaultValue={
+                                typeof member.metadata?.["max_concurrent"] === "number"
+                                  ? (member.metadata["max_concurrent"] as number)
+                                  : ""
+                              }
+                              disabled={setLimit.isPending}
+                              onBlur={(e) => {
+                                const raw = e.currentTarget.value.trim();
+                                const value = raw === "" ? null : Number(raw);
+                                if (value !== null && (!Number.isFinite(value) || value < 0)) return;
+                                const current =
+                                  typeof member.metadata?.["max_concurrent"] === "number"
+                                    ? (member.metadata["max_concurrent"] as number)
+                                    : null;
+                                if (current === value) return;
+                                setLimit.mutate({
+                                  userId: member.id,
+                                  metadata: member.metadata,
+                                  value,
+                                });
+                              }}
+                            />
+                          </div>
+
                           <Button
                             variant="ghost"
                             size="icon"
