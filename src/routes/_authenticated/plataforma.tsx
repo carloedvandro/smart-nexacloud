@@ -325,7 +325,7 @@ function PlatformPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          setTokenTarget({ id: instance.id, name: instance.name });
+                          setTokenTarget({ id: instance.id, name: instance.name ?? "Instância" });
                           setTokenValue("");
                         }}
                       >
