@@ -337,36 +337,48 @@ export type Database = {
           accepted_by: string | null
           company_id: string
           created_at: string
-          email: string
+          email: string | null
+          expires_at: string
           id: string
           invited_by: string | null
+          max_uses: number
           role: Database["public"]["Enums"]["app_role"]
           status: string
+          token: string
           updated_at: string
+          used_count: number
         }
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
           company_id: string
           created_at?: string
-          email: string
+          email?: string | null
+          expires_at?: string
           id?: string
           invited_by?: string | null
+          max_uses?: number
           role?: Database["public"]["Enums"]["app_role"]
           status?: string
+          token?: string
           updated_at?: string
+          used_count?: number
         }
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
           company_id?: string
           created_at?: string
-          email?: string
+          email?: string | null
+          expires_at?: string
           id?: string
           invited_by?: string | null
+          max_uses?: number
           role?: Database["public"]["Enums"]["app_role"]
           status?: string
+          token?: string
           updated_at?: string
+          used_count?: number
         }
         Relationships: [
           {
@@ -1008,12 +1020,14 @@ export type Database = {
           avatar_url: string | null
           company_id: string | null
           created_at: string
+          document: string | null
           email: string | null
           full_name: string | null
           id: string
           is_active: boolean
           last_seen_at: string | null
           metadata: Json
+          person_type: string
           phone: string | null
           updated_at: string
         }
@@ -1022,12 +1036,14 @@ export type Database = {
           avatar_url?: string | null
           company_id?: string | null
           created_at?: string
+          document?: string | null
           email?: string | null
           full_name?: string | null
           id: string
           is_active?: boolean
           last_seen_at?: string | null
           metadata?: Json
+          person_type?: string
           phone?: string | null
           updated_at?: string
         }
@@ -1036,12 +1052,14 @@ export type Database = {
           avatar_url?: string | null
           company_id?: string | null
           created_at?: string
+          document?: string | null
           email?: string | null
           full_name?: string | null
           id?: string
           is_active?: boolean
           last_seen_at?: string | null
           metadata?: Json
+          person_type?: string
           phone?: string | null
           updated_at?: string
         }
@@ -1508,6 +1526,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      create_invite_link: {
+        Args: {
+          _company_id?: string
+          _email?: string
+          _expires_hours?: number
+          _role?: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: Json
+      }
       create_outbound_message: {
         Args: {
           _company_id: string
@@ -1557,8 +1584,13 @@ export type Database = {
         }
         Returns: Json
       }
+      invite_link_info: { Args: { _token: string }; Returns: Json }
       is_company_admin: { Args: never; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
+      log_impersonation: {
+        Args: { _target_user_id: string }
+        Returns: undefined
+      }
       mark_conversation_read: {
         Args: { _conversation_id: string }
         Returns: undefined
@@ -1607,6 +1639,10 @@ export type Database = {
           _instance_number?: number
           _name?: string
         }
+        Returns: string
+      }
+      redeem_invite_link: {
+        Args: { _document?: string; _token: string }
         Returns: string
       }
       release_whatsapp_instance: {
