@@ -297,6 +297,13 @@ function PlatformPage() {
                     <Button
                       size="sm"
                       variant="ghost"
+                      onClick={() => setMembersTarget({ id: company.id, name: company.name })}
+                    >
+                      Membros
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => {
                         setTargetCompany(company.id);
                         setInstanceOpen(true);
@@ -304,6 +311,7 @@ function PlatformPage() {
                     >
                       Provisionar
                     </Button>
+
                   </div>
                 </div>
               ))
