@@ -75,6 +75,8 @@ function WhatsAppPage() {
   const fetchInstances = useServerFn(listWhatsAppInstances);
   const assignFn = useServerFn(assignWhatsAppInstance);
   const releaseFn = useServerFn(releaseWhatsAppInstance);
+  const setTrunkFn = useServerFn(setTrunkWhatsAppInstance);
+
   const connectFn = useServerFn(connectWhatsAppInstance);
   const refreshFn = useServerFn(refreshWhatsAppInstance);
   const provisionFn = useServerFn(provisionWhatsAppInstance);
