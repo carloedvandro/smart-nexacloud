@@ -136,6 +136,17 @@ function WhatsAppPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const trunkMutation = useMutation({
+    mutationFn: (connectionId: string) => setTrunkFn({ data: { connectionId } }),
+    onSuccess: () => {
+      toast.success("Instância definida como número tronco da empresa.");
+      void invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+
+
   const connectMutation = useMutation({
     mutationFn: (connectionId: string) => connectFn({ data: { connectionId } }),
     onSuccess: (result) => {
