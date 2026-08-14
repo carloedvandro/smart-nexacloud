@@ -83,6 +83,62 @@ function PlatformPage() {
   const [tokenValue, setTokenValue] = useState("");
   const [webhook, setWebhook] = useState<{ id: string; url: string } | null>(null);
 
+  const membersFn = useServerFn(listCompanyMembers);
+  const inviteFn = useServerFn(inviteCompanyMember);
+  const setRoleFn = useServerFn(setCompanyMemberRole);
+  const removeMemberFn = useServerFn(removeCompanyMember);
+  const [membersTarget, setMembersTarget] = useState<{ id: string; name: string } | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("ADMIN");
+
+  const membersQuery = useQuery({
+    queryKey: ["company-members", membersTarget?.id],
+    enabled: Boolean(membersTarget?.id),
+    queryFn: () => membersFn({ data: { companyId: membersTarget!.id } }),
+  });
+
+  const refreshMembers = () =>
+    queryClient.invalidateQueries({ queryKey: ["company-members", membersTarget?.id] });
+
+  const inviteMutation = useMutation({
+    mutationFn: () =>
+      inviteFn({
+        data: { companyId: membersTarget?.id ?? "", email: inviteEmail.trim(), role: inviteRole },
+      }),
+    onSuccess: (result) => {
+      toast.success(
+        result.linked
+          ? "Usuário existente vinculado à empresa com o papel escolhido."
+          : "Convite registrado: ao criar a conta com este e-mail o acesso é liberado automaticamente.",
+      );
+      setInviteEmail("");
+      void refreshMembers();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const roleMutation = useMutation({
+    mutationFn: (vars: { userId: string; role: "ADMIN" | "CONSULTANT" }) =>
+      setRoleFn({ data: { userId: vars.userId, companyId: membersTarget?.id ?? "", role: vars.role } }),
+    onSuccess: () => {
+      toast.success("Papel atualizado.");
+      void refreshMembers();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (userId: string) =>
+      removeMemberFn({ data: { userId, companyId: membersTarget?.id ?? "" } }),
+    onSuccess: () => {
+      toast.success("Vínculo operacional removido.");
+      void refreshMembers();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+
+
 
   const platformAdminQuery = useQuery({
     queryKey: ["is-platform-admin"],
