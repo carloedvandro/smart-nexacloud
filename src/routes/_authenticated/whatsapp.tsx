@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { Link2, Loader2, Plug, QrCode, RefreshCw, Unplug, User } from "lucide-react";
+import { Link2, Loader2, Plug, QrCode, RefreshCw, Star, Unplug, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/nexa/app-shell";
