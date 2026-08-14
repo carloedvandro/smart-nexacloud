@@ -321,7 +321,18 @@ function PlatformPage() {
                       >
                         Configurar
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setTokenTarget({ id: instance.id, name: instance.name });
+                          setTokenValue("");
+                        }}
+                      >
+                        Token
+                      </Button>
                     </div>
+
                   </div>
                   {webhook?.id === instance.id ? (
                     <p className="break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">
