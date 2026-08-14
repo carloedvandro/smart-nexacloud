@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bot, ShieldCheck, Timer, Workflow } from "lucide-react";
 
+import ogImage from "@/assets/nexa-og.jpg.asset.json";
 import { NexaLogo } from "@/components/nexa/logo";
 import { Button } from "@/components/ui/button";
 
