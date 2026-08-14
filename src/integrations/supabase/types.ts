@@ -331,6 +331,67 @@ export type Database = {
         }
         Relationships: []
       }
+      company_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          company_id: string
+          created_at: string
+          email: string
+          id: string
+          invited_by: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          company_id: string
+          created_at?: string
+          email: string
+          id?: string
+          invited_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          company_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          invited_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_invites_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_invites_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_invites_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_assignments: {
         Row: {
           assigned_at: string
@@ -1403,6 +1464,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_company_invites: {
+        Args: { _email: string; _user_id: string }
+        Returns: string
+      }
       assert_company_member: {
         Args: { _company_id: string }
         Returns: undefined
@@ -1423,6 +1488,7 @@ export type Database = {
         Args: { _document?: string; _legal_name?: string; _name: string }
         Returns: string
       }
+      claim_company_invite: { Args: never; Returns: string }
       create_outbound_message: {
         Args: {
           _company_id: string
@@ -1479,6 +1545,26 @@ export type Database = {
         Returns: undefined
       }
       normalize_phone: { Args: { _raw: string }; Returns: string }
+      platform_invite_company_member: {
+        Args: {
+          _company_id: string
+          _email: string
+          _role?: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: Json
+      }
+      platform_remove_company_member: {
+        Args: { _company_id: string; _user_id: string }
+        Returns: undefined
+      }
+      platform_set_member_role: {
+        Args: {
+          _company_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: undefined
+      }
       post_message: {
         Args: {
           _content?: string
