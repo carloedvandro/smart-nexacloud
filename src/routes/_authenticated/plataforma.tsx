@@ -1,3 +1,4 @@
+import { buildInviteUrl } from "@/lib/nexa/public-url";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -103,7 +104,7 @@ function PlatformPage() {
       return data as unknown as { token: string };
     },
     onSuccess: (result) => {
-      setInviteLink(`${window.location.origin}/convite/${result.token}`);
+      setInviteLink(buildInviteUrl(result.token));
       void refreshMembers();
       toast.success("Link de convite gerado (uso único, 7 dias)");
     },
