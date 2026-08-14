@@ -28,12 +28,17 @@ import {
   configurePlatformWebhook,
   createPlatformCompany,
   getPlatformWebhookUrl,
+  inviteCompanyMember,
+  listCompanyMembers,
   listPlatformCompanies,
   listPlatformInstances,
   provisionInstanceForCompany,
+  removeCompanyMember,
+  setCompanyMemberRole,
   updateInstanceCredentials,
 
 } from "@/lib/platform/platform.functions";
+
 
 export const Route = createFileRoute("/_authenticated/plataforma")({
   head: () => ({
@@ -77,6 +82,62 @@ function PlatformPage() {
   const [tokenTarget, setTokenTarget] = useState<{ id: string; name: string } | null>(null);
   const [tokenValue, setTokenValue] = useState("");
   const [webhook, setWebhook] = useState<{ id: string; url: string } | null>(null);
+
+  const membersFn = useServerFn(listCompanyMembers);
+  const inviteFn = useServerFn(inviteCompanyMember);
+  const setRoleFn = useServerFn(setCompanyMemberRole);
+  const removeMemberFn = useServerFn(removeCompanyMember);
+  const [membersTarget, setMembersTarget] = useState<{ id: string; name: string } | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("ADMIN");
+
+  const membersQuery = useQuery({
+    queryKey: ["company-members", membersTarget?.id],
+    enabled: Boolean(membersTarget?.id),
+    queryFn: () => membersFn({ data: { companyId: membersTarget!.id } }),
+  });
+
+  const refreshMembers = () =>
+    queryClient.invalidateQueries({ queryKey: ["company-members", membersTarget?.id] });
+
+  const inviteMutation = useMutation({
+    mutationFn: () =>
+      inviteFn({
+        data: { companyId: membersTarget?.id ?? "", email: inviteEmail.trim(), role: inviteRole },
+      }),
+    onSuccess: (result) => {
+      toast.success(
+        result.linked
+          ? "Usuário existente vinculado à empresa com o papel escolhido."
+          : "Convite registrado: ao criar a conta com este e-mail o acesso é liberado automaticamente.",
+      );
+      setInviteEmail("");
+      void refreshMembers();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const roleMutation = useMutation({
+    mutationFn: (vars: { userId: string; role: "ADMIN" | "CONSULTANT" }) =>
+      setRoleFn({ data: { userId: vars.userId, companyId: membersTarget?.id ?? "", role: vars.role } }),
+    onSuccess: () => {
+      toast.success("Papel atualizado.");
+      void refreshMembers();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (userId: string) =>
+      removeMemberFn({ data: { userId, companyId: membersTarget?.id ?? "" } }),
+    onSuccess: () => {
+      toast.success("Vínculo operacional removido.");
+      void refreshMembers();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+
 
 
   const platformAdminQuery = useQuery({
@@ -236,6 +297,13 @@ function PlatformPage() {
                     <Button
                       size="sm"
                       variant="ghost"
+                      onClick={() => setMembersTarget({ id: company.id, name: company.name })}
+                    >
+                      Membros
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => {
                         setTargetCompany(company.id);
                         setInstanceOpen(true);
@@ -243,6 +311,7 @@ function PlatformPage() {
                     >
                       Provisionar
                     </Button>
+
                   </div>
                 </div>
               ))
@@ -509,7 +578,141 @@ function PlatformPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={membersTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setMembersTarget(null);
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Membros de {membersTarget?.name ?? "empresa"}</DialogTitle>
+            <DialogDescription>
+              A empresa é uma entidade independente: o vínculo dos usuários é gerenciado aqui. O
+              administrador da plataforma administra a empresa mesmo sem ser membro operacional.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {membersQuery.isLoading ? (
+                <Skeleton className="h-24 w-full" />
+              ) : (membersQuery.data?.members.length ?? 0) === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum usuário vinculado ainda.</p>
+              ) : (
+                membersQuery.data!.members.map((member) => {
+                  const isCompanyAdmin = member.roles.includes("ADMIN");
+                  const isPlatform = member.roles.includes("PLATFORM_ADMIN");
+                  return (
+                    <div
+                      key={member.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {member.fullName ?? member.email ?? "Usuário"}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {member.email ?? "sem e-mail"} · {membersTarget?.name} ·{" "}
+                          {member.isActive ? "ativo" : "inativo"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {isPlatform ? <Badge>Administrador da plataforma</Badge> : null}
+                        <Badge variant={isCompanyAdmin ? "secondary" : "outline"}>
+                          {isCompanyAdmin ? "Administrador da empresa" : "Consultor"}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={roleMutation.isPending}
+                          onClick={() =>
+                            roleMutation.mutate({
+                              userId: member.id,
+                              role: isCompanyAdmin ? "CONSULTANT" : "ADMIN",
+                            })
+                          }
+                        >
+                          {isCompanyAdmin ? "Tornar consultor" : "Tornar administrador"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={removeMutation.isPending}
+                          onClick={() => removeMutation.mutate(member.id)}
+                        >
+                          Remover vínculo
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {(membersQuery.data?.invites.length ?? 0) > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium uppercase text-muted-foreground">Convites</p>
+                {membersQuery.data!.invites.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm"
+                  >
+                    <span className="truncate">{invite.email}</span>
+                    <span className="flex items-center gap-1.5">
+                      <Badge variant="outline">
+                        {invite.role === "ADMIN" ? "Administrador" : "Consultor"}
+                      </Badge>
+                      <Badge variant={invite.status === "PENDING" ? "secondary" : "outline"}>
+                        {invite.status === "PENDING" ? "pendente" : "aceito"}
+                      </Badge>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <p className="text-sm font-medium">Criar/convidar administrador da empresa</p>
+              <div className="space-y-1.5">
+                <Label>E-mail</Label>
+                <Input
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  type="email"
+                  placeholder="admin@empresa.com.br"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Papel</Label>
+                <Select
+                  value={inviteRole}
+                  onValueChange={(value) => setInviteRole(value as "ADMIN" | "CONSULTANT")}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADMIN">Administrador da empresa</SelectItem>
+                    <SelectItem value="CONSULTANT">Consultor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                className="w-full"
+                disabled={!inviteEmail.trim() || inviteMutation.isPending}
+                onClick={() => inviteMutation.mutate()}
+              >
+                {inviteMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                Convidar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppShell>
+
 
   );
 }

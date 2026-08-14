@@ -238,3 +238,121 @@ export const configurePlatformWebhook = createServerFn({ method: "POST" })
     const current = await readInstanceWebhook(data.connectionId);
     return { ok: true, url, current: current.url ?? null };
   });
+
+export type CompanyMember = {
+  id: string;
+  fullName: string | null;
+  email: string | null;
+  roles: string[];
+  isActive: boolean;
+  availability: string;
+  companyId: string | null;
+};
+
+export type CompanyInvite = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  createdAt: string;
+};
+
+/** Membros e convites de uma empresa (somente super administrador). */
+export const listCompanyMembers = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { companyId: string }) => {
+    if (!data?.companyId) throw new Error("Empresa inválida.");
+    return data;
+  })
+  .handler(async ({ data, context }): Promise<{ members: CompanyMember[]; invites: CompanyInvite[] }> => {
+    await assertPlatformAdmin(context.supabase as never);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const [{ data: profiles, error }, { data: invites }] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("id, full_name, email, is_active, availability, company_id")
+        .eq("company_id", data.companyId)
+        .order("full_name", { ascending: true }),
+      supabaseAdmin
+        .from("company_invites")
+        .select("id, email, role, status, created_at")
+        .eq("company_id", data.companyId)
+        .order("created_at", { ascending: false }),
+    ]);
+    if (error) throw new Error(error.message);
+
+    const ids = (profiles ?? []).map((row) => row.id);
+    const { data: roleRows } = ids.length
+      ? await supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids)
+      : { data: [] as { user_id: string; role: string }[] };
+
+    const rolesByUser = new Map<string, string[]>();
+    for (const row of roleRows ?? []) {
+      rolesByUser.set(row.user_id, [...(rolesByUser.get(row.user_id) ?? []), row.role]);
+    }
+
+    return {
+      members: (profiles ?? []).map((row) => ({
+        id: row.id,
+        fullName: row.full_name,
+        email: row.email,
+        roles: rolesByUser.get(row.id) ?? [],
+        isActive: row.is_active,
+        availability: row.availability,
+        companyId: row.company_id,
+      })),
+      invites: (invites ?? []).map((row) => ({
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        status: row.status,
+        createdAt: row.created_at,
+      })),
+    };
+  });
+
+/** Cria/convida o administrador (ou consultor) de uma empresa. */
+export const inviteCompanyMember = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { companyId: string; email: string; role?: "ADMIN" | "CONSULTANT" }) => {
+    if (!data?.companyId) throw new Error("Empresa inválida.");
+    if (!data.email?.trim()) throw new Error("Informe o e-mail.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const { data: result, error } = await context.supabase.rpc("platform_invite_company_member", {
+      _company_id: data.companyId,
+      _email: data.email.trim(),
+      _role: data.role ?? "ADMIN",
+    });
+    if (error) throw new Error(error.message);
+    return result as { linked: boolean; user_id?: string; invite_id?: string };
+  });
+
+/** Altera o papel de um membro da empresa. */
+export const setCompanyMemberRole = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { userId: string; companyId: string; role: "ADMIN" | "CONSULTANT" }) => data)
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("platform_set_member_role", {
+      _user_id: data.userId,
+      _company_id: data.companyId,
+      _role: data.role,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Remove o vínculo operacional de um usuário com a empresa. */
+export const removeCompanyMember = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { userId: string; companyId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("platform_remove_company_member", {
+      _user_id: data.userId,
+      _company_id: data.companyId,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });

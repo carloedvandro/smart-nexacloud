@@ -27,11 +27,18 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
+  const isPlatformAdminGuard = roles.includes("PLATFORM_ADMIN");
+
   useEffect(() => {
-    if (!loading && profile && !profile.company_id) {
-      void navigate({ to: "/onboarding", replace: true });
+    if (loading || !profile || profile.company_id) return;
+    // Administrador da plataforma não precisa de vínculo operacional com empresa.
+    if (isPlatformAdminGuard) {
+      if (pathname !== "/plataforma") void navigate({ to: "/plataforma", replace: true });
+      return;
     }
-  }, [loading, profile, navigate]);
+    void navigate({ to: "/onboarding", replace: true });
+  }, [loading, profile, navigate, isPlatformAdminGuard, pathname]);
+
 
   useEffect(() => {
     setMobileOpen(false);
