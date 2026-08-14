@@ -237,14 +237,26 @@ function WhatsAppPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {instances.map((instance) => (
-              <Card key={instance.id} className="shadow-panel">
+              <Card
+                key={instance.id}
+                className={instance.isTrunk ? "shadow-panel border-primary/60" : "shadow-panel"}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base">{instance.name ?? "Instância"}</CardTitle>
+                    <div className="space-y-1">
+                      <CardTitle className="text-base">{instance.name ?? "Instância"}</CardTitle>
+                      {instance.isTrunk ? (
+                        <Badge className="gap-1">
+                          <Star className="size-3" />
+                          Número tronco
+                        </Badge>
+                      ) : null}
+                    </div>
                     <Badge variant={statusTone(instance.status)}>
                       {WHATSAPP_INSTANCE_STATUS_LABEL[instance.status] ?? instance.status}
                     </Badge>
                   </div>
+
                   <CardDescription className="flex items-center gap-1.5">
                     <User className="size-3.5" />
                     {instance.assignedUserName ?? "Sem colaborador vinculado"}
