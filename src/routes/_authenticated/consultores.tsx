@@ -58,7 +58,9 @@ type MemberRow = {
   phone: string | null;
   availability: Availability;
   is_active: boolean;
+  metadata: Record<string, unknown> | null;
 };
+
 
 type InviteRow = { id: string; email: string | null; role: string; created_at: string };
 
@@ -80,7 +82,7 @@ function ConsultantsPage() {
       const [{ data: members, error: mErr }, { data: invites, error: iErr }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, email, phone, availability, is_active")
+          .select("id, full_name, email, phone, availability, is_active, metadata")
           .eq("company_id", companyId as string)
           .order("full_name", { nullsFirst: false })
           .limit(200),
@@ -146,7 +148,31 @@ function ConsultantsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const setLimit = useMutation({
+    mutationFn: async (input: {
+      userId: string;
+      metadata: Record<string, unknown> | null;
+      value: number | null;
+    }) => {
+      const next = { ...(input.metadata ?? {}) } as Record<string, unknown>;
+      if (input.value === null) delete next["max_concurrent"];
+      else next["max_concurrent"] = input.value;
+      const { error } = await supabase
+        .from("profiles")
+        .update({ metadata: next as never })
+        .eq("id", input.userId);
+      if (error) throw error;
+    },
+
+    onSuccess: () => {
+      invalidate();
+      toast.success("Limite de atendimentos atualizado");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const remove = useMutation({
+
     mutationFn: async (userId: string) => {
       const { error } = await supabase.rpc("company_remove_member", { _user_id: userId });
       if (error) throw error;
@@ -424,6 +450,43 @@ function ConsultantsPage() {
                               <SelectItem value="ADMIN">Administrador</SelectItem>
                             </SelectContent>
                           </Select>
+                          <div className="flex items-center gap-1">
+                            <Label
+                              htmlFor={`limit-${member.id}`}
+                              className="text-xs text-muted-foreground"
+                            >
+                              Limite
+                            </Label>
+                            <Input
+                              id={`limit-${member.id}`}
+                              type="number"
+                              min={0}
+                              className="w-20"
+                              title="Limite de atendimentos simultâneos"
+                              defaultValue={
+                                typeof member.metadata?.["max_concurrent"] === "number"
+                                  ? (member.metadata["max_concurrent"] as number)
+                                  : ""
+                              }
+                              disabled={setLimit.isPending}
+                              onBlur={(e) => {
+                                const raw = e.currentTarget.value.trim();
+                                const value = raw === "" ? null : Number(raw);
+                                if (value !== null && (!Number.isFinite(value) || value < 0)) return;
+                                const current =
+                                  typeof member.metadata?.["max_concurrent"] === "number"
+                                    ? (member.metadata["max_concurrent"] as number)
+                                    : null;
+                                if (current === value) return;
+                                setLimit.mutate({
+                                  userId: member.id,
+                                  metadata: member.metadata,
+                                  value,
+                                });
+                              }}
+                            />
+                          </div>
+
                           <Button
                             variant="ghost"
                             size="icon"
