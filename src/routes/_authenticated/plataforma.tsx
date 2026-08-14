@@ -28,12 +28,17 @@ import {
   configurePlatformWebhook,
   createPlatformCompany,
   getPlatformWebhookUrl,
+  inviteCompanyMember,
+  listCompanyMembers,
   listPlatformCompanies,
   listPlatformInstances,
   provisionInstanceForCompany,
+  removeCompanyMember,
+  setCompanyMemberRole,
   updateInstanceCredentials,
 
 } from "@/lib/platform/platform.functions";
+
 
 export const Route = createFileRoute("/_authenticated/plataforma")({
   head: () => ({
