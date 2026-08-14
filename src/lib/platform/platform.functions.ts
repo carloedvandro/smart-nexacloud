@@ -356,3 +356,70 @@ export const removeCompanyMember = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/** Visão geral da plataforma inteira (somente super administrador). */
+export const getPlatformOverview = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<PlatformOverview> => {
+    await assertPlatformAdmin(context.supabase as never);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const iso = startOfDay.toISOString();
+    const head = { count: "exact" as const, head: true };
+
+    const [
+      companies,
+      connections,
+      users,
+      leadsToday,
+      openConversations,
+      messagesToday,
+      pendingInvites,
+      recentCompanies,
+    ] = await Promise.all([
+      supabaseAdmin.from("companies").select("id, status"),
+      supabaseAdmin.from("whatsapp_connections").select("id, status, company_id"),
+      supabaseAdmin.from("profiles").select("id", head),
+      supabaseAdmin.from("leads").select("id", head).gte("created_at", iso),
+      supabaseAdmin
+        .from("conversations")
+        .select("id", head)
+        .not("status", "in", "(CLOSED)"),
+      supabaseAdmin.from("messages").select("id", head).gte("created_at", iso),
+      supabaseAdmin.from("company_invites").select("id", head).eq("status", "PENDING"),
+      supabaseAdmin
+        .from("companies")
+        .select("id, name, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5),
+    ]);
+
+    const companyRows = companies.data ?? [];
+    const connectionRows = connections.data ?? [];
+    const perCompany = new Map<string, number>();
+    for (const row of connectionRows) {
+      perCompany.set(row.company_id, (perCompany.get(row.company_id) ?? 0) + 1);
+    }
+
+    return {
+      companies: companyRows.length,
+      activeCompanies: companyRows.filter((c) => c.status === "ACTIVE").length,
+      instances: connectionRows.length,
+      connectedInstances: connectionRows.filter((c) => c.status === "CONNECTED").length,
+      availableInstances: connectionRows.filter((c) => c.status === "AVAILABLE").length,
+      users: users.count ?? 0,
+      leadsToday: leadsToday.count ?? 0,
+      openConversations: openConversations.count ?? 0,
+      messagesToday: messagesToday.count ?? 0,
+      pendingInvites: pendingInvites.count ?? 0,
+      recentCompanies: (recentCompanies.data ?? []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        createdAt: row.created_at,
+        instanceCount: perCompany.get(row.id) ?? 0,
+      })),
+    };
+  });
