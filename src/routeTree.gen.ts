@@ -25,6 +25,7 @@ import { Route as AuthenticatedPlataformaRouteImport } from './routes/_authentic
 import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authenticated/relatorios'
 import { Route as AuthenticatedWhatsappRouteImport } from './routes/_authenticated/whatsapp'
 import { Route as ConviteTokenRouteImport } from './routes/convite.$token'
+import { Route as AuthenticatedVerComoUserIdRouteImport } from './routes/_authenticated/ver-como.$userId'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
 import { Route as ApiPublicWhatsappWebhookTokenRouteImport } from './routes/api/public/whatsapp/webhook.$token'
 
@@ -111,6 +112,12 @@ const ConviteTokenRoute = ConviteTokenRouteImport.update({
   path: '/convite/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedVerComoUserIdRoute =
+  AuthenticatedVerComoUserIdRouteImport.update({
+    id: '/ver-como/$userId',
+    path: '/ver-como/$userId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicWhatsappWebhookRoute =
   ApiPublicWhatsappWebhookRouteImport.update({
     id: '/api/public/whatsapp/webhook',
@@ -140,6 +147,7 @@ export interface FileRoutesByFullPath {
   '/relatorios': typeof AuthenticatedRelatoriosRoute
   '/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
+  '/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
@@ -159,6 +167,7 @@ export interface FileRoutesByTo {
   '/relatorios': typeof AuthenticatedRelatoriosRoute
   '/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
+  '/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
@@ -180,6 +189,7 @@ export interface FileRoutesById {
   '/_authenticated/relatorios': typeof AuthenticatedRelatoriosRoute
   '/_authenticated/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
+  '/_authenticated/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/whatsapp'
     | '/convite/$token'
+    | '/ver-como/$userId'
     | '/api/public/whatsapp/webhook'
     | '/api/public/whatsapp/webhook/$token'
   fileRoutesByTo: FileRoutesByTo
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/whatsapp'
     | '/convite/$token'
+    | '/ver-como/$userId'
     | '/api/public/whatsapp/webhook'
     | '/api/public/whatsapp/webhook/$token'
   id:
@@ -240,6 +252,7 @@ export interface FileRouteTypes {
     | '/_authenticated/relatorios'
     | '/_authenticated/whatsapp'
     | '/convite/$token'
+    | '/_authenticated/ver-como/$userId'
     | '/api/public/whatsapp/webhook'
     | '/api/public/whatsapp/webhook/$token'
   fileRoutesById: FileRoutesById
@@ -366,6 +379,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConviteTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/ver-como/$userId': {
+      id: '/_authenticated/ver-como/$userId'
+      path: '/ver-como/$userId'
+      fullPath: '/ver-como/$userId'
+      preLoaderRoute: typeof AuthenticatedVerComoUserIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/whatsapp/webhook': {
       id: '/api/public/whatsapp/webhook'
       path: '/api/public/whatsapp/webhook'
@@ -396,6 +416,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPlataformaRoute: typeof AuthenticatedPlataformaRoute
   AuthenticatedRelatoriosRoute: typeof AuthenticatedRelatoriosRoute
   AuthenticatedWhatsappRoute: typeof AuthenticatedWhatsappRoute
+  AuthenticatedVerComoUserIdRoute: typeof AuthenticatedVerComoUserIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -411,6 +432,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPlataformaRoute: AuthenticatedPlataformaRoute,
   AuthenticatedRelatoriosRoute: AuthenticatedRelatoriosRoute,
   AuthenticatedWhatsappRoute: AuthenticatedWhatsappRoute,
+  AuthenticatedVerComoUserIdRoute: AuthenticatedVerComoUserIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
