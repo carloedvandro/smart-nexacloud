@@ -727,6 +727,38 @@ function PlatformPage() {
                 Convidar
               </Button>
             </div>
+
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <p className="text-sm font-medium">Link de indicação (uso único)</p>
+              <p className="text-xs text-muted-foreground">
+                Gera um link exclusivo para esta empresa com o papel selecionado acima. Vale para uma
+                única pessoa, expira em 7 dias e não pode ser reaproveitado.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={linkMutation.isPending}
+                onClick={() => linkMutation.mutate()}
+              >
+                {linkMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                Gerar link de convite
+              </Button>
+              {inviteLink ? (
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={inviteLink} />
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(inviteLink);
+                      toast.success("Link copiado");
+                    }}
+                  >
+                    Copiar
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+
           </div>
         </DialogContent>
       </Dialog>
