@@ -58,7 +58,9 @@ type MemberRow = {
   phone: string | null;
   availability: Availability;
   is_active: boolean;
+  metadata: Record<string, unknown> | null;
 };
+
 
 type InviteRow = { id: string; email: string | null; role: string; created_at: string };
 
