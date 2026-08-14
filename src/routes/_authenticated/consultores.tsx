@@ -148,7 +148,30 @@ function ConsultantsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const setLimit = useMutation({
+    mutationFn: async (input: {
+      userId: string;
+      metadata: Record<string, unknown> | null;
+      value: number | null;
+    }) => {
+      const next = { ...(input.metadata ?? {}) } as Record<string, unknown>;
+      if (input.value === null) delete next.max_concurrent;
+      else next.max_concurrent = input.value;
+      const { error } = await supabase
+        .from("profiles")
+        .update({ metadata: next })
+        .eq("id", input.userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success("Limite de atendimentos atualizado");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const remove = useMutation({
+
     mutationFn: async (userId: string) => {
       const { error } = await supabase.rpc("company_remove_member", { _user_id: userId });
       if (error) throw error;
