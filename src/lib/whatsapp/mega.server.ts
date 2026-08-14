@@ -53,13 +53,24 @@ async function request<T>(
         : null;
 
     if (!response.ok || (bodyError && bodyError !== false)) {
+      const rawMessage =
+        payload && typeof payload === "object" && "message" in payload
+          ? String((payload as { message?: unknown }).message ?? "")
+          : typeof bodyError === "string"
+            ? bodyError
+            : "";
+      const name =
+        payload && typeof payload === "object" && "name" in payload
+          ? String((payload as { name?: unknown }).name ?? "")
+          : "";
       const message =
-        typeof bodyError === "string"
-          ? bodyError
-          : `MEGA API respondeu ${response.status} em ${path}`;
-      console.error("[mega] falha", { path, status: response.status, message });
+        name === "UNAUTHORIZED"
+          ? "Token da MEGA API inválido para esta instância. Cadastre o token (Bearer) da instância no painel."
+          : rawMessage || `MEGA API respondeu ${response.status} em ${path}`;
+      console.error("[mega] falha", { path, status: response.status, name });
       return { ok: false, error: message, status: response.status };
     }
+
 
     return { ok: true, data: payload as T };
   } catch (error) {
