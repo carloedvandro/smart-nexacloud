@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/nexa/app-shell";
+import { PlatformDashboard } from "@/components/nexa/platform-dashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
@@ -107,13 +108,14 @@ async function fetchMetrics(companyId: string): Promise<Metrics> {
 }
 
 function DashboardPage() {
-  const { companyId, profile } = useAuth();
+  const { companyId, profile, roles } = useAuth();
   const queryClient = useQueryClient();
+  const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
 
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-metrics", companyId],
     queryFn: () => fetchMetrics(companyId as string),
-    enabled: Boolean(companyId),
+    enabled: Boolean(companyId) && !isPlatformAdmin,
     refetchInterval: 60_000,
   });
 
@@ -143,6 +145,17 @@ function DashboardPage() {
     { label: "Transferências hoje", value: data?.transfers, icon: Repeat2 },
     { label: "Timeouts hoje", value: data?.timeouts, icon: TimerReset },
   ];
+
+  if (isPlatformAdmin) {
+    return (
+      <AppShell
+        title="Painel da plataforma"
+        description={`Visão geral de todas as empresas — ${profile?.full_name ?? profile?.email ?? ""}`}
+      >
+        <PlatformDashboard />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell
