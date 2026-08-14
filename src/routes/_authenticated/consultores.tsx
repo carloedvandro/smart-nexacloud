@@ -82,7 +82,7 @@ function ConsultantsPage() {
       const [{ data: members, error: mErr }, { data: invites, error: iErr }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, email, phone, availability, is_active")
+          .select("id, full_name, email, phone, availability, is_active, metadata")
           .eq("company_id", companyId as string)
           .order("full_name", { nullsFirst: false })
           .limit(200),
