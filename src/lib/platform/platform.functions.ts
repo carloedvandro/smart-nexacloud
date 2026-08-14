@@ -24,6 +24,26 @@ export type PlatformInstance = {
   hasCredentials: boolean;
 };
 
+export type PlatformOverview = {
+  companies: number;
+  activeCompanies: number;
+  instances: number;
+  connectedInstances: number;
+  availableInstances: number;
+  users: number;
+  leadsToday: number;
+  openConversations: number;
+  messagesToday: number;
+  pendingInvites: number;
+  recentCompanies: {
+    id: string;
+    name: string;
+    status: string;
+    createdAt: string;
+    instanceCount: number;
+  }[];
+};
+
 async function assertPlatformAdmin(supabase: { rpc: (fn: "is_platform_admin") => Promise<{ data: unknown }> }) {
   const { data } = await supabase.rpc("is_platform_admin");
   if (!data) throw new Error("Acesso restrito ao administrador da plataforma.");
