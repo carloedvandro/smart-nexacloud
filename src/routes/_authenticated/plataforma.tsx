@@ -451,6 +451,16 @@ function PlatformPage() {
                 placeholder="chave fornecida pela MEGA API"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>Token da MEGA API (opcional)</Label>
+              <Input
+                value={instanceToken}
+                onChange={(event) => setInstanceToken(event.target.value)}
+                autoComplete="off"
+                type="password"
+                placeholder="Bearer token da instância — em branco usa o token padrão da plataforma"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -463,6 +473,43 @@ function PlatformPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={tokenTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setTokenTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Token da MEGA API</DialogTitle>
+            <DialogDescription>
+              Guarde aqui o Bearer token de {tokenTarget?.name ?? "instância"}. Ele fica somente no
+              backend e nunca é exibido novamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Token</Label>
+            <Input
+              value={tokenValue}
+              onChange={(event) => setTokenValue(event.target.value)}
+              autoComplete="off"
+              type="password"
+              placeholder="token da instância na MEGA API"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!tokenValue.trim() || tokenMutation.isPending}
+              onClick={() => tokenMutation.mutate()}
+            >
+              {tokenMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Salvar token
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
+
   );
 }
