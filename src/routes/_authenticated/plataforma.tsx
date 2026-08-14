@@ -31,6 +31,8 @@ import {
   listPlatformCompanies,
   listPlatformInstances,
   provisionInstanceForCompany,
+  updateInstanceCredentials,
+
 } from "@/lib/platform/platform.functions";
 
 export const Route = createFileRoute("/_authenticated/plataforma")({
@@ -60,6 +62,7 @@ function PlatformPage() {
   const provisionFn = useServerFn(provisionInstanceForCompany);
   const webhookFn = useServerFn(getPlatformWebhookUrl);
   const configureWebhookFn = useServerFn(configurePlatformWebhook);
+  const updateCredentialsFn = useServerFn(updateInstanceCredentials);
 
   const [companyOpen, setCompanyOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
@@ -70,7 +73,11 @@ function PlatformPage() {
   const [targetCompany, setTargetCompany] = useState("");
   const [instanceKey, setInstanceKey] = useState("");
   const [instanceName, setInstanceName] = useState("");
+  const [instanceToken, setInstanceToken] = useState("");
+  const [tokenTarget, setTokenTarget] = useState<{ id: string; name: string } | null>(null);
+  const [tokenValue, setTokenValue] = useState("");
   const [webhook, setWebhook] = useState<{ id: string; url: string } | null>(null);
+
 
   const platformAdminQuery = useQuery({
     queryKey: ["is-platform-admin"],
