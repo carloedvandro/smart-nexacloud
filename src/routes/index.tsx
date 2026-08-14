@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bot, ShieldCheck, Timer, Workflow } from "lucide-react";
 
+import ogImage from "@/assets/nexa-og.jpg.asset.json";
 import { NexaLogo } from "@/components/nexa/logo";
 import { Button } from "@/components/ui/button";
 
@@ -20,8 +21,14 @@ export const Route = createFileRoute("/")({
           "IA de qualificação, fila automática com SLA e CRM de leads integrados ao WhatsApp.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://smart-nexacloud.lovable.app/" },
+      { property: "og:image", content: `https://smart-nexacloud.lovable.app${ogImage.url}` },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: `https://smart-nexacloud.lovable.app${ogImage.url}` },
     ],
+    links: [{ rel: "canonical", href: "https://smart-nexacloud.lovable.app/" }],
   }),
   component: Landing,
 });
