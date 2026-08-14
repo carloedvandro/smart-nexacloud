@@ -2,7 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { KeyRound, Loader2, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  KeyRound,
+  Link as LinkIcon,
+  Loader2,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 
 import { AppShell } from "@/components/nexa/app-shell";
 import { Badge } from "@/components/ui/badge";
