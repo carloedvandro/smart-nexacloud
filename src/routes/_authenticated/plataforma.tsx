@@ -655,6 +655,11 @@ function PlatformPage() {
                         >
                           {isCompanyAdmin ? "Tornar consultor" : "Tornar administrador"}
                         </Button>
+                        <Button asChild size="sm" variant="ghost">
+                          <Link to="/ver-como/$userId" params={{ userId: member.id }}>
+                            Ver como
+                          </Link>
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
