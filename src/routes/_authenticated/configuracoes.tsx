@@ -364,6 +364,8 @@ function TeamCard({
   const queryClient = useQueryClient();
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("CONSULTANT");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [linkHours, setLinkHours] = useState(168);
 
   const { data, isLoading } = useQuery({
     queryKey: ["company-team", companyId],
