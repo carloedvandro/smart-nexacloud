@@ -100,7 +100,7 @@ function PlatformPage() {
         _expires_hours: 168,
       });
       if (error) throw error;
-      return data as { token: string };
+      return data as unknown as { token: string };
     },
     onSuccess: (result) => {
       setInviteLink(`${window.location.origin}/convite/${result.token}`);

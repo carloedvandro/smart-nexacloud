@@ -471,7 +471,7 @@ function TeamCard({
         _expires_hours: linkHours,
       });
       if (error) throw error;
-      return data as { token: string; expires_at: string };
+      return data as unknown as { token: string; expires_at: string };
     },
     onSuccess: (result) => {
       setInviteLink(`${window.location.origin}/convite/${result.token}`);
