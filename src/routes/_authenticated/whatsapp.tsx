@@ -317,6 +317,20 @@ function WhatsAppPage() {
                       Histórico
                     </Button>
 
+                    {isAdmin && !instance.isTrunk ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => trunkMutation.mutate(instance.id)}
+                        disabled={trunkMutation.isPending}
+                      >
+                        <Star className="mr-1.5 size-3.5" />
+                        Definir como tronco
+                      </Button>
+                    ) : null}
+
+
+
                     {isAdmin && instance.assignedUserId ? (
                       <Button
                         size="sm"
