@@ -31,6 +31,13 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Indicadores operacionais em tempo real",
   },
   {
+    label: "Minha conexão",
+    to: "/minha-conexao",
+    icon: Smartphone,
+    roles: ["ADMIN", "CONSULTANT"],
+    description: "Status do seu WhatsApp",
+  },
+  {
     label: "Conversas",
     to: "/conversas",
     icon: MessagesSquare,

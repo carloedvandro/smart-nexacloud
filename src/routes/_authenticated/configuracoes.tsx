@@ -1,8 +1,17 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { KeyRound, Loader2, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  KeyRound,
+  Link as LinkIcon,
+  Loader2,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 
 import { AppShell } from "@/components/nexa/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -355,6 +364,8 @@ function TeamCard({
   const queryClient = useQueryClient();
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("CONSULTANT");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [linkHours, setLinkHours] = useState(168);
 
   const { data, isLoading } = useQuery({
     queryKey: ["company-team", companyId],
@@ -453,8 +464,89 @@ function TeamCard({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const createLink = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc("create_invite_link", {
+        _role: inviteRole,
+        _expires_hours: linkHours,
+      });
+      if (error) throw error;
+      return data as unknown as { token: string; expires_at: string };
+    },
+    onSuccess: (result) => {
+      setInviteLink(`${window.location.origin}/convite/${result.token}`);
+      invalidate();
+      toast.success("Link de convite gerado (uso único)");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6">
+      <Card className="shadow-panel">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <LinkIcon className="size-4 text-primary" /> Link de indicação (uso único)
+          </CardTitle>
+          <CardDescription>
+            Gere um link exclusivo para cadastrar um colaborador com CPF diretamente na sua empresa.
+            O link vale para uma única pessoa e expira no prazo escolhido — depois de usado, deixa de
+            funcionar para qualquer outra pessoa.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="space-y-2 sm:w-48">
+              <Label>Papel</Label>
+              <Select
+                value={inviteRole}
+                onValueChange={(v) => setInviteRole(v as "ADMIN" | "CONSULTANT")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CONSULTANT">Consultor</SelectItem>
+                  <SelectItem value="ADMIN">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 sm:w-48">
+              <Label>Validade</Label>
+              <Select value={String(linkHours)} onValueChange={(v) => setLinkHours(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="24">24 horas</SelectItem>
+                  <SelectItem value="72">3 dias</SelectItem>
+                  <SelectItem value="168">7 dias</SelectItem>
+                  <SelectItem value="720">30 dias</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={() => createLink.mutate()} disabled={createLink.isPending}>
+              {createLink.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Gerar link
+            </Button>
+          </div>
+          {inviteLink ? (
+            <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center">
+              <Input readOnly value={inviteLink} className="flex-1" />
+              <Button
+                variant="outline"
+                onClick={() => {
+                  void navigator.clipboard.writeText(inviteLink);
+                  toast.success("Link copiado");
+                }}
+              >
+                <Copy className="size-4" /> Copiar
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
       <Card className="shadow-panel">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -547,6 +639,11 @@ function TeamCard({
                         <SelectItem value="ADMIN">Administrador</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Button asChild variant="ghost" size="icon" aria-label="Ver como usuário">
+                      <Link to="/ver-como/$userId" params={{ userId: member.id }}>
+                        <Eye className="size-4" />
+                      </Link>
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
