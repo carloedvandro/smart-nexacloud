@@ -155,14 +155,15 @@ function ConsultantsPage() {
       value: number | null;
     }) => {
       const next = { ...(input.metadata ?? {}) } as Record<string, unknown>;
-      if (input.value === null) delete next.max_concurrent;
-      else next.max_concurrent = input.value;
+      if (input.value === null) delete next["max_concurrent"];
+      else next["max_concurrent"] = input.value;
       const { error } = await supabase
         .from("profiles")
-        .update({ metadata: next })
+        .update({ metadata: next as never })
         .eq("id", input.userId);
       if (error) throw error;
     },
+
     onSuccess: () => {
       invalidate();
       toast.success("Limite de atendimentos atualizado");
