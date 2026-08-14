@@ -31,6 +31,8 @@ import {
   listPlatformCompanies,
   listPlatformInstances,
   provisionInstanceForCompany,
+  updateInstanceCredentials,
+
 } from "@/lib/platform/platform.functions";
 
 export const Route = createFileRoute("/_authenticated/plataforma")({
@@ -60,6 +62,7 @@ function PlatformPage() {
   const provisionFn = useServerFn(provisionInstanceForCompany);
   const webhookFn = useServerFn(getPlatformWebhookUrl);
   const configureWebhookFn = useServerFn(configurePlatformWebhook);
+  const updateCredentialsFn = useServerFn(updateInstanceCredentials);
 
   const [companyOpen, setCompanyOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
@@ -70,7 +73,11 @@ function PlatformPage() {
   const [targetCompany, setTargetCompany] = useState("");
   const [instanceKey, setInstanceKey] = useState("");
   const [instanceName, setInstanceName] = useState("");
+  const [instanceToken, setInstanceToken] = useState("");
+  const [tokenTarget, setTokenTarget] = useState<{ id: string; name: string } | null>(null);
+  const [tokenValue, setTokenValue] = useState("");
   const [webhook, setWebhook] = useState<{ id: string; url: string } | null>(null);
+
 
   const platformAdminQuery = useQuery({
     queryKey: ["is-platform-admin"],
@@ -127,6 +134,7 @@ function PlatformPage() {
           companyId: targetCompany,
           instanceKey,
           ...(instanceName.trim() ? { name: instanceName.trim() } : {}),
+          ...(instanceToken.trim() ? { apiToken: instanceToken.trim() } : {}),
         },
       }),
     onSuccess: () => {
@@ -134,10 +142,26 @@ function PlatformPage() {
       setInstanceOpen(false);
       setInstanceKey("");
       setInstanceName("");
+      setInstanceToken("");
       invalidate();
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const tokenMutation = useMutation({
+    mutationFn: () =>
+      updateCredentialsFn({
+        data: { connectionId: tokenTarget?.id ?? "", apiToken: tokenValue.trim() },
+      }),
+    onSuccess: () => {
+      toast.success("Token da MEGA API atualizado para esta instância.");
+      setTokenTarget(null);
+      setTokenValue("");
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
 
   if (platformAdminQuery.isLoading) {
     return (
@@ -297,7 +321,18 @@ function PlatformPage() {
                       >
                         Configurar
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setTokenTarget({ id: instance.id, name: instance.name ?? "Instância" });
+                          setTokenValue("");
+                        }}
+                      >
+                        Token
+                      </Button>
                     </div>
+
                   </div>
                   {webhook?.id === instance.id ? (
                     <p className="break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">
@@ -416,6 +451,16 @@ function PlatformPage() {
                 placeholder="chave fornecida pela MEGA API"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>Token da MEGA API (opcional)</Label>
+              <Input
+                value={instanceToken}
+                onChange={(event) => setInstanceToken(event.target.value)}
+                autoComplete="off"
+                type="password"
+                placeholder="Bearer token da instância — em branco usa o token padrão da plataforma"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -428,6 +473,43 @@ function PlatformPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={tokenTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setTokenTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Token da MEGA API</DialogTitle>
+            <DialogDescription>
+              Guarde aqui o Bearer token de {tokenTarget?.name ?? "instância"}. Ele fica somente no
+              backend e nunca é exibido novamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Token</Label>
+            <Input
+              value={tokenValue}
+              onChange={(event) => setTokenValue(event.target.value)}
+              autoComplete="off"
+              type="password"
+              placeholder="token da instância na MEGA API"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!tokenValue.trim() || tokenMutation.isPending}
+              onClick={() => tokenMutation.mutate()}
+            >
+              {tokenMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Salvar token
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
+
   );
 }

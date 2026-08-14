@@ -144,7 +144,14 @@ export const listPlatformInstances = createServerFn({ method: "GET" })
 export const provisionInstanceForCompany = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (data: { companyId: string; instanceKey: string; name?: string; instanceNumber?: number }) => {
+    (data: {
+      companyId: string;
+      instanceKey: string;
+      name?: string;
+      instanceNumber?: number;
+      apiToken?: string;
+      apiHost?: string;
+    }) => {
       if (!data.companyId) throw new Error("Selecione a empresa.");
       if (!data.instanceKey?.trim()) throw new Error("Informe a instance_key.");
       return data;
@@ -158,8 +165,48 @@ export const provisionInstanceForCompany = createServerFn({ method: "POST" })
       ...(typeof data.instanceNumber === "number" ? { _instance_number: data.instanceNumber } : {}),
     });
     if (error) throw new Error(error.message);
+
+    const token = data.apiToken?.trim();
+    const host = data.apiHost?.trim();
+    if (token || host) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error: credError } = await supabaseAdmin
+        .from("whatsapp_credentials")
+        .update({
+          ...(token ? { api_key: token } : {}),
+          ...(host ? { api_host: host } : {}),
+        })
+        .eq("connection_id", id as string);
+      if (credError) throw new Error(credError.message);
+    }
     return { id: id as string };
   });
+
+/** Atualiza o token/host da MEGA de uma instância já provisionada. */
+export const updateInstanceCredentials = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string; apiToken?: string; apiHost?: string }) => {
+    if (!data.connectionId) throw new Error("Instância inválida.");
+    if (!data.apiToken?.trim() && !data.apiHost?.trim())
+      throw new Error("Informe o token ou o host.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    await assertPlatformAdmin(context.supabase as never);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const token = data.apiToken?.trim();
+    const host = data.apiHost?.trim();
+    const { error } = await supabaseAdmin
+      .from("whatsapp_credentials")
+      .update({
+        ...(token ? { api_key: token } : {}),
+        ...(host ? { api_host: host } : {}),
+      })
+      .eq("connection_id", data.connectionId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 
 /**
  * URL CENTRAL do webhook (super administrador).
