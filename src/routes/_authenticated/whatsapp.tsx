@@ -129,7 +129,7 @@ function WhatsAppPage() {
       toast.success(
         result.logout
           ? "Instância liberada e WhatsApp deslogado. O histórico foi preservado."
-          : "Instância liberada. O logout na MEGA API não pôde ser confirmado.",
+          : "Instância liberada. O logout do WhatsApp não pôde ser confirmado.",
       );
       void invalidate();
     },
