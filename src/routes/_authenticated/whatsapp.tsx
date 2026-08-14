@@ -37,6 +37,8 @@ import {
   provisionWhatsAppInstance,
   refreshWhatsAppInstance,
   releaseWhatsAppInstance,
+  setTrunkWhatsAppInstance,
+
   type WhatsAppInstance,
 } from "@/lib/whatsapp/whatsapp.functions";
 
