@@ -102,6 +102,14 @@ function WhatsAppPage() {
     queryFn: () => listConsultants(companyId as string),
   });
 
+  const fetchCandidates = useServerFn(listInstanceCandidates);
+  const candidatesQuery = useQuery({
+    queryKey: ["instance-candidates", assignTarget?.id],
+    enabled: Boolean(assignTarget?.id),
+    queryFn: () => fetchCandidates({ data: { connectionId: assignTarget!.id } }),
+  });
+
+
   const platformAdminQuery = useQuery({
     queryKey: ["is-platform-admin"],
     queryFn: async () => {
