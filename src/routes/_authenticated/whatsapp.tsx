@@ -32,6 +32,7 @@ import {
   connectWhatsAppInstance,
   getInstanceWebhookConfig,
   getWhatsAppWebhookUrl,
+  listInstanceCandidates,
   listInstanceHistory,
   listWhatsAppInstances,
   provisionWhatsAppInstance,
