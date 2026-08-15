@@ -369,11 +369,17 @@ function WhatsAppPage() {
                 <SelectValue placeholder="Selecione o colaborador" />
               </SelectTrigger>
               <SelectContent>
-                {(consultantsQuery.data ?? []).map((consultant) => (
+                {(candidatesQuery.data ?? []).map((consultant) => (
                   <SelectItem key={consultant.id} value={consultant.id}>
-                    {consultant.full_name ?? consultant.email}
+                    {consultant.fullName ?? consultant.email}
                   </SelectItem>
                 ))}
+                {candidatesQuery.data && candidatesQuery.data.length === 0 ? (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">
+                    Nenhum colaborador ativo nesta empresa.
+                  </div>
+                ) : null}
+
               </SelectContent>
             </Select>
           </div>
