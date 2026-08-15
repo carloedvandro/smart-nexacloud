@@ -187,6 +187,17 @@ function PlatformPage() {
     void queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
   };
 
+  const transferMutation = useMutation({
+    mutationFn: (vars: { connectionId: string; companyId: string }) =>
+      transferFn({ data: vars }),
+    onSuccess: () => {
+      toast.success("Instância transferida para a nova empresa.");
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+
   const createCompanyMutation = useMutation({
     mutationFn: () =>
       createCompanyFn({
