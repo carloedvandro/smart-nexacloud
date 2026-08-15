@@ -36,6 +36,7 @@ import {
   provisionInstanceForCompany,
   removeCompanyMember,
   setCompanyMemberRole,
+  transferInstanceCompany,
   updateInstanceCredentials,
 
 } from "@/lib/platform/platform.functions";
@@ -69,6 +70,7 @@ function PlatformPage() {
   const webhookFn = useServerFn(getPlatformWebhookUrl);
   const configureWebhookFn = useServerFn(configurePlatformWebhook);
   const updateCredentialsFn = useServerFn(updateInstanceCredentials);
+  const transferFn = useServerFn(transferInstanceCompany);
 
   const [companyOpen, setCompanyOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
@@ -186,6 +188,17 @@ function PlatformPage() {
     void queryClient.invalidateQueries({ queryKey: ["platform-instances"] });
     void queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
   };
+
+  const transferMutation = useMutation({
+    mutationFn: (vars: { connectionId: string; companyId: string }) =>
+      transferFn({ data: vars }),
+    onSuccess: () => {
+      toast.success("Instância transferida para a nova empresa.");
+      invalidate();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
 
   const createCompanyMutation = useMutation({
     mutationFn: () =>
@@ -420,7 +433,27 @@ function PlatformPage() {
                       >
                         Token
                       </Button>
+                      <Select
+                        value=""
+                        onValueChange={(companyId) =>
+                          transferMutation.mutate({ connectionId: instance.id, companyId })
+                        }
+                      >
+                        <SelectTrigger className="h-9 w-[180px]">
+                          <SelectValue placeholder="Mover para empresa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {companies
+                            .filter((company) => company.id !== instance.companyId)
+                            .map((company) => (
+                              <SelectItem key={company.id} value={company.id}>
+                                {company.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
                     </div>
+
 
                   </div>
                   {webhook?.id === instance.id ? (
