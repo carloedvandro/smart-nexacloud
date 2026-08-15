@@ -32,6 +32,7 @@ import {
   connectWhatsAppInstance,
   getInstanceWebhookConfig,
   getWhatsAppWebhookUrl,
+  listInstanceCandidates,
   listInstanceHistory,
   listWhatsAppInstances,
   provisionWhatsAppInstance,
@@ -101,6 +102,14 @@ function WhatsAppPage() {
     enabled: Boolean(companyId),
     queryFn: () => listConsultants(companyId as string),
   });
+
+  const fetchCandidates = useServerFn(listInstanceCandidates);
+  const candidatesQuery = useQuery({
+    queryKey: ["instance-candidates", assignTarget?.id],
+    enabled: Boolean(assignTarget?.id),
+    queryFn: () => fetchCandidates({ data: { connectionId: assignTarget!.id } }),
+  });
+
 
   const platformAdminQuery = useQuery({
     queryKey: ["is-platform-admin"],
@@ -369,11 +378,17 @@ function WhatsAppPage() {
                 <SelectValue placeholder="Selecione o colaborador" />
               </SelectTrigger>
               <SelectContent>
-                {(consultantsQuery.data ?? []).map((consultant) => (
+                {(candidatesQuery.data ?? []).map((consultant) => (
                   <SelectItem key={consultant.id} value={consultant.id}>
-                    {consultant.full_name ?? consultant.email}
+                    {consultant.fullName ?? consultant.email}
                   </SelectItem>
                 ))}
+                {candidatesQuery.data && candidatesQuery.data.length === 0 ? (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">
+                    Nenhum colaborador ativo nesta empresa.
+                  </div>
+                ) : null}
+
               </SelectContent>
             </Select>
           </div>
