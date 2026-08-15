@@ -420,7 +420,27 @@ function PlatformPage() {
                       >
                         Token
                       </Button>
+                      <Select
+                        value=""
+                        onValueChange={(companyId) =>
+                          transferMutation.mutate({ connectionId: instance.id, companyId })
+                        }
+                      >
+                        <SelectTrigger className="h-9 w-[180px]">
+                          <SelectValue placeholder="Mover para empresa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {companies
+                            .filter((company) => company.id !== instance.companyId)
+                            .map((company) => (
+                              <SelectItem key={company.id} value={company.id}>
+                                {company.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
                     </div>
+
 
                   </div>
                   {webhook?.id === instance.id ? (
