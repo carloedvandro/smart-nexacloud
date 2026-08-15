@@ -162,7 +162,10 @@ export const releaseWhatsAppInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string; reason?: string }) => data)
   .handler(async ({ data, context }) => {
     const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
-    if (!isAdmin) throw new Error("Somente administradores podem liberar instâncias.");
+    const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin");
+    if (!isAdmin && !isPlatformAdmin) {
+      throw new Error("Somente administradores podem liberar instâncias.");
+    }
 
     const { data: connection } = await context.supabase
       .from("whatsapp_connections")
