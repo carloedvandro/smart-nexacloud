@@ -111,7 +111,39 @@ export const provisionWhatsAppInstance = createServerFn({ method: "POST" })
     return { id: id as string };
   });
 
+/** Colaboradores elegíveis para vincular a uma instância (da empresa dona da instância). */
+export const listInstanceCandidates = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string }) => {
+    if (!data?.connectionId) throw new Error("Instância inválida.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const { data: connection, error: connError } = await context.supabase
+      .from("whatsapp_connections")
+      .select("company_id")
+      .eq("id", data.connectionId)
+      .maybeSingle();
+    if (connError) throw new Error(connError.message);
+    if (!connection) throw new Error("Instância inexistente.");
+
+    const { data: rows, error } = await context.supabase
+      .from("profiles")
+      .select("id, full_name, email, availability, is_active")
+      .eq("company_id", connection.company_id)
+      .eq("is_active", true)
+      .order("full_name", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (rows ?? []).map((row) => ({
+      id: row.id,
+      fullName: row.full_name,
+      email: row.email,
+      availability: row.availability as string,
+    }));
+  });
+
 /** Vincula um colaborador a uma instância disponível. */
+
 export const assignWhatsAppInstance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { connectionId: string; userId: string }) => data)
