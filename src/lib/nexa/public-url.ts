@@ -6,7 +6,7 @@
  * então links de convite gerados a partir deles levam para a tela de login.
  * Nesses casos usamos sempre o domínio público publicado.
  */
-const PUBLIC_BASE_URL = "https://smart-nexacloud.lovable.app";
+const PUBLIC_BASE_URL = "https://nexaatende.yrwentechnology.com.br";
 
 const INTERNAL_HOST_PATTERNS = [
   "lovableproject.com",
