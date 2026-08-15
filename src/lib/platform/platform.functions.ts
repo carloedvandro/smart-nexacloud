@@ -227,6 +227,86 @@ export const updateInstanceCredentials = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Transfere uma instância provisionada de uma empresa para outra (super administrador). */
+export const transferInstanceCompany = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { connectionId: string; companyId: string }) => {
+    if (!data.connectionId) throw new Error("Instância inválida.");
+    if (!data.companyId) throw new Error("Selecione a empresa de destino.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    await assertPlatformAdmin(context.supabase as never);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: connection, error: readError } = await supabaseAdmin
+      .from("whatsapp_connections")
+      .select("id, company_id, user_id, is_trunk")
+      .eq("id", data.connectionId)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!connection) throw new Error("Instância inexistente.");
+    if (connection.company_id === data.companyId)
+      throw new Error("A instância já pertence a esta empresa.");
+
+    const { count: messageCount } = await supabaseAdmin
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("connection_id", data.connectionId);
+    if (messageCount && messageCount > 0)
+      throw new Error(
+        "Esta instância já possui mensagens vinculadas a outra empresa e não pode ser transferida.",
+      );
+
+    // Número da instância na empresa de destino e definição de tronco.
+    const { data: targetRows } = await supabaseAdmin
+      .from("whatsapp_connections")
+      .select("instance_number, is_trunk")
+      .eq("company_id", data.companyId);
+    const nextNumber =
+      Math.max(0, ...(targetRows ?? []).map((row) => row.instance_number ?? 0)) + 1;
+    const targetHasTrunk = (targetRows ?? []).some((row) => row.is_trunk);
+
+    // Encerra vínculos ativos do colaborador antes de mudar de empresa.
+    if (connection.user_id) {
+      await supabaseAdmin
+        .from("whatsapp_instance_assignments")
+        .update({ ended_at: new Date().toISOString(), release_reason: "TRANSFERENCIA_DE_EMPRESA" })
+        .eq("connection_id", data.connectionId)
+        .is("ended_at", null);
+    }
+
+    const { error } = await supabaseAdmin
+      .from("whatsapp_connections")
+      .update({
+        company_id: data.companyId,
+        user_id: null,
+        assigned_at: null,
+        assigned_by: null,
+        instance_number: nextNumber,
+        is_trunk: !targetHasTrunk,
+        status: "AVAILABLE",
+      })
+      .eq("id", data.connectionId);
+    if (error) throw new Error(error.message);
+
+    await supabaseAdmin
+      .from("whatsapp_credentials")
+      .update({ company_id: data.companyId })
+      .eq("connection_id", data.connectionId);
+
+    await supabaseAdmin.from("audit_logs").insert({
+      company_id: data.companyId,
+      user_id: context.userId,
+      action: "TRANSFER_WHATSAPP_INSTANCE",
+      entity_type: "whatsapp_connection",
+      entity_id: data.connectionId,
+      metadata: { from_company_id: connection.company_id, to_company_id: data.companyId },
+    });
+
+    return { ok: true };
+  });
+
 
 /**
  * URL CENTRAL do webhook (super administrador).
