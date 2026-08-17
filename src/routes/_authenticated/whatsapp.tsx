@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { AdminOnly } from "@/components/nexa/admin-only";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -59,7 +60,7 @@ export const Route = createFileRoute("/_authenticated/whatsapp")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: WhatsAppPage,
+  component: GuardedWhatsAppPage,
 });
 
 function statusTone(status: string) {
@@ -642,5 +643,13 @@ function WebhookCard({ instances }: { instances: WhatsAppInstance[] }) {
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function GuardedWhatsAppPage() {
+  return (
+    <AdminOnly title="WhatsApp" description="Conexões e instâncias">
+      <WhatsAppPage />
+    </AdminOnly>
   );
 }

@@ -1506,6 +1506,11 @@ export type Database = {
         Args: { _document?: string; _legal_name?: string; _name: string }
         Returns: string
       }
+      can_view_conversation: {
+        Args: { _conversation_id: string }
+        Returns: boolean
+      }
+      can_view_lead: { Args: { _lead_id: string }; Returns: boolean }
       claim_company_invite: { Args: never; Returns: string }
       company_cancel_invite: {
         Args: { _invite_id: string }

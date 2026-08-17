@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { AdminOnly } from "@/components/nexa/admin-only";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -67,7 +68,7 @@ export const Route = createFileRoute("/_authenticated/conhecimento")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: ConhecimentoPage,
+  component: GuardedConhecimentoPage,
 });
 
 const EMPTY: KnowledgeItem = {
@@ -359,5 +360,13 @@ function ConhecimentoPage() {
         </DialogContent>
       </Dialog>
     </AppShell>
+  );
+}
+
+function GuardedConhecimentoPage() {
+  return (
+    <AdminOnly title="Conhecimento IA" description="Base usada pela inteligência artificial">
+      <ConhecimentoPage />
+    </AdminOnly>
   );
 }

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { AdminOnly } from "@/components/nexa/admin-only";
 import { useServerFn } from "@tanstack/react-start";
 import { sendCompanyInviteEmail } from "@/lib/invites/invites.functions";
 
@@ -51,7 +52,7 @@ export const Route = createFileRoute("/_authenticated/consultores")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: ConsultantsPage,
+  component: GuardedConsultantsPage,
 });
 
 type MemberRow = {
@@ -572,5 +573,13 @@ function StatCard({ label, value }: { label: string; value: number }) {
         <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function GuardedConsultantsPage() {
+  return (
+    <AdminOnly title="Consultores" description="Equipe, papéis e disponibilidade">
+      <ConsultantsPage />
+    </AdminOnly>
   );
 }

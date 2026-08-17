@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { AdminOnly } from "@/components/nexa/admin-only";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/_authenticated/fila")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: FilaPage,
+  component: GuardedFilaPage,
 });
 
 function useCountdown(deadline: string) {
@@ -365,5 +366,13 @@ function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: stri
         <span className="rounded-lg bg-primary/10 p-2 text-primary">{icon}</span>
       </CardContent>
     </Card>
+  );
+}
+
+function GuardedFilaPage() {
+  return (
+    <AdminOnly title="Fila" description="Rodízio, SLA e distribuição">
+      <FilaPage />
+    </AdminOnly>
   );
 }
