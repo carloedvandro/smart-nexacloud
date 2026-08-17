@@ -7,11 +7,10 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
 import { MegaApiService, extractConnectedPhone } from "@/lib/whatsapp/mega.server";
+import type { MediaKind } from "@/lib/whatsapp/media.server";
 
 type Json = Record<string, unknown>;
 type MessageType = "text" | "audio" | "image" | "document" | "video" | "system" | "other";
-
-const MEDIA_BUCKET = "conversation-media";
 
 /** Inclui a chave apenas quando há valor (exactOptionalPropertyTypes). */
 function opt<K extends string, T>(key: K, value: T | null | undefined) {
@@ -351,7 +350,7 @@ async function downloadAndStoreMedia(input: {
   body: Json;
   messageType: MessageType;
 }): Promise<{ path: string; mimeType: string | null } | null> {
-  const { base64ToBytes, storeMedia, type MediaKind } = await import("@/lib/whatsapp/media.server");
+  const { base64ToBytes, storeMedia } = await import("@/lib/whatsapp/media.server");
   const creds = await loadMegaCredentials(input.connectionId);
   if (!creds) return null;
 
