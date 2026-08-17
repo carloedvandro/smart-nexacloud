@@ -83,15 +83,21 @@ function InvitePage() {
       toast.error("Informe um CPF válido (11 dígitos).");
       return;
     }
+    const finalEmail = (email || info?.email || "").trim();
+    if (!finalEmail) {
+      toast.error("Informe seu e-mail.");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.signUp({
-      email,
+      email: finalEmail,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/convite/${token}`,
         data: { full_name: fullName },
       },
     });
+
     if (error) {
       setBusy(false);
       toast.error(error.message);
