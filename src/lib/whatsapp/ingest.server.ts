@@ -191,6 +191,11 @@ export async function processWebhookEvent(input: {
   if (parsed.isBroadcast) return { status: "ignored", reason: "status/broadcast" };
   if (!parsed.identifier) return { status: "ignored", reason: "identificador inválido" };
 
+  // Quando o remetente vem por LID, a MEGA costuma enviar também o número real
+  // em campos paralelos (senderPn / participantPn / remoteJidAlt).
+  const realPhone = parsed.isLid ? extractRealPhone(payload) : parsed.phone;
+
+
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
   const detected = detectMessageType(body);
   const messageType = detected === "text" ? detectMessageType(payload) : detected;
