@@ -204,7 +204,15 @@ export const MegaApiService = {
         if (value && typeof value === "object") {
           if (/^(audio|video|document|image)Message$/i.test(name)) {
             mediaNode = value as Record<string, unknown>;
-            messageType = name.replace(/Message$/i, "").toLowerCase() as typeof messageType;
+            const normalizedType = name.replace(/Message$/i, "").toLowerCase();
+            if (
+              normalizedType === "audio" ||
+              normalizedType === "video" ||
+              normalizedType === "document" ||
+              normalizedType === "image"
+            ) {
+              messageType = normalizedType;
+            }
             break;
           }
           stack.push(value);
