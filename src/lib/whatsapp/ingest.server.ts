@@ -311,6 +311,16 @@ export async function processWebhookEvent(input: {
     lead_id?: string;
   };
 
+  // Lead criado por LID: se a MEGA informou o número real, gravamos no lead.
+  if (result.lead_id && realPhone) {
+    await supabaseAdmin
+      .from("leads")
+      .update({ phone: realPhone })
+      .eq("id", result.lead_id)
+      .is("phone", null);
+  }
+
+
   console.info("[whatsapp] mensagem processada", {
     evento: eventType,
     tipo: messageType,
