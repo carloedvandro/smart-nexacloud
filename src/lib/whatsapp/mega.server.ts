@@ -174,11 +174,19 @@ export const MegaApiService = {
 
   /** Download de mídia recebida — endpoint confirmado na integração de referência. */
   downloadMedia(creds: MegaCredentials, messageKey: unknown, messagePayload: unknown) {
-    return request<{ data?: string; base64?: string; mimetype?: string }>(
-      creds,
-      `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
-      { method: "POST", body: { messageKeys: messageKey, message: messagePayload } },
-    );
+    return request<{
+      data?: string;
+      base64?: string;
+      buffer?: string;
+      mediaUrl?: string;
+      fileURL?: string;
+      url?: string;
+      mimetype?: string;
+      mimeType?: string;
+    }>(creds, `/rest/instance/downloadMediaMessage/${creds.instanceKey}`, {
+      method: "POST",
+      body: { messageKeys: messageKey, message: messagePayload },
+    });
   },
 
   /**
