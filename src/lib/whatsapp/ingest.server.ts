@@ -5,6 +5,7 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
+import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
 import { MegaApiService, extractConnectedPhone } from "@/lib/whatsapp/mega.server";
 import type { MediaKind } from "@/lib/whatsapp/media.server";
