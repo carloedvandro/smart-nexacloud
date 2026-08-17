@@ -120,7 +120,7 @@ function PlatformPage() {
 
   const membersQuery = useQuery({
     queryKey: ["company-members", membersTarget?.id],
-    enabled: Boolean(membersTarget?.id),
+    enabled: hasSession && Boolean(membersTarget?.id),
     queryFn: () => membersFn({ data: { companyId: membersTarget!.id } }),
   });
 
