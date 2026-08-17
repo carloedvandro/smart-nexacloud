@@ -110,12 +110,13 @@ async function callGateway(messages: ChatMessage[]): Promise<string | null> {
   }
 }
 
-async function handoff(companyId: string, conversationId: string, reason: string) {
-  await supabaseAdmin
+async function handoff(companyId: string, conversationId: string, reason: string): Promise<boolean> {
+  const { error: sessionError } = await supabaseAdmin
     .from("ai_sessions")
     .update({ status: "HANDOFF", ended_at: new Date().toISOString(), handoff_reason: reason })
     .eq("conversation_id", conversationId)
     .eq("status", "ACTIVE");
+  if (sessionError) console.error("[ia] falha ao encerrar sessão na transferência", sessionError.message);
 
   // Entra na fila: o motor escolhe o consultor e inicia a contagem do SLA.
   const { error } = await supabaseAdmin.rpc("enqueue_conversation", {
@@ -129,7 +130,13 @@ async function handoff(companyId: string, conversationId: string, reason: string
       .update({ status: "WAITING_HUMAN" })
       .eq("id", conversationId)
       .eq("company_id", companyId);
+    return false;
   }
+
+  // A notificação não depende do próximo webhook ou do relógio da fila.
+  const { notifyQueueOffers } = await import("@/lib/queue/bridge.server");
+  await notifyQueueOffers(companyId);
+  return true;
 }
 
 /**
@@ -218,6 +225,13 @@ export async function respondWithAI(input: {
     return { status: "skipped", reason: "conversa com consultor" };
   }
 
+  const customerText = (lastCustomer.content ?? lastCustomer.transcription ?? "").trim();
+  const explicitHumanRequest =
+    /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
+    /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
+      customerText,
+    );
+
   // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
   const unreadableMedia =
     lastCustomer.message_type !== "text" && !lastCustomer.content && !lastCustomer.transcription;
@@ -256,16 +270,15 @@ export async function respondWithAI(input: {
 
 
   log("chamando o modelo", { mensagens: messages.length, conhecimento: knowledge.length });
-  const raw = await callGateway(messages);
+  // Pedido inequívoco de humano não fica sujeito à interpretação do modelo.
+  const raw = explicitHumanRequest
+    ? `Claro! Vou transferir você agora para um consultor humano. ${HANDOFF_TOKEN}`
+    : await callGateway(messages);
   if (!raw) {
     await handoff(companyId, conversationId, "falha na geração da resposta");
     return { status: "handoff", reason: "gateway" };
   }
 
-  const customerText = (lastCustomer.content ?? lastCustomer.transcription ?? "").trim();
-  const explicitHumanRequest =
-    /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
-    /\b(falar|transfer|passar|chamar|quero|gostaria|pode|preciso)\w*/i.test(customerText);
   const needsHuman = explicitHumanRequest || raw.includes(HANDOFF_TOKEN);
   const text = raw.replaceAll(HANDOFF_TOKEN, "").trim();
 
