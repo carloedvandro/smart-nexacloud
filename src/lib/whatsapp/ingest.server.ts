@@ -143,21 +143,55 @@ export async function processWebhookEvent(input: {
   if (!parsed.identifier) return { status: "ignored", reason: "identificador inválido" };
 
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
+  const messageType = detectMessageType(body);
+  const content = extractText(body);
+  let mimeTypeHint: string | null =
+    firstString(body, [
+      "message.audioMessage.mimetype",
+      "message.imageMessage.mimetype",
+      "message.videoMessage.mimetype",
+      "message.documentMessage.mimetype",
+    ]) ?? null;
+
   if (fromMe) {
-    // Mensagem enviada pelo próprio número: só atualizamos o status da mensagem
-    // já registrada pelo painel. Nunca duplicamos histórico.
+    // Mensagem enviada pelo próprio número da empresa. Se ela já existe no
+    // sistema (enviada pelo painel/IA), apenas atualizamos o status. Se foi
+    // digitada direto no celular, registramos no histórico da conversa.
     if (externalId) {
-      await supabaseAdmin.rpc("update_message_delivery", {
+      const { data: updated } = await supabaseAdmin.rpc("update_message_delivery", {
         _company_id: companyId,
         _external_message_id: externalId,
         _status: "SENT",
       });
+      if (updated) return { status: "processed", reason: "status da própria mensagem" };
     }
-    return { status: "ignored", reason: "fromMe" };
-  }
 
-  const messageType = detectMessageType(body);
-  const content = extractText(body);
+    let echoMedia: { path: string; mimeType: string | null } | null = null;
+    if (messageType !== "text") {
+      echoMedia = await downloadAndStoreMedia({ connectionId, companyId, body, messageType });
+    }
+
+    const { data: echo, error: echoError } = await supabaseAdmin.rpc("ingest_outbound_echo", {
+      _connection_id: connectionId,
+      _remote_jid: parsed.jid,
+      _external_message_id: externalId ?? (null as unknown as string),
+      _message_type: messageType,
+      ...opt("_content", content),
+      ...opt("_media_url", echoMedia?.path ?? null),
+      ...opt("_mime_type", echoMedia?.mimeType ?? mimeTypeHint),
+      _metadata: { remote_jid: parsed.jid, is_lid: parsed.isLid, event: eventType },
+    });
+    if (echoError) {
+      console.error("[whatsapp] eco do aparelho falhou", echoError.message);
+      return { status: "error", reason: echoError.message };
+    }
+    const echoResult = (echo ?? {}) as { duplicate?: boolean; message_id?: string };
+    return {
+      status: echoResult.duplicate ? "duplicate" : "processed",
+      reason: "mensagem enviada pelo aparelho",
+      ...(echoResult.message_id ? { messageId: echoResult.message_id } : {}),
+    };
+  }
 
   // Ponte do consultor: se o número é de um colaborador da empresa, a mensagem
   // não vira lead — ela é retransmitida ao lead pelo número da empresa.
@@ -168,17 +202,17 @@ export async function processWebhookEvent(input: {
       trunkConnectionId: connectionId,
       phone: parsed.phone,
       text: content,
+      messageType,
+      ...(messageType === "text"
+        ? {}
+        : {
+            media: await downloadAndStoreMedia({ connectionId, companyId, body, messageType }),
+          }),
     });
     if (handled) return { status: "processed", reason: "mensagem de consultor" };
   }
   let mediaUrl: string | null = null;
-  let mimeType: string | null =
-    firstString(body, [
-      "message.audioMessage.mimetype",
-      "message.imageMessage.mimetype",
-      "message.videoMessage.mimetype",
-      "message.documentMessage.mimetype",
-    ]) ?? null;
+  let mimeType: string | null = mimeTypeHint;
 
   if (messageType !== "text") {
     const stored = await downloadAndStoreMedia({
@@ -190,6 +224,8 @@ export async function processWebhookEvent(input: {
     if (stored) {
       mediaUrl = stored.path;
       mimeType = stored.mimeType ?? mimeType;
+    } else {
+      console.error("[whatsapp] mídia recebida não pôde ser baixada", { messageType });
     }
   }
 
