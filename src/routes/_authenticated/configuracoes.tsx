@@ -146,8 +146,12 @@ function ProfileCard({ onSaved }: { onSaved: () => Promise<void> }) {
           <Input id="full_name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="phone">Telefone</Label>
+          <Label htmlFor="phone">WhatsApp do consultor</Label>
           <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
+          <p className="text-xs text-muted-foreground">
+            Obrigatório para receber os atendimentos da fila no WhatsApp e responder por ele. O lead
+            nunca vê este número: as mensagens saem pelo número da empresa.
+          </p>
         </div>
         <div className="space-y-2">
           <Label>E-mail</Label>
