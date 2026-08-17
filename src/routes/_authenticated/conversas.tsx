@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/nexa/app-shell";
 import { ConversationStatusBadge } from "@/components/nexa/status-badge";
 import { LeadDetailSheet } from "@/components/nexa/lead-detail-sheet";
+import { PurgeConversationsButton } from "@/components/nexa/purge-conversations-button";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
