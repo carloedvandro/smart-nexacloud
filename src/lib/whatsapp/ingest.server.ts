@@ -502,33 +502,12 @@ async function downloadAndStoreMedia(input: {
   }
 
 
-  const encoded = result.data?.data ?? result.data?.base64 ?? result.data?.buffer;
+  const encoded = result.data?.data ?? result.data?.base64;
   let bytes: Uint8Array | null = null;
   let mimeType: string | null = result.data?.mimetype ?? result.data?.mimeType ?? null;
 
   if (typeof encoded === "string" && encoded.trim()) {
     bytes = base64ToBytes(encoded);
-  } else if (Array.isArray(encoded) && encoded.every((value) => typeof value === "number")) {
-    bytes = new Uint8Array(encoded);
-  } else if (
-    encoded &&
-    typeof encoded === "object" &&
-    "data" in encoded &&
-    Array.isArray((encoded as { data?: unknown }).data)
-  ) {
-    const values = (encoded as { data: unknown[] }).data;
-    if (values.every((value) => typeof value === "number")) bytes = new Uint8Array(values as number[]);
-  } else {
-    // Algumas versões da MEGA devolvem apenas uma URL temporária.
-    const url = result.data?.url ?? result.data?.mediaUrl ?? result.data?.fileURL;
-
-    if (typeof url === "string" && url.startsWith("http")) {
-      const response = await fetch(url);
-      if (response.ok) {
-        bytes = new Uint8Array(await response.arrayBuffer());
-        mimeType = mimeType ?? response.headers.get("content-type");
-      }
-    }
   }
   if (!bytes || bytes.byteLength === 0) return null;
 
