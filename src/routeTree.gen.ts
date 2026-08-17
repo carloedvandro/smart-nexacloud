@@ -30,6 +30,7 @@ import { Route as ApiPublicQueueTickRouteImport } from './routes/api/public/queu
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
 import { Route as LovableEmailAuthPreviewRouteImport } from './routes/lovable/email/auth/preview'
 import { Route as LovableEmailAuthWebhookRouteImport } from './routes/lovable/email/auth/webhook'
+import { Route as LovableEmailTransactionalPreviewRouteImport } from './routes/lovable/email/transactional/preview'
 import { Route as ApiPublicWhatsappWebhookTokenRouteImport } from './routes/api/public/whatsapp/webhook.$token'
 
 const IndexRoute = IndexRouteImport.update({
@@ -142,6 +143,12 @@ const LovableEmailAuthWebhookRoute = LovableEmailAuthWebhookRouteImport.update({
   path: '/lovable/email/auth/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LovableEmailTransactionalPreviewRoute =
+  LovableEmailTransactionalPreviewRouteImport.update({
+    id: '/lovable/email/transactional/preview',
+    path: '/lovable/email/transactional/preview',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicWhatsappWebhookTokenRoute =
   ApiPublicWhatsappWebhookTokenRouteImport.update({
     id: '/$token',
@@ -170,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
   '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
+  '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
 export interface FileRoutesByTo {
@@ -193,6 +201,7 @@ export interface FileRoutesByTo {
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
   '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
+  '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
 export interface FileRoutesById {
@@ -218,6 +227,7 @@ export interface FileRoutesById {
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
   '/lovable/email/auth/webhook': typeof LovableEmailAuthWebhookRoute
+  '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
 export interface FileRouteTypes {
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
     | '/api/public/whatsapp/webhook'
     | '/lovable/email/auth/preview'
     | '/lovable/email/auth/webhook'
+    | '/lovable/email/transactional/preview'
     | '/api/public/whatsapp/webhook/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -266,6 +277,7 @@ export interface FileRouteTypes {
     | '/api/public/whatsapp/webhook'
     | '/lovable/email/auth/preview'
     | '/lovable/email/auth/webhook'
+    | '/lovable/email/transactional/preview'
     | '/api/public/whatsapp/webhook/$token'
   id:
     | '__root__'
@@ -290,6 +302,7 @@ export interface FileRouteTypes {
     | '/api/public/whatsapp/webhook'
     | '/lovable/email/auth/preview'
     | '/lovable/email/auth/webhook'
+    | '/lovable/email/transactional/preview'
     | '/api/public/whatsapp/webhook/$token'
   fileRoutesById: FileRoutesById
 }
@@ -302,6 +315,7 @@ export interface RootRouteChildren {
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRouteWithChildren
   LovableEmailAuthPreviewRoute: typeof LovableEmailAuthPreviewRoute
   LovableEmailAuthWebhookRoute: typeof LovableEmailAuthWebhookRoute
+  LovableEmailTransactionalPreviewRoute: typeof LovableEmailTransactionalPreviewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -453,6 +467,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LovableEmailAuthWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lovable/email/transactional/preview': {
+      id: '/lovable/email/transactional/preview'
+      path: '/lovable/email/transactional/preview'
+      fullPath: '/lovable/email/transactional/preview'
+      preLoaderRoute: typeof LovableEmailTransactionalPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/whatsapp/webhook/$token': {
       id: '/api/public/whatsapp/webhook/$token'
       path: '/$token'
@@ -521,6 +542,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRouteWithChildren,
   LovableEmailAuthPreviewRoute: LovableEmailAuthPreviewRoute,
   LovableEmailAuthWebhookRoute: LovableEmailAuthWebhookRoute,
+  LovableEmailTransactionalPreviewRoute: LovableEmailTransactionalPreviewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
