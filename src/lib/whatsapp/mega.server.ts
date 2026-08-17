@@ -194,7 +194,7 @@ export const MegaApiService = {
 
     // `type` é obrigatório neste endpoint. Sem ele, a MEGA responde 200 com
     // `{ name: "FORBIDDEN", message: "Invalid type: " }`. Versões em uso
-    // aceitam `base64` ou `buffer`, mantendo `messageKeys` como o WebMessageInfo
+    // aceitam `buffer`, `base64` ou `stream`, mantendo `messageKeys` como o WebMessageInfo
     // completo (key + message).
     const messageVariants: unknown[] = [
       full,
