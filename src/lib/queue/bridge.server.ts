@@ -68,6 +68,31 @@ function firstName(name: string | null | undefined) {
 }
 
 /**
+ * O número operacional do consultor é, preferencialmente, o WhatsApp conectado
+ * à instância que foi vinculada a ele. O telefone do perfil fica como fallback
+ * para empresas que usam uma instância apenas para avisos.
+ */
+async function consultantNotificationPhone(
+  companyId: string,
+  consultantId: string,
+  profilePhone: string | null,
+): Promise<string | null> {
+  const { data: connection } = await supabaseAdmin
+    .from("whatsapp_connections")
+    .select("phone_number")
+    .eq("company_id", companyId)
+    .eq("user_id", consultantId)
+    .eq("status", "CONNECTED")
+    .eq("is_trunk", false)
+    .not("phone_number", "is", null)
+    .order("instance_number", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  return connection?.phone_number ?? profilePhone;
+}
+
+/**
  * Avisa no WhatsApp os consultores com oferta de fila aguardando resposta e
  * comunica quando uma oferta expirou e foi repassada.
  */
@@ -99,14 +124,24 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       .select("full_name, phone")
       .eq("id", attempt.consultant_id)
       .maybeSingle();
-    if (!profile?.phone) continue;
+    if (!profile) continue;
+
+    const notificationPhone = await consultantNotificationPhone(
+      companyId,
+      attempt.consultant_id,
+      profile.phone,
+    );
+    if (!notificationPhone) {
+      console.error("[ponte] consultor sem WhatsApp vinculado", attempt.consultant_id);
+      continue;
+    }
 
     if (attempt.status === "TIMEOUT") {
       if (!(await alreadyLogged(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id))) continue;
       if (await alreadyLogged(attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id)) continue;
       await sendToConsultant(
         trunk,
-        profile.phone,
+        notificationPhone,
         "⌛ O tempo de resposta expirou e este atendimento foi repassado para outro consultor.",
       );
       await logEvent(companyId, attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id);
@@ -158,7 +193,7 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       .filter((line) => line !== "")
       .join("\n");
 
-    const ok = await sendToConsultant(trunk, profile.phone, text);
+    const ok = await sendToConsultant(trunk, notificationPhone, text);
     if (ok) await logEvent(companyId, attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
   }
 }
@@ -187,7 +222,25 @@ export async function resolveConsultantByPhone(
   const match = (data ?? []).find(
     (p) => p.is_active && PhoneNormalizationService.normalize(p.phone) === normalized,
   );
-  return match ? { profileId: match.id, fullName: match.full_name } : null;
+  if (match) return { profileId: match.id, fullName: match.full_name };
+
+  const { data: connections } = await supabaseAdmin
+    .from("whatsapp_connections")
+    .select("user_id, phone_number, profile:profiles!whatsapp_connections_user_id_fkey(full_name, is_active)")
+    .eq("company_id", companyId)
+    .eq("status", "CONNECTED")
+    .not("user_id", "is", null)
+    .not("phone_number", "is", null);
+
+  const connectionMatch = (connections ?? []).find(
+    (connection) => PhoneNormalizationService.normalize(connection.phone_number) === normalized,
+  );
+  const connectionProfile = connectionMatch?.profile as {
+    full_name: string | null;
+    is_active: boolean;
+  } | null;
+  if (!connectionMatch?.user_id || !connectionProfile?.is_active) return null;
+  return { profileId: connectionMatch.user_id, fullName: connectionProfile.full_name };
 }
 
 /** Conversa que o consultor está atendendo (oferta pendente ou já assumida). */
@@ -347,14 +400,20 @@ export async function mirrorLeadMessageToConsultant(input: {
     .select("phone")
     .eq("id", conversation.assigned_user_id)
     .maybeSingle();
-  if (!profile?.phone) return;
+
+  const notificationPhone = await consultantNotificationPhone(
+    input.companyId,
+    conversation.assigned_user_id,
+    profile?.phone ?? null,
+  );
+  if (!notificationPhone) return;
 
   const trunk = await loadTrunk(input.companyId);
   if (!trunk) return;
 
   const leadName = (conversation.lead as { name: string | null } | null)?.name?.trim() || "Lead";
   const body = (input.text ?? "").trim() || `[${input.messageType}] veja no sistema NexaAtende`;
-  await sendToConsultant(trunk, profile.phone, `💬 ${leadName}: ${body}`);
+  await sendToConsultant(trunk, notificationPhone, `💬 ${leadName}: ${body}`);
 }
 
 /** Notifica ofertas pendentes de todas as empresas (usado pelo relógio da fila). */
