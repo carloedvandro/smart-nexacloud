@@ -7,6 +7,8 @@ import { Building2, Loader2, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/nexa/app-shell";
+import { useAuth } from "@/hooks/use-auth";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,8 +64,11 @@ export const Route = createFileRoute("/_authenticated/plataforma")({
 });
 
 function PlatformPage() {
+  const { session, loading: authLoading } = useAuth();
+  const hasSession = Boolean(session?.access_token) && !authLoading;
   const queryClient = useQueryClient();
   const fetchCompanies = useServerFn(listPlatformCompanies);
+
   const fetchInstances = useServerFn(listPlatformInstances);
   const createCompanyFn = useServerFn(createPlatformCompany);
   const provisionFn = useServerFn(provisionInstanceForCompany);
@@ -115,7 +120,7 @@ function PlatformPage() {
 
   const membersQuery = useQuery({
     queryKey: ["company-members", membersTarget?.id],
-    enabled: Boolean(membersTarget?.id),
+    enabled: hasSession && Boolean(membersTarget?.id),
     queryFn: () => membersFn({ data: { companyId: membersTarget!.id } }),
   });
 
@@ -164,6 +169,7 @@ function PlatformPage() {
 
   const platformAdminQuery = useQuery({
     queryKey: ["is-platform-admin"],
+    enabled: hasSession,
     queryFn: async () => {
       const { data } = await supabase.rpc("is_platform_admin");
       return Boolean(data);
@@ -173,15 +179,16 @@ function PlatformPage() {
 
   const companiesQuery = useQuery({
     queryKey: ["platform-companies"],
-    enabled: isPlatformAdmin,
+    enabled: hasSession && isPlatformAdmin,
     queryFn: () => fetchCompanies(),
   });
 
   const instancesQuery = useQuery({
     queryKey: ["platform-instances"],
-    enabled: isPlatformAdmin,
+    enabled: hasSession && isPlatformAdmin,
     queryFn: () => fetchInstances(),
   });
+
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["platform-companies"] });
