@@ -127,22 +127,38 @@ function PlatformPage() {
   const refreshMembers = () =>
     queryClient.invalidateQueries({ queryKey: ["company-members", membersTarget?.id] });
 
+  const sendInviteEmailFn = useServerFn(sendCompanyInviteEmail);
+
   const inviteMutation = useMutation({
-    mutationFn: () =>
-      inviteFn({
-        data: { companyId: membersTarget?.id ?? "", email: inviteEmail.trim(), role: inviteRole },
-      }),
+    mutationFn: async () => {
+      const email = inviteEmail.trim();
+      const result = await inviteFn({
+        data: { companyId: membersTarget?.id ?? "", email, role: inviteRole },
+      });
+      let emailResult: { sent: boolean; reason?: string } = { sent: false };
+      if (!result.linked) {
+        emailResult = await sendInviteEmailFn({
+          data: { email, companyId: membersTarget?.id ?? "" },
+        });
+      }
+      return { ...result, emailResult };
+    },
     onSuccess: (result) => {
-      toast.success(
-        result.linked
-          ? "Usuário existente vinculado à empresa com o papel escolhido."
-          : "Convite registrado: ao criar a conta com este e-mail o acesso é liberado automaticamente.",
-      );
+      if (result.linked) {
+        toast.success("Usuário existente vinculado à empresa com o papel escolhido.");
+      } else if (result.emailResult.sent) {
+        toast.success("Convite registrado e e-mail enviado.");
+      } else {
+        toast.warning(
+          `Convite registrado, mas o e-mail não saiu: ${result.emailResult.reason ?? "erro desconhecido"}`,
+        );
+      }
       setInviteEmail("");
       void refreshMembers();
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
 
   const roleMutation = useMutation({
     mutationFn: (vars: { userId: string; role: "ADMIN" | "CONSULTANT" }) =>
