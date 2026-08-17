@@ -228,7 +228,7 @@ export const MegaApiService = {
           const hasPayload =
             Boolean(data.data ?? data.base64 ?? data.buffer) ||
             typeof (data.url ?? data.mediaUrl ?? data.fileURL) === "string";
-          if (hasPayload) return { ok: true, data };
+          if (hasPayload) return { ok: true as const, data };
           last = { ok: false, error: "resposta sem mídia" };
           continue;
         }
