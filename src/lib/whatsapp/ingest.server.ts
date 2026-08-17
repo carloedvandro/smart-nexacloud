@@ -261,6 +261,16 @@ export async function processWebhookEvent(input: {
     conversa: result.conversation_id ?? null,
   });
 
+  // Áudio do lead: transcreve antes da IA responder, para que ela entenda.
+  if (!result.duplicate && result.message_id && messageType === "audio" && mediaUrl) {
+    const { transcribeAudioMessage } = await import("@/lib/ai/transcribe.server");
+    await transcribeAudioMessage({
+      messageId: result.message_id,
+      mediaPath: mediaUrl,
+      mimeType,
+    });
+  }
+
   if (!result.duplicate && result.conversation_id) {
     const { respondWithAI } = await import("@/lib/ai/agent.server");
     const ai = await respondWithAI({
@@ -294,6 +304,7 @@ export async function processWebhookEvent(input: {
       conversationId: result.conversation_id,
       text: content,
       messageType,
+      media: mediaUrl ? { path: mediaUrl, mimeType } : null,
     });
   }
 
@@ -340,6 +351,7 @@ async function downloadAndStoreMedia(input: {
   body: Json;
   messageType: MessageType;
 }): Promise<{ path: string; mimeType: string | null } | null> {
+  const { base64ToBytes, storeMedia, type MediaKind } = await import("@/lib/whatsapp/media.server");
   const creds = await loadMegaCredentials(input.connectionId);
   if (!creds) return null;
 
@@ -348,31 +360,42 @@ async function downloadAndStoreMedia(input: {
     pick(input.body, "key") ?? input.body["key"],
     pick(input.body, "message"),
   );
-  if (!result.ok) return null;
-
-  const base64 = result.data?.data ?? result.data?.base64;
-  if (!base64 || typeof base64 !== "string") return null;
-
-  const clean = base64.includes(",") ? (base64.split(",")[1] ?? base64) : base64;
-  const bytes = Uint8Array.from(atob(clean), (char) => char.charCodeAt(0));
-  const mimeType = result.data?.mimetype ?? null;
-  const extension =
-    input.messageType === "audio"
-      ? "ogg"
-      : input.messageType === "image"
-        ? "jpg"
-        : input.messageType === "video"
-          ? "mp4"
-          : "bin";
-  const path = `${input.companyId}/${input.connectionId}/${crypto.randomUUID()}.${extension}`;
-
-  const { error } = await supabaseAdmin.storage.from(MEDIA_BUCKET).upload(path, bytes, {
-    contentType: mimeType ?? "application/octet-stream",
-    upsert: false,
-  });
-  if (error) {
-    console.error("[whatsapp] upload de mídia falhou", error.message);
+  if (!result.ok) {
+    console.error("[whatsapp] download de mídia falhou", result.error);
     return null;
   }
-  return { path, mimeType };
+
+  const base64 = result.data?.data ?? result.data?.base64;
+  let bytes: Uint8Array | null = null;
+  let mimeType: string | null = result.data?.mimetype ?? null;
+
+  if (typeof base64 === "string" && base64.trim()) {
+    bytes = base64ToBytes(base64);
+  } else {
+    // Algumas versões da MEGA devolvem apenas uma URL temporária.
+    const url = result.data?.url ?? result.data?.mediaUrl;
+    if (typeof url === "string" && url.startsWith("http")) {
+      const response = await fetch(url);
+      if (response.ok) {
+        bytes = new Uint8Array(await response.arrayBuffer());
+        mimeType = mimeType ?? response.headers.get("content-type");
+      }
+    }
+  }
+  if (!bytes || bytes.byteLength === 0) return null;
+
+  const kind = (
+    ["audio", "image", "video", "document"].includes(input.messageType)
+      ? input.messageType
+      : "other"
+  ) as MediaKind;
+
+  const path = await storeMedia({
+    companyId: input.companyId,
+    connectionId: input.connectionId,
+    bytes,
+    mimeType,
+    kind,
+  });
+  return path ? { path, mimeType } : null;
 }
