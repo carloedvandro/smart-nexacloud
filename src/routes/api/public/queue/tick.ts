@@ -30,6 +30,10 @@ async function handle(request: Request): Promise<Response> {
     console.error("[fila] tick falhou", error.message);
     return new Response(JSON.stringify({ ok: false }), init(500));
   }
+
+  // Avisa no WhatsApp os consultores com oferta pendente ou repassada.
+  const { notifyAllQueueOffers } = await import("@/lib/queue/bridge.server");
+  await notifyAllQueueOffers();
   return new Response(JSON.stringify({ ok: true, processed: Number(data ?? 0) }), init());
 }
 
