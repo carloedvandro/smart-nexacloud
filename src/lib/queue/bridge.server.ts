@@ -137,14 +137,15 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
     }
 
     if (attempt.status === "TIMEOUT") {
-      if (!(await alreadyLogged(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id))) continue;
       if (await alreadyLogged(attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id)) continue;
-      await sendToConsultant(
+      const timeoutSent = await sendToConsultant(
         trunk,
         notificationPhone,
         "⌛ O tempo de resposta expirou e este atendimento foi repassado para outro consultor.",
       );
-      await logEvent(companyId, attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id);
+      if (timeoutSent) {
+        await logEvent(companyId, attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id);
+      }
       continue;
     }
 
@@ -325,12 +326,6 @@ export async function handleConsultantInbound(input: {
     return true;
   }
 
-  // Primeira resposta = aceite da oferta: encerra o rodízio desta conversa.
-  await supabaseAdmin.rpc("queue_register_response", {
-    _conversation_id: conversationId,
-    _user_id: consultant.profileId,
-  });
-
   const { data: conversation } = await supabaseAdmin
     .from("conversations")
     .select("channel_id, lead:leads(whatsapp)")
@@ -376,7 +371,20 @@ export async function handleConsultantInbound(input: {
       ...(sent.ok ? {} : { _reason: sent.error }),
     });
   }
-  if (!sent.ok) await reply(`⚠️ Falha ao entregar sua mensagem ao lead: ${sent.error}`);
+  if (!sent.ok) {
+    await reply(`⚠️ Falha ao entregar sua mensagem ao lead: ${sent.error}`);
+    return true;
+  }
+
+  // Só encerra o rodízio depois que a primeira mensagem foi realmente entregue
+  // à API do WhatsApp. Uma falha de envio não pode prender o lead ao consultor.
+  const { error: responseError } = await supabaseAdmin.rpc("queue_register_response", {
+    _conversation_id: conversationId,
+    _user_id: consultant.profileId,
+  });
+  if (responseError) {
+    console.error("[ponte] mensagem entregue, mas aceite da fila falhou", responseError.message);
+  }
   return true;
 }
 
