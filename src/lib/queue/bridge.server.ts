@@ -14,7 +14,10 @@ import { getPublicBaseUrl } from "@/lib/nexa/public-url";
 
 const EVENT_OFFER_NOTIFIED = "CONSULTANT_NOTIFIED";
 const EVENT_TIMEOUT_NOTIFIED = "CONSULTANT_TIMEOUT_NOTIFIED";
+/** Marca qual lead o consultor está respondendo pelo WhatsApp neste momento. */
+const EVENT_BRIDGE_FOCUS = "BRIDGE_FOCUS";
 const END_COMMANDS = ["#encerrar", "#fim", "#finalizar"];
+
 
 type TrunkContext = { connectionId: string; creds: MegaCredentials };
 
