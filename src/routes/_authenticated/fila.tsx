@@ -38,6 +38,11 @@ export const Route = createFileRoute("/_authenticated/fila")({
     ],
   }),
   component: GuardedFilaPage,
+  errorComponent: ({ error }) => (
+    <div className="p-8 text-sm text-muted-foreground">
+      Não foi possível carregar a fila: {error.message}
+    </div>
+  ),
 });
 
 function useCountdown(deadline: string) {
