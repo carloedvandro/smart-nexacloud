@@ -161,14 +161,34 @@ export async function respondWithAI(input: {
     log("skip: conversa inexistente");
     return { status: "skipped", reason: "conversa inexistente" };
   }
-  if (conversation.assigned_user_id) {
-    log("skip: conversa com consultor");
-    return { status: "skipped", reason: "conversa com consultor" };
-  }
-  if (!["AI_ACTIVE", "WAITING_HUMAN", "QUEUED", "WAITING_CUSTOMER"].includes(conversation.status)) {
+  if (["CLOSED", "PAUSED"].includes(conversation.status)) {
     log("skip: status", conversation.status);
     return { status: "skipped", reason: `status ${conversation.status}` };
   }
+
+  // Um humano só "assume" a conversa quando de fato responde. Enquanto isso
+  // (inclusive em conversas antigas atribuídas mas sem resposta) a IA continua
+  // atendendo, mantendo o contexto do histórico.
+  const { count: humanReplies } = await supabaseAdmin
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .in("sender_type", ["consultant", "admin"]);
+  if ((humanReplies ?? 0) > 0) {
+    log("skip: consultor já respondeu nesta conversa");
+    return { status: "skipped", reason: "conversa com consultor" };
+  }
+
+  const { count: pendingOffers } = await supabaseAdmin
+    .from("assignment_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("status", "WAITING");
+  if ((pendingOffers ?? 0) > 0) {
+    log("skip: oferta de fila aguardando consultor");
+    return { status: "skipped", reason: "conversa com consultor" };
+  }
+
 
   const { data: history } = await supabaseAdmin
     .from("messages")
@@ -279,7 +299,7 @@ export async function respondWithAI(input: {
 
   await supabaseAdmin
     .from("conversations")
-    .update({ status: "AI_ACTIVE" })
+    .update({ status: "AI_ACTIVE", assigned_user_id: null })
     .eq("id", conversationId)
     .eq("company_id", companyId);
 
