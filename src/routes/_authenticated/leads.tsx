@@ -186,7 +186,7 @@ function LeadsPage() {
               <SelectContent>
                 <SelectItem value="ALL">Todos os consultores</SelectItem>
                 <SelectItem value="NONE">Sem consultor</SelectItem>
-                {(consultants ?? []).map((c) => (
+                {(Array.isArray(consultants) ? consultants : []).map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.full_name ?? c.email}</SelectItem>
                 ))}
               </SelectContent>

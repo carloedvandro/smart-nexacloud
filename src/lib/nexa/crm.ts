@@ -268,14 +268,15 @@ export async function listLeadConversations(leadId: string) {
 /* ------------------------------- Consultores ------------------------------- */
 
 export async function listConsultants(companyId: string) {
-  return (assertOk(
+  const data = assertOk(
     await supabase
       .from("profiles")
       .select("id, full_name, email, availability, is_active")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("full_name"),
-  ) ?? []) as {
+  );
+  return (Array.isArray(data) ? data : []) as {
     id: string;
     full_name: string | null;
     email: string | null;
