@@ -175,7 +175,7 @@ function ConversasPage() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-medium">
-                        {conv.lead?.name ?? PhoneNormalizationService.format(conv.lead?.whatsapp)}
+                        {conv.lead?.name ?? PhoneNormalizationService.formatContact(conv.lead?.phone, conv.lead?.whatsapp)}
                       </span>
                       {conv.unread_count > 0 ? (
                         <Badge className="shrink-0">{conv.unread_count}</Badge>
@@ -335,7 +335,7 @@ function ConversationThread({
             {conversation.lead?.name ?? "Lead sem nome"}
           </p>
           <p className="truncate text-xs text-muted-foreground">
-            {PhoneNormalizationService.format(conversation.lead?.whatsapp)}
+            {PhoneNormalizationService.formatContact(conversation.lead?.phone, conversation.lead?.whatsapp)}
           </p>
         </button>
         <ConversationStatusBadge status={conversation.status as ConversationStatus} />

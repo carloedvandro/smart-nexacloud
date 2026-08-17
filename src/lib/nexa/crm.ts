@@ -13,7 +13,7 @@ export type LeadSource = Database["public"]["Enums"]["lead_source"];
 export type SenderType = Database["public"]["Enums"]["sender_type"];
 
 export type ConversationListItem = ConversationRow & {
-  lead: Pick<LeadRow, "id" | "name" | "whatsapp" | "status" | "source"> | null;
+  lead: Pick<LeadRow, "id" | "name" | "phone" | "whatsapp" | "status" | "source"> | null;
   consultant: { id: string; full_name: string | null; email: string | null } | null;
 };
 
@@ -150,7 +150,7 @@ export async function addLeadNote(input: { companyId: string; leadId: string; co
 /* -------------------------------- Conversas -------------------------------- */
 
 const CONVERSATION_SELECT =
-  "*, lead:leads(id, name, whatsapp, status, source), consultant:profiles!conversations_assigned_user_id_fkey(id, full_name, email)";
+  "*, lead:leads(id, name, phone, whatsapp, status, source), consultant:profiles!conversations_assigned_user_id_fkey(id, full_name, email)";
 
 export async function listConversations(params: {
   companyId: string;

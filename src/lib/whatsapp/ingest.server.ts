@@ -5,6 +5,7 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
+import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
 import { MegaApiService, extractConnectedPhone } from "@/lib/whatsapp/mega.server";
 import type { MediaKind } from "@/lib/whatsapp/media.server";
@@ -95,6 +96,30 @@ export function extractMimeType(payload: unknown): string | null {
   const value = deepString(payload, /^mime_?type$/i);
   return value && value.includes("/") ? value : null;
 }
+
+/**
+ * Número real do contato quando o remetente chega como LID.
+ * A MEGA/Baileys envia o telefone em campos paralelos (senderPn, participantPn,
+ * remoteJidAlt, participantAlt...). Devolve apenas dígitos válidos.
+ */
+export function extractRealPhone(payload: unknown): string | null {
+  const candidate =
+    firstString(payload, [
+      "key.senderPn",
+      "senderPn",
+      "data.key.senderPn",
+      "key.participantPn",
+      "participantPn",
+      "key.remoteJidAlt",
+      "remoteJidAlt",
+      "key.participantAlt",
+      "participantAlt",
+    ]) ?? deepString(payload, /^(senderPn|participantPn|remoteJidAlt|participantAlt|senderPhone)$/i);
+  if (!candidate || candidate.includes("@lid")) return null;
+  const local = candidate.split("@")[0]?.split(":")[0] ?? "";
+  return PhoneNormalizationService.normalize(local);
+}
+
 
 export function detectMessageType(payload: unknown): MessageType {
   // 1) pela presença do nó da mídia, em qualquer nível
@@ -190,6 +215,11 @@ export async function processWebhookEvent(input: {
   if (parsed.isGroup) return { status: "ignored", reason: "grupo" };
   if (parsed.isBroadcast) return { status: "ignored", reason: "status/broadcast" };
   if (!parsed.identifier) return { status: "ignored", reason: "identificador inválido" };
+
+  // Quando o remetente vem por LID, a MEGA costuma enviar também o número real
+  // em campos paralelos (senderPn / participantPn / remoteJidAlt).
+  const realPhone = parsed.isLid ? extractRealPhone(payload) : parsed.phone;
+
 
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
   const detected = detectMessageType(body);
@@ -305,6 +335,16 @@ export async function processWebhookEvent(input: {
     conversation_id?: string;
     lead_id?: string;
   };
+
+  // Lead criado por LID: se a MEGA informou o número real, gravamos no lead.
+  if (result.lead_id && realPhone) {
+    await supabaseAdmin
+      .from("leads")
+      .update({ phone: realPhone })
+      .eq("id", result.lead_id)
+      .is("phone", null);
+  }
+
 
   console.info("[whatsapp] mensagem processada", {
     evento: eventType,
