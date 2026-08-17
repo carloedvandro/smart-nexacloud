@@ -198,12 +198,32 @@ export async function processWebhookEvent(input: {
     return { status: "error", reason: error.message };
   }
 
-  const result = (data ?? {}) as { duplicate?: boolean; message_id?: string };
+  const result = (data ?? {}) as {
+    duplicate?: boolean;
+    message_id?: string;
+    conversation_id?: string;
+    lead_id?: string;
+  };
+
+  if (!result.duplicate && result.conversation_id) {
+    const { respondWithAI } = await import("@/lib/ai/agent.server");
+    const ai = await respondWithAI({
+      companyId,
+      conversationId: result.conversation_id,
+      leadId: result.lead_id ?? null,
+      connectionId,
+    });
+    if (ai.status === "handoff") {
+      console.info("[ia] transferido para humano:", ai.reason);
+    }
+  }
+
   return {
     status: result.duplicate ? "duplicate" : "processed",
     ...(result.message_id ? { messageId: result.message_id } : {}),
   };
 }
+
 
 async function handleConnectionEvent(connectionId: string, eventType: string, payload: unknown) {
   const raw = (
