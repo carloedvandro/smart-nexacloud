@@ -192,9 +192,17 @@ export async function processWebhookEvent(input: {
   if (!parsed.identifier) return { status: "ignored", reason: "identificador inválido" };
 
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
-  const messageType = detectMessageType(body);
-  const content = extractText(body);
+  const detected = detectMessageType(body);
+  const messageType = detected === "text" ? detectMessageType(payload) : detected;
+  const content = extractText(body) ?? extractText(payload);
   const mimeTypeHint: string | null = extractMimeType(body) ?? extractMimeType(payload);
+
+  // Diagnóstico: evento sem texto e sem mídia identificada — registramos o
+  // formato recebido para ajustar a leitura do payload.
+  if (messageType === "text" && !content) {
+    console.warn("[whatsapp] evento sem conteúdo reconhecido", JSON.stringify(payload).slice(0, 1500));
+  }
+
 
 
   if (fromMe) {
