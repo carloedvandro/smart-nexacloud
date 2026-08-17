@@ -187,16 +187,23 @@ export async function respondWithAI(input: {
       })),
   ];
 
-  await supabaseAdmin.from("ai_sessions").upsert(
-    {
+  const { data: openSession } = await supabaseAdmin
+    .from("ai_sessions")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("status", "ACTIVE")
+    .maybeSingle();
+
+  if (!openSession) {
+    await supabaseAdmin.from("ai_sessions").insert({
       company_id: companyId,
       conversation_id: conversationId,
       ...(input.leadId ? { lead_id: input.leadId } : {}),
       model: MODEL,
       status: "ACTIVE",
-    },
-    { onConflict: "conversation_id", ignoreDuplicates: true },
-  );
+    });
+  }
+
 
   const raw = await callGateway(messages);
   if (!raw) {
