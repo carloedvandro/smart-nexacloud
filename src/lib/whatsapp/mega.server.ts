@@ -204,18 +204,18 @@ export const MegaApiService = {
     }
 
     if (!mediaNode || !messageType) {
-      return { ok: false, error: "nó de mídia ausente no webhook" };
+      return { ok: false as const, error: "nó de mídia ausente no webhook" };
     }
 
     const required = ["mediaKey", "directPath", "url"] as const;
-    const missing = required.filter((field) => {
+    const missing: string[] = required.filter((field) => {
       const value = mediaNode?.[field];
       return typeof value !== "string" || !value.trim();
     });
     const mimetype = mediaNode["mimetype"] ?? mediaNode["mimeType"];
-    if (typeof mimetype !== "string" || !mimetype.trim()) missing.push("mimetype" as "url");
+    if (typeof mimetype !== "string" || !mimetype.trim()) missing.push("mimetype");
     if (missing.length > 0) {
-      return { ok: false, error: `campos de mídia ausentes no webhook: ${missing.join(", ")}` };
+      return { ok: false as const, error: `campos de mídia ausentes no webhook: ${missing.join(", ")}` };
     }
 
     const result = await request<DownloadResponse>(
@@ -236,7 +236,7 @@ export const MegaApiService = {
     );
     if (!result.ok) return result;
     if (typeof result.data?.data !== "string" || !result.data.data.trim()) {
-      return { ok: false, error: "MEGA API respondeu sem a mídia em base64" };
+      return { ok: false as const, error: "MEGA API respondeu sem a mídia em base64" };
     }
     return result;
   },
