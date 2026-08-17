@@ -18,8 +18,14 @@ export const PhoneNormalizationService = {
     return PhoneNormalizationService.normalize(raw) !== null;
   },
 
+  /** true quando o valor é um LID do WhatsApp (identificador interno, não é telefone). */
+  isLid(raw: string | null | undefined): boolean {
+    return typeof raw === "string" && raw.includes("@lid");
+  },
+
   /** Exibição amigável: +55 (11) 99999-9999 quando for número brasileiro. */
   format(raw: string | null | undefined): string {
+    if (PhoneNormalizationService.isLid(raw)) return "Número oculto pelo WhatsApp";
     const n = PhoneNormalizationService.normalize(raw);
     if (!n) return raw ?? "—";
     if (n.startsWith("55") && (n.length === 12 || n.length === 13)) {
@@ -31,6 +37,18 @@ export const PhoneNormalizationService = {
     }
     return `+${n}`;
   },
+
+  /** Prefere o telefone real; cai para o identificador do WhatsApp. */
+  formatContact(
+    phone: string | null | undefined,
+    whatsapp?: string | null | undefined,
+  ): string {
+    if (phone && !PhoneNormalizationService.isLid(phone)) {
+      return PhoneNormalizationService.format(phone);
+    }
+    return PhoneNormalizationService.format(whatsapp ?? phone ?? null);
+  },
+
 
   /** Link direto para o WhatsApp do lead. */
   waLink(raw: string | null | undefined): string | null {
