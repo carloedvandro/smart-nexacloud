@@ -192,15 +192,21 @@ export const MegaApiService = {
     const key = (messageKey ?? {}) as Record<string, unknown>;
     const full = { key, message: messagePayload };
 
-    const bodies: unknown[] = [
-      { messageKeys: full },
-      { messageKeys: { ...key, message: messagePayload } },
-      { messageKeys: key, message: messagePayload },
+    // `type` é obrigatório neste endpoint. Sem ele, a MEGA responde 200 com
+    // `{ name: "FORBIDDEN", message: "Invalid type: " }`. Versões em uso
+    // aceitam `base64` ou `buffer`, mantendo `messageKeys` como o WebMessageInfo
+    // completo (key + message).
+    const messageVariants: unknown[] = [
       full,
-      { messageData: full },
-      { messageData: { messageKeys: full } },
-      { messages: [full] },
+      { ...key, message: messagePayload },
+      key,
     ];
+    const bodies: unknown[] = [];
+    for (const type of ["base64", "buffer"] as const) {
+      for (const messageKeys of messageVariants) {
+        bodies.push({ messageKeys, type });
+      }
+    }
 
     const paths = [
       `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
