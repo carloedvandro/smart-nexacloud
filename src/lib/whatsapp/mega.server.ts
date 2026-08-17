@@ -192,35 +192,49 @@ export const MegaApiService = {
     const key = (messageKey ?? {}) as Record<string, unknown>;
     const full = { key, message: messagePayload };
 
-    const attempts: unknown[] = [
+    const bodies: unknown[] = [
       { messageKeys: full },
       { messageKeys: { ...key, message: messagePayload } },
       { messageKeys: key, message: messagePayload },
       full,
       { messageData: full },
+      { messageData: { messageKeys: full } },
+      { messages: [full] },
+    ];
+
+    const paths = [
+      `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
+      `/rest/instance/downloadMedia/${creds.instanceKey}`,
+      `/rest/message/downloadMedia/${creds.instanceKey}`,
     ];
 
     let last: MegaResult<DownloadResponse> = { ok: false, error: "sem tentativa" };
-    for (const body of attempts) {
-      const result = await request<DownloadResponse>(
-        creds,
-        `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
-        { method: "POST", body },
-      );
-      if (result.ok) {
-        const data = result.data ?? {};
-        const hasPayload =
-          Boolean(data.data ?? data.base64 ?? data.buffer) ||
-          typeof (data.url ?? data.mediaUrl ?? data.fileURL) === "string";
-        if (hasPayload) return result;
-        last = { ok: false, error: "resposta sem mídia" };
-        continue;
+    for (const path of paths) {
+      let pathUnsupported = false;
+      for (const body of bodies) {
+        const result = await request<DownloadResponse>(creds, path, { method: "POST", body });
+        if (result.ok) {
+          const data = result.data ?? {};
+          const hasPayload =
+            Boolean(data.data ?? data.base64 ?? data.buffer) ||
+            typeof (data.url ?? data.mediaUrl ?? data.fileURL) === "string";
+          if (hasPayload) return result;
+          last = { ok: false, error: "resposta sem mídia" };
+          continue;
+        }
+        last = result;
+        if (result.status === 401 || result.status === 403) return result;
+        // Endpoint inexistente nesta versão da MEGA: não insistir com outros corpos.
+        if (result.status === 404) {
+          pathUnsupported = true;
+          break;
+        }
       }
-      last = result;
-      if (result.status === 401 || result.status === 403) return result;
+      if (!pathUnsupported && last.ok === false && last.error === "resposta sem mídia") continue;
     }
     return last;
   },
+
 
 
   /**
