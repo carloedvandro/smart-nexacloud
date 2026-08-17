@@ -144,3 +144,56 @@ export const saveAiConfig = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return value;
   });
+
+/**
+ * Diagnóstico: executa a IA na conversa em aberto mais recente da empresa e
+ * devolve o motivo exato caso ela não responda.
+ */
+export const testAiReply = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const companyId = await currentCompany(context);
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+    const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin");
+    if (!isAdmin && !isPlatformAdmin) throw new Error("Somente administradores.");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { respondWithAI, loadAiSettings } = await import("@/lib/ai/agent.server");
+
+    const settings = await loadAiSettings(companyId);
+    if (!settings.enabled) {
+      return { status: "skipped", reason: "A IA está desligada nesta empresa." };
+    }
+
+    const { data: conversation } = await supabaseAdmin
+      .from("conversations")
+      .select("id, lead_id, metadata, status, assigned_user_id")
+      .eq("company_id", companyId)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!conversation) return { status: "skipped", reason: "Nenhuma conversa encontrada." };
+
+    const metadata = (conversation.metadata ?? {}) as { connection_id?: string };
+    let connectionId = metadata.connection_id ?? null;
+    if (!connectionId) {
+      const { data: connection } = await supabaseAdmin
+        .from("whatsapp_connections")
+        .select("id")
+        .eq("company_id", companyId)
+        .order("instance_number", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      connectionId = connection?.id ?? null;
+    }
+    if (!connectionId) return { status: "skipped", reason: "Nenhuma instância disponível." };
+
+    const result = await respondWithAI({
+      companyId,
+      conversationId: conversation.id,
+      leadId: conversation.lead_id ?? null,
+      connectionId,
+    });
+    return { status: result.status, reason: result.reason ?? "" };
+  });
