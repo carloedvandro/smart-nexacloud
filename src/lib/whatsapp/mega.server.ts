@@ -181,19 +181,10 @@ export const MegaApiService = {
     type DownloadResponse = {
       data?: string;
       base64?: string;
-      buffer?: string;
-      mediaUrl?: string;
-      fileURL?: string;
-      url?: string;
       mimetype?: string;
       mimeType?: string;
     };
 
-    const key = (messageKey ?? {}) as Record<string, unknown>;
-
-    // Contrato oficial: messageKeys contém os dados criptográficos da mídia e
-    // messageType normalizado (audio|video|document|image). O valor cru do
-    // webhook, como `audioMessage`, não é aceito pela MEGA.
     const stack: unknown[] = [messagePayload];
     let mediaNode: Record<string, unknown> | null = null;
     let messageType: "audio" | "video" | "document" | "image" | null = null;
@@ -201,70 +192,53 @@ export const MegaApiService = {
       const current = stack.pop();
       if (!current || typeof current !== "object") continue;
       for (const [name, value] of Object.entries(current as Record<string, unknown>)) {
-        if (value && typeof value === "object") {
-          if (/^(audio|video|document|image)Message$/i.test(name)) {
-            mediaNode = value as Record<string, unknown>;
-            const normalizedType = name.replace(/Message$/i, "").toLowerCase();
-            if (
-              normalizedType === "audio" ||
-              normalizedType === "video" ||
-              normalizedType === "document" ||
-              normalizedType === "image"
-            ) {
-              messageType = normalizedType;
-            }
-            break;
-          }
-          stack.push(value);
-        }
-      }
-    }
-
-    const messageKeys = mediaNode && messageType
-      ? {
-          mediaKey: mediaNode["mediaKey"],
-          directPath: mediaNode["directPath"],
-          url: mediaNode["url"],
-          mimetype: mediaNode["mimetype"] ?? mediaNode["mimeType"],
-          messageType,
-        }
-      : null;
-    const full = { key, message: messagePayload };
-    const bodies: unknown[] = messageKeys
-      ? [{ messageKeys }]
-      : [{ messageKeys: full }, { messageKeys: key, message: messagePayload }];
-
-    const paths = [
-      `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
-      `/rest/instance/downloadMedia/${creds.instanceKey}`,
-      `/rest/message/downloadMedia/${creds.instanceKey}`,
-    ];
-
-    let last: MegaResult<DownloadResponse> = { ok: false, error: "sem tentativa" };
-    for (const path of paths) {
-      let pathUnsupported = false;
-      for (const body of bodies) {
-        const result = await request<DownloadResponse>(creds, path, { method: "POST", body });
-        if (result.ok) {
-          const data = result.data ?? {};
-          const hasPayload =
-            Boolean(data.data ?? data.base64 ?? data.buffer) ||
-            typeof (data.url ?? data.mediaUrl ?? data.fileURL) === "string";
-          if (hasPayload) return result;
-          last = { ok: false, error: "resposta sem mídia" };
-          continue;
-        }
-        last = result;
-        if (result.status === 401 || result.status === 403) return result;
-        // Endpoint inexistente nesta versão da MEGA: não insistir com outros corpos.
-        if (result.status === 404) {
-          pathUnsupported = true;
+        if (!value || typeof value !== "object") continue;
+        const normalized = name.replace(/Message$/i, "").toLowerCase();
+        if (["audio", "video", "document", "image"].includes(normalized)) {
+          mediaNode = value as Record<string, unknown>;
+          messageType = normalized as "audio" | "video" | "document" | "image";
           break;
         }
+        stack.push(value);
       }
-      if (!pathUnsupported && last.ok === false && last.error === "resposta sem mídia") continue;
     }
-    return last;
+
+    if (!mediaNode || !messageType) {
+      return { ok: false as const, error: "nó de mídia ausente no webhook" };
+    }
+
+    const required = ["mediaKey", "directPath", "url"] as const;
+    const missing: string[] = required.filter((field) => {
+      const value = mediaNode?.[field];
+      return typeof value !== "string" || !value.trim();
+    });
+    const mimetype = mediaNode["mimetype"] ?? mediaNode["mimeType"];
+    if (typeof mimetype !== "string" || !mimetype.trim()) missing.push("mimetype");
+    if (missing.length > 0) {
+      return { ok: false as const, error: `campos de mídia ausentes no webhook: ${missing.join(", ")}` };
+    }
+
+    const result = await request<DownloadResponse>(
+      creds,
+      `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
+      {
+        method: "POST",
+        body: {
+          messageKeys: {
+            mediaKey: mediaNode["mediaKey"],
+            directPath: mediaNode["directPath"],
+            url: mediaNode["url"],
+            mimetype,
+            messageType,
+          },
+        },
+      },
+    );
+    if (!result.ok) return result;
+    if (typeof result.data?.data !== "string" || !result.data.data.trim()) {
+      return { ok: false as const, error: "MEGA API respondeu sem a mídia em base64" };
+    }
+    return result;
   },
 
 

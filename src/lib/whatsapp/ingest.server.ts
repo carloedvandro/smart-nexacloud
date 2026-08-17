@@ -502,23 +502,12 @@ async function downloadAndStoreMedia(input: {
   }
 
 
-  const base64 = result.data?.data ?? result.data?.base64 ?? result.data?.buffer;
+  const encoded = result.data?.data ?? result.data?.base64;
   let bytes: Uint8Array | null = null;
   let mimeType: string | null = result.data?.mimetype ?? result.data?.mimeType ?? null;
 
-  if (typeof base64 === "string" && base64.trim()) {
-    bytes = base64ToBytes(base64);
-  } else {
-    // Algumas versões da MEGA devolvem apenas uma URL temporária.
-    const url = result.data?.url ?? result.data?.mediaUrl ?? result.data?.fileURL;
-
-    if (typeof url === "string" && url.startsWith("http")) {
-      const response = await fetch(url);
-      if (response.ok) {
-        bytes = new Uint8Array(await response.arrayBuffer());
-        mimeType = mimeType ?? response.headers.get("content-type");
-      }
-    }
+  if (typeof encoded === "string" && encoded.trim()) {
+    bytes = base64ToBytes(encoded);
   }
   if (!bytes || bytes.byteLength === 0) return null;
 
