@@ -27,7 +27,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { WHATSAPP_INSTANCE_STATUS_LABEL } from "@/lib/nexa/domain";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
+import { sendCompanyInviteEmail } from "@/lib/invites/invites.functions";
 import {
+
   configurePlatformWebhook,
   createPlatformCompany,
   getPlatformWebhookUrl,
