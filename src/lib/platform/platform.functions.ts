@@ -316,28 +316,39 @@ export const getPlatformWebhookUrl = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertPlatformAdmin(context.supabase as never);
-    const { getRequest } = await import("@tanstack/react-start/server");
-    const origin = new URL(getRequest().url).origin;
-    return { url: `${origin}/api/public/whatsapp/webhook` };
+    const { getPublicBaseUrl } = await import("@/lib/nexa/public-url");
+    return { url: `${getPublicBaseUrl()}/api/public/whatsapp/webhook` };
   });
 
 /** Configura o webhook central na MEGA para uma instância (super administrador). */
 export const configurePlatformWebhook = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { connectionId: string }) => data)
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data, context }): Promise<{ ok: boolean; url: string; current: string | null; error?: string }> => {
     await assertPlatformAdmin(context.supabase as never);
-    const { getRequest } = await import("@tanstack/react-start/server");
-    const url = `${new URL(getRequest().url).origin}/api/public/whatsapp/webhook`;
+    const { getPublicBaseUrl } = await import("@/lib/nexa/public-url");
+    const url = `${getPublicBaseUrl()}/api/public/whatsapp/webhook`;
 
     const { readInstanceWebhook, writeInstanceWebhook } = await import(
       "@/lib/whatsapp/actions.server"
     );
-    const applied = await writeInstanceWebhook(data.connectionId, url);
-    if (!applied.ok) throw new Error(applied.error ?? "Falha ao configurar o webhook.");
-    const current = await readInstanceWebhook(data.connectionId);
-    return { ok: true, url, current: current.url ?? null };
+    try {
+      const applied = await writeInstanceWebhook(data.connectionId, url);
+      if (!applied.ok) {
+        return { ok: false, url, current: null, error: applied.error ?? "Falha ao configurar o webhook." };
+      }
+      const current = await readInstanceWebhook(data.connectionId);
+      return { ok: true, url, current: current.url ?? null };
+    } catch (error) {
+      return {
+        ok: false,
+        url,
+        current: null,
+        error: error instanceof Error ? error.message : "Falha ao configurar o webhook.",
+      };
+    }
   });
+
 
 export type CompanyMember = {
   id: string;
