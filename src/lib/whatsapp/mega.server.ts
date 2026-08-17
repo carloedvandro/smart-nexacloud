@@ -67,7 +67,12 @@ async function request<T>(
         name === "UNAUTHORIZED"
           ? "Token da MEGA API inválido para esta instância. Cadastre o token (Bearer) da instância no painel."
           : rawMessage || `MEGA API respondeu ${response.status} em ${path}`;
-      console.error("[mega] falha", { path, status: response.status, name });
+      console.error("[mega] falha", {
+        path,
+        status: response.status,
+        name,
+        body: text?.slice(0, 500),
+      });
       return { ok: false, error: message, status: response.status };
     }
 
@@ -140,17 +145,36 @@ export const MegaApiService = {
     return request<Record<string, unknown>>(creds, `/rest/webhook/${creds.instanceKey}`);
   },
 
-  /** Configura/reconfigura o webhook central para a instância. */
-  setWebhook(creds: MegaCredentials, webhookUrl: string) {
-    return request<Record<string, unknown>>(
-      creds,
-      `/rest/webhook/${creds.instanceKey}/configWebhook`,
-      {
-        method: "POST",
-        body: { webhookData: { webhookUrl, webhookEnabled: true } },
-      },
-    );
+  /**
+   * Configura/reconfigura o webhook central para a instância.
+   * A MEGA aceita formatos de corpo diferentes conforme a versão do servidor,
+   * então tentamos as variações conhecidas até uma responder com sucesso.
+   */
+  async setWebhook(creds: MegaCredentials, webhookUrl: string) {
+    const variants: Array<Record<string, unknown>> = [
+      { messageData: { webhookUrl, webhookEnabled: true } },
+      { webhookUrl, webhookEnabled: true },
+      { webhookData: { webhookUrl, webhookEnabled: true } },
+    ];
+
+    let last: MegaResult<Record<string, unknown>> = {
+      ok: false,
+      error: "Não foi possível configurar o webhook na MEGA API.",
+    };
+    for (const body of variants) {
+      const result = await request<Record<string, unknown>>(
+        creds,
+        `/rest/webhook/${creds.instanceKey}/configWebhook`,
+        { method: "POST", body },
+      );
+      if (result.ok) return result;
+      last = result;
+      // Token inválido não melhora com outro formato de corpo.
+      if (result.status === 401 || result.status === 403) return result;
+    }
+    return last;
   },
+
 };
 
 /** Extrai a URL de webhook informada pela MEGA API em qualquer formato. */
