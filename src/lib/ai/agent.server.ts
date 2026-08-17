@@ -1,0 +1,268 @@
+/**
+ * Agente de IA do NexaAtende.
+ * Responde leads no WhatsApp usando SOMENTE a base de conhecimento da empresa
+ * e transfere para atendimento humano quando não houver informação confiável.
+ */
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
+import { MegaApiService } from "@/lib/whatsapp/mega.server";
+import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
+
+const MODEL = "google/gemini-2.5-flash";
+const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const HANDOFF_TOKEN = "[TRANSFERIR_HUMANO]";
+const HISTORY_LIMIT = 14;
+
+export type AiSettings = {
+  enabled: boolean;
+  agentName: string;
+  companyName: string;
+  extraInstructions: string;
+};
+
+const DEFAULT_SETTINGS: AiSettings = {
+  enabled: false,
+  agentName: "Assistente",
+  companyName: "nossa assessoria",
+  extraInstructions: "",
+};
+
+export async function loadAiSettings(companyId: string): Promise<AiSettings> {
+  const { data } = await supabaseAdmin
+    .from("system_settings")
+    .select("value")
+    .eq("company_id", companyId)
+    .eq("key", "ai")
+    .maybeSingle();
+
+  const value = (data?.value ?? {}) as Partial<AiSettings>;
+  return {
+    enabled: Boolean(value.enabled),
+    agentName: value.agentName?.trim() || DEFAULT_SETTINGS.agentName,
+    companyName: value.companyName?.trim() || DEFAULT_SETTINGS.companyName,
+    extraInstructions: value.extraInstructions?.trim() || "",
+  };
+}
+
+async function loadKnowledge(companyId: string) {
+  const { data } = await supabaseAdmin
+    .from("knowledge_base")
+    .select("title, category, content")
+    .eq("company_id", companyId)
+    .eq("status", "ACTIVE")
+    .order("category", { ascending: true })
+    .limit(60);
+  return data ?? [];
+}
+
+function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; category: string; content: string }[]) {
+  const base = knowledge.length
+    ? knowledge.map((k) => `### ${k.title} (${k.category})\n${k.content}`).join("\n\n")
+    : "(base de conhecimento vazia)";
+
+  return [
+    `Você é ${settings.agentName}, atendente virtual de ${settings.companyName}, uma assessoria que ajuda pessoas a conseguirem o salário-maternidade (auxílio-maternidade).`,
+    "Fale português do Brasil, em tom humano, acolhedor e objetivo. Mensagens curtas (até 3 frases ou uma lista curta), estilo WhatsApp, sem markdown pesado.",
+    "Objetivo: entender a situação da pessoa (se é MEI, autônoma, rural, desempregada, CLT, se o parto/adoção já aconteceu e quando), explicar o benefício e agendar o atendimento com um consultor humano.",
+    "REGRAS ABSOLUTAS:",
+    "- Nunca invente valores, prazos, regras, documentos ou promessas de aprovação.",
+    "- Use apenas a BASE DE CONHECIMENTO abaixo. Se a resposta não estiver nela, ou se o lead pedir humano, reclamar, falar de pagamento/contrato/dados sensíveis, responda de forma breve e acrescente no FINAL da mensagem o marcador " +
+      HANDOFF_TOKEN,
+    "- Nunca garanta que o benefício será concedido; quem decide é o INSS.",
+    "- Nunca peça senha do gov.br, cartão ou dados bancários.",
+    settings.extraInstructions ? `Instruções da empresa: ${settings.extraInstructions}` : "",
+    "",
+    "BASE DE CONHECIMENTO:",
+    base,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+async function callGateway(messages: ChatMessage[]): Promise<string | null> {
+  const apiKey = process.env["LOVABLE_API_KEY"];
+  if (!apiKey) {
+    console.error("[ia] LOVABLE_API_KEY ausente");
+    return null;
+  }
+
+  try {
+    const response = await fetch(GATEWAY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: MODEL, messages, temperature: 0.3, max_tokens: 400 }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) {
+      console.error("[ia] gateway respondeu", response.status, await response.text());
+      return null;
+    }
+    const payload = (await response.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    return payload.choices?.[0]?.message?.content?.trim() ?? null;
+  } catch (error) {
+    console.error("[ia] falha ao chamar o gateway", error);
+    return null;
+  }
+}
+
+async function handoff(companyId: string, conversationId: string, reason: string) {
+  await supabaseAdmin
+    .from("conversations")
+    .update({ status: "WAITING_HUMAN" })
+    .eq("id", conversationId)
+    .eq("company_id", companyId);
+
+  await supabaseAdmin.from("conversation_events").insert({
+    company_id: companyId,
+    conversation_id: conversationId,
+    event_type: "AI_HANDOFF",
+    metadata: { reason },
+  });
+
+  await supabaseAdmin
+    .from("ai_sessions")
+    .update({ status: "HANDOFF", ended_at: new Date().toISOString(), handoff_reason: reason })
+    .eq("conversation_id", conversationId)
+    .eq("status", "ACTIVE");
+}
+
+/**
+ * Gera e envia a resposta da IA para uma mensagem recebida.
+ * Nunca lança: qualquer falha resulta em transferência para humano.
+ */
+export async function respondWithAI(input: {
+  companyId: string;
+  conversationId: string;
+  leadId: string | null;
+  connectionId: string;
+}): Promise<{ status: "skipped" | "replied" | "handoff"; reason?: string }> {
+  const { companyId, conversationId, connectionId } = input;
+
+  const settings = await loadAiSettings(companyId);
+  if (!settings.enabled) return { status: "skipped", reason: "ia desativada" };
+
+  const { data: conversation } = await supabaseAdmin
+    .from("conversations")
+    .select("id, status, assigned_user_id, channel_id, lead:leads(whatsapp)")
+    .eq("id", conversationId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!conversation) return { status: "skipped", reason: "conversa inexistente" };
+  if (conversation.assigned_user_id) return { status: "skipped", reason: "conversa com consultor" };
+  if (!["AI_ACTIVE", "WAITING_HUMAN", "QUEUED", "WAITING_CUSTOMER"].includes(conversation.status)) {
+    return { status: "skipped", reason: `status ${conversation.status}` };
+  }
+
+  const { data: history } = await supabaseAdmin
+    .from("messages")
+    .select("sender_type, content, message_type, transcription")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(HISTORY_LIMIT);
+
+  const ordered = (history ?? []).slice().reverse();
+  const lastCustomer = ordered.filter((m) => m.sender_type === "customer").at(-1);
+  if (!lastCustomer) return { status: "skipped", reason: "sem mensagem do lead" };
+
+  // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
+  const unreadableMedia =
+    lastCustomer.message_type !== "text" && !lastCustomer.content && !lastCustomer.transcription;
+  if (unreadableMedia) {
+    await handoff(companyId, conversationId, "mídia recebida sem texto");
+    return { status: "handoff", reason: "mídia" };
+  }
+
+  const knowledge = await loadKnowledge(companyId);
+  const messages: ChatMessage[] = [
+    { role: "system", content: buildSystemPrompt(settings, knowledge) },
+    ...ordered
+      .filter((m) => (m.content ?? m.transcription ?? "").trim())
+      .map<ChatMessage>((m) => ({
+        role: m.sender_type === "customer" ? "user" : "assistant",
+        content: (m.content ?? m.transcription ?? "").trim(),
+      })),
+  ];
+
+  const { data: openSession } = await supabaseAdmin
+    .from("ai_sessions")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("status", "ACTIVE")
+    .maybeSingle();
+
+  if (!openSession) {
+    await supabaseAdmin.from("ai_sessions").insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      ...(input.leadId ? { lead_id: input.leadId } : {}),
+      model: MODEL,
+      status: "ACTIVE",
+    });
+  }
+
+
+  const raw = await callGateway(messages);
+  if (!raw) {
+    await handoff(companyId, conversationId, "falha na geração da resposta");
+    return { status: "handoff", reason: "gateway" };
+  }
+
+  const needsHuman = raw.includes(HANDOFF_TOKEN);
+  const text = raw.replaceAll(HANDOFF_TOKEN, "").trim();
+
+  if (text) {
+    const destination =
+      (conversation.lead as { whatsapp: string | null } | null)?.whatsapp ?? conversation.channel_id;
+    const recipient = WhatsAppIdentifierService.toRecipient(destination);
+    const creds = recipient ? await loadMegaCredentials(connectionId) : null;
+
+    if (recipient && creds) {
+      const { data: messageId } = await supabaseAdmin.rpc("create_outbound_message", {
+        _conversation_id: conversationId,
+        _company_id: companyId,
+        _sender_id: null as unknown as string,
+        _sender_type: "ai",
+        _sender_name: "IA",
+        _content: text,
+        _message_type: "text",
+        _connection_id: connectionId,
+      });
+
+      const sent = await MegaApiService.sendText(creds, recipient, text);
+      if (messageId) {
+        await supabaseAdmin.rpc("finalize_outbound_message", {
+          _message_id: messageId,
+          _external_message_id: (sent.ok
+            ? (sent.data?.key?.id ?? sent.data?.messageId ?? null)
+            : null) as unknown as string,
+          _status: sent.ok ? "SENT" : "FAILED",
+          ...(sent.ok ? {} : { _reason: sent.error }),
+        });
+      }
+      if (!sent.ok) {
+        await handoff(companyId, conversationId, `falha no envio: ${sent.error}`);
+        return { status: "handoff", reason: "envio" };
+      }
+    } else {
+      await handoff(companyId, conversationId, "instância sem credenciais ou destino inválido");
+      return { status: "handoff", reason: "instância" };
+    }
+  }
+
+  if (needsHuman) {
+    await handoff(companyId, conversationId, "IA solicitou atendimento humano");
+    return { status: "handoff", reason: "regra da IA" };
+  }
+
+  await supabaseAdmin
+    .from("conversations")
+    .update({ status: "AI_ACTIVE" })
+    .eq("id", conversationId)
+    .eq("company_id", companyId);
+
+  return { status: "replied" };
+}
