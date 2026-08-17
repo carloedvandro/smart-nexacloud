@@ -299,7 +299,7 @@ export async function respondWithAI(input: {
 
   await supabaseAdmin
     .from("conversations")
-    .update({ status: "AI_ACTIVE" })
+    .update({ status: "AI_ACTIVE", assigned_user_id: null })
     .eq("id", conversationId)
     .eq("company_id", companyId);
 
