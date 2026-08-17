@@ -158,6 +158,19 @@ export async function processWebhookEvent(input: {
 
   const messageType = detectMessageType(body);
   const content = extractText(body);
+
+  // Ponte do consultor: se o número é de um colaborador da empresa, a mensagem
+  // não vira lead — ela é retransmitida ao lead pelo número da empresa.
+  if (!parsed.isLid && parsed.phone) {
+    const { handleConsultantInbound } = await import("@/lib/queue/bridge.server");
+    const handled = await handleConsultantInbound({
+      companyId,
+      trunkConnectionId: connectionId,
+      phone: parsed.phone,
+      text: content,
+    });
+    if (handled) return { status: "processed", reason: "mensagem de consultor" };
+  }
   let mediaUrl: string | null = null;
   let mimeType: string | null =
     firstString(body, [
