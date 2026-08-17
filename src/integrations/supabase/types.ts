@@ -1593,6 +1593,19 @@ export type Database = {
         }
         Returns: Json
       }
+      ingest_outbound_echo: {
+        Args: {
+          _connection_id: string
+          _content?: string
+          _external_message_id: string
+          _media_url?: string
+          _message_type?: Database["public"]["Enums"]["message_type"]
+          _metadata?: Json
+          _mime_type?: string
+          _remote_jid: string
+        }
+        Returns: Json
+      }
       invite_link_info: { Args: { _token: string }; Returns: Json }
       is_company_admin: { Args: never; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
@@ -1689,6 +1702,14 @@ export type Database = {
         Args: {
           _lead_id: string
           _status: Database["public"]["Enums"]["lead_status"]
+        }
+        Returns: undefined
+      }
+      set_message_transcription: {
+        Args: {
+          _message_id: string
+          _status: Database["public"]["Enums"]["transcription_status"]
+          _transcription?: string
         }
         Returns: undefined
       }

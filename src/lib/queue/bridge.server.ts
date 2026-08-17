@@ -294,6 +294,8 @@ export async function handleConsultantInbound(input: {
   trunkConnectionId: string;
   phone: string | null;
   text: string | null;
+  messageType?: string;
+  media?: { path: string; mimeType: string | null } | null;
 }): Promise<boolean> {
   const { companyId, trunkConnectionId } = input;
   const consultant = await resolveConsultantByPhone(companyId, input.phone);
@@ -305,6 +307,15 @@ export async function handleConsultantInbound(input: {
   };
 
   const text = (input.text ?? "").trim();
+  const messageType = (input.messageType ?? "text") as
+    | "text"
+    | "audio"
+    | "image"
+    | "video"
+    | "document"
+    | "system"
+    | "other";
+  const media = input.media ?? null;
   const conversationId = await findConsultantConversation(companyId, consultant.profileId);
 
   if (!conversationId) {
@@ -312,12 +323,12 @@ export async function handleConsultantInbound(input: {
     return true;
   }
 
-  if (!text) {
-    await reply("ℹ️ Por enquanto só consigo repassar mensagens de texto ao lead.");
+  if (!text && !media) {
+    await reply("ℹ️ Não consegui ler esse conteúdo. Envie texto, áudio, imagem ou documento.");
     return true;
   }
 
-  if (END_COMMANDS.includes(text.toLowerCase())) {
+  if (text && END_COMMANDS.includes(text.toLowerCase())) {
     await supabaseAdmin.rpc("set_conversation_status", {
       _conversation_id: conversationId,
       _status: "CLOSED",
@@ -356,11 +367,31 @@ export async function handleConsultantInbound(input: {
     _sender_type: "consultant",
     _sender_name: consultant.fullName ?? "Consultor",
     _content: text,
-    _message_type: "text",
+    _message_type: media ? messageType : "text",
+    ...(media ? { _media_url: media.path } : {}),
     _connection_id: connectionId,
   });
 
-  const sent = await MegaApiService.sendText(creds, recipient, text);
+  let sent: Awaited<ReturnType<typeof MegaApiService.sendText>>;
+  if (media) {
+    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+    const url = await signedMediaUrl(media.path);
+    sent = url
+      ? await MegaApiService.sendMedia(creds, {
+          to: recipient,
+          url,
+          mediaType: (["audio", "image", "video"].includes(messageType)
+            ? messageType
+            : "document") as "audio" | "image" | "video" | "document",
+          mimeType: media.mimeType,
+          fileName: media.path.split("/").pop() ?? null,
+          caption: text || null,
+        })
+      : { ok: false as const, error: "Não consegui preparar o arquivo para envio." };
+  } else {
+    sent = await MegaApiService.sendText(creds, recipient, text);
+  }
+
   if (messageId) {
     await supabaseAdmin.rpc("finalize_outbound_message", {
       _message_id: messageId,
@@ -394,6 +425,7 @@ export async function mirrorLeadMessageToConsultant(input: {
   conversationId: string;
   text: string | null;
   messageType: string;
+  media?: { path: string; mimeType: string | null } | null;
 }): Promise<void> {
   const { data: conversation } = await supabaseAdmin
     .from("conversations")
@@ -420,7 +452,31 @@ export async function mirrorLeadMessageToConsultant(input: {
   if (!trunk) return;
 
   const leadName = (conversation.lead as { name: string | null } | null)?.name?.trim() || "Lead";
-  const body = (input.text ?? "").trim() || `[${input.messageType}] veja no sistema NexaAtende`;
+  const text = (input.text ?? "").trim();
+
+  // Mídia do lead: encaminha o arquivo em si para o WhatsApp do consultor.
+  if (input.media) {
+    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+    const url = await signedMediaUrl(input.media.path);
+    const to = PhoneNormalizationService.normalize(notificationPhone);
+    if (url && to) {
+      const mediaType = (["audio", "image", "video"].includes(input.messageType)
+        ? input.messageType
+        : "document") as "audio" | "image" | "video" | "document";
+      const sent = await MegaApiService.sendMedia(trunk.creds, {
+        to,
+        url,
+        mediaType,
+        mimeType: input.media.mimeType,
+        fileName: input.media.path.split("/").pop() ?? null,
+        caption: `💬 ${leadName}${text ? `: ${text}` : ""}`,
+      });
+      if (sent.ok) return;
+      console.error("[ponte] falha ao espelhar mídia ao consultor", sent.error);
+    }
+  }
+
+  const body = text || `[${input.messageType}] veja no sistema NexaAtende`;
   await sendToConsultant(trunk, notificationPhone, `💬 ${leadName}: ${body}`);
 }
 

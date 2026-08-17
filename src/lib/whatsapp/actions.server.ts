@@ -260,3 +260,115 @@ async function resolveConnection(input: {
     .maybeSingle();
   return fallback?.id ?? null;
 }
+
+/**
+ * Envia mídia (áudio gravado, imagem, vídeo ou documento) pelo WhatsApp.
+ * O arquivo é guardado no bucket da empresa e enviado por link assinado,
+ * ficando disponível também no histórico do sistema.
+ */
+export async function sendWhatsAppMedia(input: {
+  companyId: string;
+  conversationId: string;
+  userId: string;
+  senderName: string | null;
+  senderType: "consultant" | "admin";
+  base64: string;
+  mimeType: string | null;
+  fileName: string | null;
+  caption: string | null;
+  kind: "audio" | "image" | "video" | "document";
+}) {
+  const { base64ToBytes, storeMedia, signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+
+  const { data: conversation } = await supabaseAdmin
+    .from("conversations")
+    .select("id, company_id, channel_id, metadata, lead:leads(whatsapp)")
+    .eq("id", input.conversationId)
+    .eq("company_id", input.companyId)
+    .maybeSingle();
+  if (!conversation) return { ok: false as const, error: "Conversa inexistente." };
+
+  const destination =
+    (conversation.lead as { whatsapp: string | null } | null)?.whatsapp ?? conversation.channel_id;
+  const recipient = WhatsAppIdentifierService.toRecipient(destination);
+  if (!recipient) return { ok: false as const, error: "Lead sem WhatsApp válido." };
+
+  const connectionId = await resolveConnection({
+    companyId: input.companyId,
+    conversationId: input.conversationId,
+    userId: input.userId,
+    metadata: conversation.metadata as Record<string, unknown> | null,
+  });
+  if (!connectionId) {
+    return { ok: false as const, error: "Nenhuma instância de WhatsApp conectada disponível." };
+  }
+
+  const bytes = base64ToBytes(input.base64);
+  if (!bytes.byteLength) return { ok: false as const, error: "Arquivo vazio." };
+
+  const path = await storeMedia({
+    companyId: input.companyId,
+    connectionId,
+    bytes,
+    mimeType: input.mimeType,
+    kind: input.kind,
+  });
+  if (!path) return { ok: false as const, error: "Não foi possível guardar o arquivo." };
+
+  const { data: messageId, error: createError } = await supabaseAdmin.rpc(
+    "create_outbound_message",
+    {
+      _conversation_id: input.conversationId,
+      _company_id: input.companyId,
+      _sender_id: input.userId,
+      _sender_type: input.senderType,
+      _sender_name: input.senderName ?? (null as unknown as string),
+      _content: input.caption ?? "",
+      _message_type: input.kind,
+      _media_url: path,
+      _connection_id: connectionId,
+    },
+  );
+  if (createError || !messageId) {
+    return { ok: false as const, error: createError?.message ?? "Falha ao registrar a mensagem." };
+  }
+
+  const fail = async (reason: string) => {
+    await supabaseAdmin.rpc("finalize_outbound_message", {
+      _message_id: messageId,
+      _external_message_id: null as unknown as string,
+      _status: "FAILED",
+      _reason: reason,
+    });
+    return { ok: false as const, error: reason, messageId };
+  };
+
+  const creds = await loadMegaCredentials(connectionId);
+  if (!creds) return fail("Credenciais da instância não configuradas.");
+
+  const url = await signedMediaUrl(path);
+  if (!url) return fail("Não consegui gerar o link do arquivo.");
+
+  const sent = await MegaApiService.sendMedia(creds, {
+    to: recipient,
+    url,
+    mediaType: input.kind,
+    mimeType: input.mimeType,
+    fileName: input.fileName,
+    caption: input.caption,
+  });
+  if (!sent.ok) return fail(sent.error);
+
+  await supabaseAdmin.rpc("finalize_outbound_message", {
+    _message_id: messageId,
+    _external_message_id: (sent.data?.key?.id ?? sent.data?.messageId ?? null) as unknown as string,
+    _status: "SENT",
+  });
+
+  await supabaseAdmin.rpc("queue_register_response", {
+    _conversation_id: input.conversationId,
+    _user_id: input.userId,
+  });
+
+  return { ok: true as const, messageId, mediaPath: path };
+}

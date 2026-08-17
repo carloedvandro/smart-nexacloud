@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, Search, Send, UserCheck, X } from "lucide-react";
+import { Bot, Check, FileText, Loader2, Mic, Paperclip, Search, Send, Square, UserCheck, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/nexa/app-shell";
@@ -32,6 +33,10 @@ import {
   type ConversationListItem,
   type MessageRow,
 } from "@/lib/nexa/crm";
+import {
+  getConversationMediaUrls,
+  sendWhatsAppMediaMessage,
+} from "@/lib/whatsapp/whatsapp.functions";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { cn } from "@/lib/utils";
 
@@ -237,6 +242,41 @@ function ConversationThread({
     queryFn: () => listConsultants(companyId),
   });
 
+  // Links temporários das mídias (áudios, imagens, documentos) da conversa.
+  const mediaPaths = useMemo(
+    () => (messages ?? []).map((m) => m.media_url).filter((p): p is string => Boolean(p)),
+    [messages],
+  );
+  const fetchMediaUrls = useServerFn(getConversationMediaUrls);
+  const { data: mediaUrls } = useQuery({
+    queryKey: ["media-urls", conversation.id, mediaPaths.join("|")],
+    queryFn: () => fetchMediaUrls({ data: { paths: mediaPaths } }),
+    enabled: mediaPaths.length > 0,
+    staleTime: 30 * 60_000,
+  });
+
+  const sendMediaFn = useServerFn(sendWhatsAppMediaMessage);
+  const sendMedia = useMutation({
+    mutationFn: async (file: { blob: Blob; name: string; kind: MediaKind }) => {
+      const base64 = await blobToBase64(file.blob);
+      return sendMediaFn({
+        data: {
+          conversationId: conversation.id,
+          base64,
+          mimeType: file.blob.type || null,
+          fileName: file.name,
+          caption: draft.trim() || null,
+          kind: file.kind,
+        },
+      });
+    },
+    onSuccess: () => {
+      setDraft("");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -332,7 +372,13 @@ function ConversationThread({
             Nenhuma mensagem nesta conversa ainda.
           </p>
         ) : (
-          (messages ?? []).map((m) => <MessageBubble key={m.id} message={m} />)
+          (messages ?? []).map((m) => (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              mediaUrl={m.media_url ? (mediaUrls?.[m.media_url] ?? null) : null}
+            />
+          ))
         )}
         <div ref={bottomRef} />
       </div>
@@ -348,6 +394,10 @@ function ConversationThread({
           </p>
         ) : (
           <div className="flex items-end gap-2">
+            <MediaComposer
+              disabled={sendMedia.isPending}
+              onFile={(file) => sendMedia.mutate(file)}
+            />
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -370,7 +420,97 @@ function ConversationThread({
   );
 }
 
-function MessageBubble({ message }: { message: MessageRow }) {
+type MediaKind = "audio" | "image" | "video" | "document";
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < buffer.length; i += chunk) {
+    binary += String.fromCharCode(...buffer.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function kindFromMime(mime: string): MediaKind {
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  return "document";
+}
+
+/** Anexos e gravação de áudio direto do navegador. */
+function MediaComposer({
+  disabled,
+  onFile,
+}: {
+  disabled: boolean;
+  onFile: (file: { blob: Blob; name: string; kind: MediaKind }) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        setRecording(false);
+        if (blob.size > 0) onFile({ blob, name: `audio-${Date.now()}.webm`, kind: "audio" });
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+    } catch {
+      toast.error("Não consegui acessar o microfone.");
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) onFile({ blob: file, name: file.name, kind: kindFromMime(file.type) });
+        }}
+      />
+      <Button
+        type="button"
+        size="icon"
+        variant="outline"
+        disabled={disabled}
+        aria-label="Anexar arquivo"
+        onClick={() => inputRef.current?.click()}
+      >
+        {disabled ? <Loader2 className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
+      </Button>
+      <Button
+        type="button"
+        size="icon"
+        variant={recording ? "destructive" : "outline"}
+        disabled={disabled}
+        aria-label={recording ? "Parar gravação" : "Gravar áudio"}
+        onClick={() => (recording ? recorderRef.current?.stop() : void startRecording())}
+      >
+        {recording ? <Square className="size-4" /> : <Mic className="size-4" />}
+      </Button>
+    </div>
+  );
+}
+
+function MessageBubble({ message, mediaUrl }: { message: MessageRow; mediaUrl?: string | null }) {
   const isCustomer = message.sender_type === "customer";
   const isSystem = message.sender_type === "system";
   const isAi = message.sender_type === "ai";
@@ -399,7 +539,20 @@ function MessageBubble({ message }: { message: MessageRow }) {
             {isAi ? "IA" : (message.sender_name ?? "Consultor")}
           </p>
         ) : null}
-        <p className="whitespace-pre-wrap">{message.content ?? "(mídia)"}</p>
+        {message.media_url ? (
+          <MessageMedia type={message.message_type} url={mediaUrl ?? null} />
+        ) : null}
+        {message.content ? <p className="whitespace-pre-wrap">{message.content}</p> : null}
+        {message.transcription ? (
+          <p className="mt-1 rounded-md bg-background/40 px-2 py-1 text-xs italic opacity-90">
+            “{message.transcription}”
+          </p>
+        ) : message.message_type === "audio" && message.transcription_status === "PROCESSING" ? (
+          <p className="mt-1 text-xs opacity-70">Transcrevendo áudio…</p>
+        ) : null}
+        {!message.media_url && !message.content ? (
+          <p className="opacity-70">(sem conteúdo)</p>
+        ) : null}
         <p className="mt-1 text-right text-[10px] opacity-70">
           {new Date(message.created_at).toLocaleTimeString("pt-BR", {
             hour: "2-digit",
@@ -412,3 +565,33 @@ function MessageBubble({ message }: { message: MessageRow }) {
 }
 
 export const CONVERSATION_LABELS = CONVERSATION_STATUS_LABEL;
+
+/** Renderiza áudio, imagem, vídeo ou documento da mensagem. */
+function MessageMedia({ type, url }: { type: string; url: string | null }) {
+  if (!url) {
+    return <p className="mb-1 text-xs opacity-70">Carregando mídia…</p>;
+  }
+  if (type === "audio") {
+    return <audio controls src={url} className="mb-1 w-64 max-w-full" />;
+  }
+  if (type === "image") {
+    return (
+      <a href={url} target="_blank" rel="noreferrer">
+        <img src={url} alt="Imagem enviada na conversa" className="mb-1 max-h-64 rounded-lg" />
+      </a>
+    );
+  }
+  if (type === "video") {
+    return <video controls src={url} className="mb-1 max-h-64 w-64 max-w-full rounded-lg" />;
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="mb-1 flex items-center gap-2 text-xs underline"
+    >
+      <FileText className="size-4" /> Abrir documento
+    </a>
+  );
+}

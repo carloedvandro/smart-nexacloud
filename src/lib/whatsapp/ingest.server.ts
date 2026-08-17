@@ -7,11 +7,10 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
 import { MegaApiService, extractConnectedPhone } from "@/lib/whatsapp/mega.server";
+import type { MediaKind } from "@/lib/whatsapp/media.server";
 
 type Json = Record<string, unknown>;
 type MessageType = "text" | "audio" | "image" | "document" | "video" | "system" | "other";
-
-const MEDIA_BUCKET = "conversation-media";
 
 /** Inclui a chave apenas quando há valor (exactOptionalPropertyTypes). */
 function opt<K extends string, T>(key: K, value: T | null | undefined) {
@@ -143,21 +142,55 @@ export async function processWebhookEvent(input: {
   if (!parsed.identifier) return { status: "ignored", reason: "identificador inválido" };
 
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
+  const messageType = detectMessageType(body);
+  const content = extractText(body);
+  let mimeTypeHint: string | null =
+    firstString(body, [
+      "message.audioMessage.mimetype",
+      "message.imageMessage.mimetype",
+      "message.videoMessage.mimetype",
+      "message.documentMessage.mimetype",
+    ]) ?? null;
+
   if (fromMe) {
-    // Mensagem enviada pelo próprio número: só atualizamos o status da mensagem
-    // já registrada pelo painel. Nunca duplicamos histórico.
+    // Mensagem enviada pelo próprio número da empresa. Se ela já existe no
+    // sistema (enviada pelo painel/IA), apenas atualizamos o status. Se foi
+    // digitada direto no celular, registramos no histórico da conversa.
     if (externalId) {
-      await supabaseAdmin.rpc("update_message_delivery", {
+      const { data: updated } = await supabaseAdmin.rpc("update_message_delivery", {
         _company_id: companyId,
         _external_message_id: externalId,
         _status: "SENT",
       });
+      if (updated) return { status: "processed", reason: "status da própria mensagem" };
     }
-    return { status: "ignored", reason: "fromMe" };
-  }
 
-  const messageType = detectMessageType(body);
-  const content = extractText(body);
+    let echoMedia: { path: string; mimeType: string | null } | null = null;
+    if (messageType !== "text") {
+      echoMedia = await downloadAndStoreMedia({ connectionId, companyId, body, messageType });
+    }
+
+    const { data: echo, error: echoError } = await supabaseAdmin.rpc("ingest_outbound_echo", {
+      _connection_id: connectionId,
+      _remote_jid: parsed.jid,
+      _external_message_id: externalId ?? (null as unknown as string),
+      _message_type: messageType,
+      ...opt("_content", content),
+      ...opt("_media_url", echoMedia?.path ?? null),
+      ...opt("_mime_type", echoMedia?.mimeType ?? mimeTypeHint),
+      _metadata: { remote_jid: parsed.jid, is_lid: parsed.isLid, event: eventType },
+    });
+    if (echoError) {
+      console.error("[whatsapp] eco do aparelho falhou", echoError.message);
+      return { status: "error", reason: echoError.message };
+    }
+    const echoResult = (echo ?? {}) as { duplicate?: boolean; message_id?: string };
+    return {
+      status: echoResult.duplicate ? "duplicate" : "processed",
+      reason: "mensagem enviada pelo aparelho",
+      ...(echoResult.message_id ? { messageId: echoResult.message_id } : {}),
+    };
+  }
 
   // Ponte do consultor: se o número é de um colaborador da empresa, a mensagem
   // não vira lead — ela é retransmitida ao lead pelo número da empresa.
@@ -168,17 +201,17 @@ export async function processWebhookEvent(input: {
       trunkConnectionId: connectionId,
       phone: parsed.phone,
       text: content,
+      messageType,
+      ...(messageType === "text"
+        ? {}
+        : {
+            media: await downloadAndStoreMedia({ connectionId, companyId, body, messageType }),
+          }),
     });
     if (handled) return { status: "processed", reason: "mensagem de consultor" };
   }
   let mediaUrl: string | null = null;
-  let mimeType: string | null =
-    firstString(body, [
-      "message.audioMessage.mimetype",
-      "message.imageMessage.mimetype",
-      "message.videoMessage.mimetype",
-      "message.documentMessage.mimetype",
-    ]) ?? null;
+  let mimeType: string | null = mimeTypeHint;
 
   if (messageType !== "text") {
     const stored = await downloadAndStoreMedia({
@@ -190,6 +223,8 @@ export async function processWebhookEvent(input: {
     if (stored) {
       mediaUrl = stored.path;
       mimeType = stored.mimeType ?? mimeType;
+    } else {
+      console.error("[whatsapp] mídia recebida não pôde ser baixada", { messageType });
     }
   }
 
@@ -225,6 +260,16 @@ export async function processWebhookEvent(input: {
     conversa: result.conversation_id ?? null,
   });
 
+  // Áudio do lead: transcreve antes da IA responder, para que ela entenda.
+  if (!result.duplicate && result.message_id && messageType === "audio" && mediaUrl) {
+    const { transcribeAudioMessage } = await import("@/lib/ai/transcribe.server");
+    await transcribeAudioMessage({
+      messageId: result.message_id,
+      mediaPath: mediaUrl,
+      mimeType,
+    });
+  }
+
   if (!result.duplicate && result.conversation_id) {
     const { respondWithAI } = await import("@/lib/ai/agent.server");
     const ai = await respondWithAI({
@@ -258,6 +303,7 @@ export async function processWebhookEvent(input: {
       conversationId: result.conversation_id,
       text: content,
       messageType,
+      media: mediaUrl ? { path: mediaUrl, mimeType } : null,
     });
   }
 
@@ -304,6 +350,7 @@ async function downloadAndStoreMedia(input: {
   body: Json;
   messageType: MessageType;
 }): Promise<{ path: string; mimeType: string | null } | null> {
+  const { base64ToBytes, storeMedia } = await import("@/lib/whatsapp/media.server");
   const creds = await loadMegaCredentials(input.connectionId);
   if (!creds) return null;
 
@@ -312,31 +359,42 @@ async function downloadAndStoreMedia(input: {
     pick(input.body, "key") ?? input.body["key"],
     pick(input.body, "message"),
   );
-  if (!result.ok) return null;
-
-  const base64 = result.data?.data ?? result.data?.base64;
-  if (!base64 || typeof base64 !== "string") return null;
-
-  const clean = base64.includes(",") ? (base64.split(",")[1] ?? base64) : base64;
-  const bytes = Uint8Array.from(atob(clean), (char) => char.charCodeAt(0));
-  const mimeType = result.data?.mimetype ?? null;
-  const extension =
-    input.messageType === "audio"
-      ? "ogg"
-      : input.messageType === "image"
-        ? "jpg"
-        : input.messageType === "video"
-          ? "mp4"
-          : "bin";
-  const path = `${input.companyId}/${input.connectionId}/${crypto.randomUUID()}.${extension}`;
-
-  const { error } = await supabaseAdmin.storage.from(MEDIA_BUCKET).upload(path, bytes, {
-    contentType: mimeType ?? "application/octet-stream",
-    upsert: false,
-  });
-  if (error) {
-    console.error("[whatsapp] upload de mídia falhou", error.message);
+  if (!result.ok) {
+    console.error("[whatsapp] download de mídia falhou", result.error);
     return null;
   }
-  return { path, mimeType };
+
+  const base64 = result.data?.data ?? result.data?.base64;
+  let bytes: Uint8Array | null = null;
+  let mimeType: string | null = result.data?.mimetype ?? null;
+
+  if (typeof base64 === "string" && base64.trim()) {
+    bytes = base64ToBytes(base64);
+  } else {
+    // Algumas versões da MEGA devolvem apenas uma URL temporária.
+    const url = result.data?.url ?? result.data?.mediaUrl;
+    if (typeof url === "string" && url.startsWith("http")) {
+      const response = await fetch(url);
+      if (response.ok) {
+        bytes = new Uint8Array(await response.arrayBuffer());
+        mimeType = mimeType ?? response.headers.get("content-type");
+      }
+    }
+  }
+  if (!bytes || bytes.byteLength === 0) return null;
+
+  const kind = (
+    ["audio", "image", "video", "document"].includes(input.messageType)
+      ? input.messageType
+      : "other"
+  ) as MediaKind;
+
+  const path = await storeMedia({
+    companyId: input.companyId,
+    connectionId: input.connectionId,
+    bytes,
+    mimeType,
+    kind,
+  });
+  return path ? { path, mimeType } : null;
 }

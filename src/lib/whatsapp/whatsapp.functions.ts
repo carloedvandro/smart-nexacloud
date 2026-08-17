@@ -309,3 +309,68 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
     if (!result.ok) throw new Error(result.error);
     return { messageId: result.messageId };
   });
+
+/** Envia áudio/imagem/vídeo/documento para o lead pelo WhatsApp. */
+export const sendWhatsAppMediaMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (data: {
+      conversationId: string;
+      base64: string;
+      mimeType: string | null;
+      fileName: string | null;
+      caption: string | null;
+      kind: "audio" | "image" | "video" | "document";
+    }) => {
+      if (!data.conversationId) throw new Error("Conversa inválida.");
+      if (!data.base64?.trim()) throw new Error("Arquivo vazio.");
+      return data;
+    },
+  )
+  .handler(async ({ data, context }) => {
+    const { data: profile } = await context.supabase
+      .from("profiles")
+      .select("company_id, full_name, email")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!profile?.company_id) throw new Error("Usuário sem empresa.");
+
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+    const { sendWhatsAppMedia } = await import("@/lib/whatsapp/actions.server");
+    const result = await sendWhatsAppMedia({
+      companyId: profile.company_id,
+      conversationId: data.conversationId,
+      userId: context.userId,
+      senderName: profile.full_name ?? profile.email ?? null,
+      senderType: isAdmin ? "admin" : "consultant",
+      base64: data.base64,
+      mimeType: data.mimeType,
+      fileName: data.fileName,
+      caption: data.caption,
+      kind: data.kind,
+    });
+    if (!result.ok) throw new Error(result.error);
+    return { messageId: result.messageId, mediaPath: result.mediaPath };
+  });
+
+/** Link temporário para ouvir/ver as mídias da conversa (respeita a empresa). */
+export const getConversationMediaUrls = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { paths: string[] }) => ({ paths: (data.paths ?? []).slice(0, 60) }))
+  .handler(async ({ data, context }): Promise<Record<string, string>> => {
+    if (!data.paths.length) return {};
+    const { data: profile } = await context.supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!profile?.company_id) throw new Error("Usuário sem empresa.");
+
+    // Só liberamos arquivos do prefixo da própria empresa.
+    const allowed = data.paths.filter((path) => path.startsWith(`${profile.company_id}/`));
+    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+    const entries = await Promise.all(
+      allowed.map(async (path) => [path, await signedMediaUrl(path)] as const),
+    );
+    return Object.fromEntries(entries.filter(([, url]) => Boolean(url)) as [string, string][]);
+  });
