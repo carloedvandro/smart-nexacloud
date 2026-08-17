@@ -96,6 +96,30 @@ export function extractMimeType(payload: unknown): string | null {
   return value && value.includes("/") ? value : null;
 }
 
+/**
+ * Número real do contato quando o remetente chega como LID.
+ * A MEGA/Baileys envia o telefone em campos paralelos (senderPn, participantPn,
+ * remoteJidAlt, participantAlt...). Devolve apenas dígitos válidos.
+ */
+export function extractRealPhone(payload: unknown): string | null {
+  const candidate =
+    firstString(payload, [
+      "key.senderPn",
+      "senderPn",
+      "data.key.senderPn",
+      "key.participantPn",
+      "participantPn",
+      "key.remoteJidAlt",
+      "remoteJidAlt",
+      "key.participantAlt",
+      "participantAlt",
+    ]) ?? deepString(payload, /^(senderPn|participantPn|remoteJidAlt|participantAlt|senderPhone)$/i);
+  if (!candidate || candidate.includes("@lid")) return null;
+  const local = candidate.split("@")[0]?.split(":")[0] ?? "";
+  return PhoneNormalizationService.normalize(local);
+}
+
+
 export function detectMessageType(payload: unknown): MessageType {
   // 1) pela presença do nó da mídia, em qualquer nível
   if (deepFind(payload, /audioMessage|pttMessage/i) !== undefined) return "audio";
