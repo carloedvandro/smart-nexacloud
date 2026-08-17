@@ -26,6 +26,7 @@ import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authentic
 import { Route as AuthenticatedWhatsappRouteImport } from './routes/_authenticated/whatsapp'
 import { Route as ConviteTokenRouteImport } from './routes/convite.$token'
 import { Route as AuthenticatedVerComoUserIdRouteImport } from './routes/_authenticated/ver-como.$userId'
+import { Route as ApiPublicQueueTickRouteImport } from './routes/api/public/queue/tick'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
 import { Route as ApiPublicWhatsappWebhookTokenRouteImport } from './routes/api/public/whatsapp/webhook.$token'
 
@@ -118,6 +119,11 @@ const AuthenticatedVerComoUserIdRoute =
     path: '/ver-como/$userId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicQueueTickRoute = ApiPublicQueueTickRouteImport.update({
+  id: '/api/public/queue/tick',
+  path: '/api/public/queue/tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWhatsappWebhookRoute =
   ApiPublicWhatsappWebhookRouteImport.update({
     id: '/api/public/whatsapp/webhook',
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
@@ -168,6 +175,7 @@ export interface FileRoutesByTo {
   '/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
@@ -190,6 +198,7 @@ export interface FileRoutesById {
   '/_authenticated/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/_authenticated/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
   '/api/public/whatsapp/webhook/$token': typeof ApiPublicWhatsappWebhookTokenRoute
 }
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/convite/$token'
     | '/ver-como/$userId'
+    | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
     | '/api/public/whatsapp/webhook/$token'
   fileRoutesByTo: FileRoutesByTo
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/convite/$token'
     | '/ver-como/$userId'
+    | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
     | '/api/public/whatsapp/webhook/$token'
   id:
@@ -253,6 +264,7 @@ export interface FileRouteTypes {
     | '/_authenticated/whatsapp'
     | '/convite/$token'
     | '/_authenticated/ver-como/$userId'
+    | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
     | '/api/public/whatsapp/webhook/$token'
   fileRoutesById: FileRoutesById
@@ -262,6 +274,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ConviteTokenRoute: typeof ConviteTokenRoute
+  ApiPublicQueueTickRoute: typeof ApiPublicQueueTickRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRouteWithChildren
 }
 
@@ -386,6 +399,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVerComoUserIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/queue/tick': {
+      id: '/api/public/queue/tick'
+      path: '/api/public/queue/tick'
+      fullPath: '/api/public/queue/tick'
+      preLoaderRoute: typeof ApiPublicQueueTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/whatsapp/webhook': {
       id: '/api/public/whatsapp/webhook'
       path: '/api/public/whatsapp/webhook'
@@ -457,6 +477,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ConviteTokenRoute: ConviteTokenRoute,
+  ApiPublicQueueTickRoute: ApiPublicQueueTickRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRouteWithChildren,
 }
 export const routeTree = rootRouteImport
