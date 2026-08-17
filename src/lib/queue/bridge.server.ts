@@ -515,6 +515,22 @@ export async function mirrorLeadMessageToConsultant(input: {
   const leadName = (conversation.lead as { name: string | null } | null)?.name?.trim() || "Lead";
   const text = (input.text ?? "").trim();
 
+  // Trocou o lead em foco: avisa o consultor para não responder ao lead errado.
+  const focusChanged = await setFocusConversation(
+    input.companyId,
+    input.conversationId,
+    conversation.assigned_user_id,
+  );
+  if (focusChanged) {
+    await sendToConsultant(
+      trunk,
+      notificationPhone,
+      `🔄 Você está agora respondendo ao lead *${leadName}*. Suas próximas mensagens vão para ele.`,
+    );
+  }
+
+
+
   // Mídia do lead: encaminha o arquivo em si para o WhatsApp do consultor.
   if (input.media) {
     const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
