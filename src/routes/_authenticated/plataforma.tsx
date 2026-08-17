@@ -62,8 +62,11 @@ export const Route = createFileRoute("/_authenticated/plataforma")({
 });
 
 function PlatformPage() {
+  const { session, loading: authLoading } = useAuth();
+  const hasSession = Boolean(session?.access_token) && !authLoading;
   const queryClient = useQueryClient();
   const fetchCompanies = useServerFn(listPlatformCompanies);
+
   const fetchInstances = useServerFn(listPlatformInstances);
   const createCompanyFn = useServerFn(createPlatformCompany);
   const provisionFn = useServerFn(provisionInstanceForCompany);
