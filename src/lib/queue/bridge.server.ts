@@ -247,11 +247,63 @@ export async function resolveConsultantByPhone(
   return { profileId: connectionMatch.user_id, fullName: connectionProfile.full_name };
 }
 
-/** Conversa que o consultor está atendendo (oferta pendente ou já assumida). */
+/**
+ * Conversa "em foco" do consultor no WhatsApp: é sempre o último lead que o
+ * sistema apresentou a ele. Sem isso, uma resposta poderia cair no lead errado
+ * quando existem vários atendimentos abertos ao mesmo tempo.
+ */
+async function currentFocusConversation(
+  companyId: string,
+  profileId: string,
+): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("conversation_events")
+    .select("conversation_id, created_at")
+    .eq("company_id", companyId)
+    .eq("event_type", EVENT_BRIDGE_FOCUS)
+    .eq("metadata->>consultant_id", profileId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  for (const row of data ?? []) {
+    const { data: conversation } = await supabaseAdmin
+      .from("conversations")
+      .select("id, status, assigned_user_id")
+      .eq("id", row.conversation_id)
+      .maybeSingle();
+    if (!conversation) continue;
+    if (["CLOSED", "PAUSED"].includes(conversation.status)) continue;
+    if (conversation.assigned_user_id && conversation.assigned_user_id !== profileId) continue;
+    return conversation.id;
+  }
+  return null;
+}
+
+/** Define o lead em foco. Retorna true quando o foco mudou de lead. */
+async function setFocusConversation(
+  companyId: string,
+  conversationId: string,
+  profileId: string,
+): Promise<boolean> {
+  const current = await currentFocusConversation(companyId, profileId);
+  if (current === conversationId) return false;
+  await supabaseAdmin.from("conversation_events").insert({
+    company_id: companyId,
+    conversation_id: conversationId,
+    event_type: EVENT_BRIDGE_FOCUS,
+    metadata: { consultant_id: profileId },
+  });
+  return true;
+}
+
+/** Conversa que o consultor está atendendo (foco atual, oferta ou assumida). */
 async function findConsultantConversation(
   companyId: string,
   profileId: string,
 ): Promise<string | null> {
+  const focused = await currentFocusConversation(companyId, profileId);
+  if (focused) return focused;
+
   const { data: waiting } = await supabaseAdmin
     .from("assignment_attempts")
     .select("conversation_id")
@@ -272,6 +324,7 @@ async function findConsultantConversation(
     .limit(1);
   return active?.[0]?.id ?? null;
 }
+
 
 /** Instância pela qual o lead entrou (mantém a "grudação" de canal). */
 async function conversationConnectionId(
