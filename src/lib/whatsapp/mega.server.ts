@@ -190,17 +190,49 @@ export const MegaApiService = {
     };
 
     const key = (messageKey ?? {}) as Record<string, unknown>;
-    const full = { key, message: messagePayload };
 
-    const bodies: unknown[] = [
-      { messageKeys: full },
-      { messageKeys: { ...key, message: messagePayload } },
-      { messageKeys: key, message: messagePayload },
-      full,
-      { messageData: full },
-      { messageData: { messageKeys: full } },
-      { messages: [full] },
-    ];
+    // Contrato oficial: messageKeys contém os dados criptográficos da mídia e
+    // messageType normalizado (audio|video|document|image). O valor cru do
+    // webhook, como `audioMessage`, não é aceito pela MEGA.
+    const stack: unknown[] = [messagePayload];
+    let mediaNode: Record<string, unknown> | null = null;
+    let messageType: "audio" | "video" | "document" | "image" | null = null;
+    while (stack.length > 0 && !mediaNode) {
+      const current = stack.pop();
+      if (!current || typeof current !== "object") continue;
+      for (const [name, value] of Object.entries(current as Record<string, unknown>)) {
+        if (value && typeof value === "object") {
+          if (/^(audio|video|document|image)Message$/i.test(name)) {
+            mediaNode = value as Record<string, unknown>;
+            const normalizedType = name.replace(/Message$/i, "").toLowerCase();
+            if (
+              normalizedType === "audio" ||
+              normalizedType === "video" ||
+              normalizedType === "document" ||
+              normalizedType === "image"
+            ) {
+              messageType = normalizedType;
+            }
+            break;
+          }
+          stack.push(value);
+        }
+      }
+    }
+
+    const messageKeys = mediaNode && messageType
+      ? {
+          mediaKey: mediaNode["mediaKey"],
+          directPath: mediaNode["directPath"],
+          url: mediaNode["url"],
+          mimetype: mediaNode["mimetype"] ?? mediaNode["mimeType"],
+          messageType,
+        }
+      : null;
+    const full = { key, message: messagePayload };
+    const bodies: unknown[] = messageKeys
+      ? [{ messageKeys }]
+      : [{ messageKeys: full }, { messageKeys: key, message: messagePayload }];
 
     const paths = [
       `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
