@@ -47,33 +47,83 @@ export function extractRemoteJid(payload: unknown): string | null {
   ]);
 }
 
+/**
+ * Percorre o payload inteiro procurando a primeira chave que casa com o padrão.
+ * A MEGA embrulha a mensagem de várias formas (ephemeral, viewOnce, editada,
+ * documentWithCaption), então a busca precisa ser em profundidade.
+ */
+function deepFind(payload: unknown, pattern: RegExp, depth = 0): unknown {
+  if (!payload || typeof payload !== "object" || depth > 8) return undefined;
+  for (const [key, value] of Object.entries(payload as Json)) {
+    if (pattern.test(key) && value !== null && value !== undefined) return value;
+  }
+  for (const value of Object.values(payload as Json)) {
+    const found = deepFind(value, pattern, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function deepString(payload: unknown, pattern: RegExp): string | null {
+  const found = deepFind(payload, pattern);
+  return typeof found === "string" && found.trim() ? found.trim() : null;
+}
+
 export function extractText(payload: unknown): string | null {
-  return firstString(payload, [
-    "message.conversation",
-    "message.extendedTextMessage.text",
-    "message.imageMessage.caption",
-    "message.videoMessage.caption",
-    "message.documentMessage.caption",
-    "message.buttonsResponseMessage.selectedDisplayText",
-    "message.listResponseMessage.title",
-    "message.ephemeralMessage.message.conversation",
-    "message.ephemeralMessage.message.extendedTextMessage.text",
-    "text",
-    "body",
-  ]);
+  return (
+    firstString(payload, [
+      "message.conversation",
+      "message.extendedTextMessage.text",
+      "message.imageMessage.caption",
+      "message.videoMessage.caption",
+      "message.documentMessage.caption",
+      "message.buttonsResponseMessage.selectedDisplayText",
+      "message.listResponseMessage.title",
+      "message.ephemeralMessage.message.conversation",
+      "message.ephemeralMessage.message.extendedTextMessage.text",
+      "text",
+      "body",
+    ]) ??
+    deepString(payload, /^conversation$/i) ??
+    deepString(payload, /^caption$/i) ??
+    deepString(payload, /^(selectedDisplayText|selectedButtonId|title)$/i)
+  );
+}
+
+/** Extrai o mime-type da mídia em qualquer profundidade do payload. */
+export function extractMimeType(payload: unknown): string | null {
+  const value = deepString(payload, /^mime_?type$/i);
+  return value && value.includes("/") ? value : null;
 }
 
 export function detectMessageType(payload: unknown): MessageType {
-  const message = pick(payload, "message");
-  if (message && typeof message === "object") {
-    const keys = Object.keys(message as Json);
-    if (keys.some((k) => /audioMessage|pttMessage/i.test(k))) return "audio";
-    if (keys.some((k) => /imageMessage|stickerMessage/i.test(k))) return "image";
-    if (keys.some((k) => /videoMessage/i.test(k))) return "video";
-    if (keys.some((k) => /documentMessage/i.test(k))) return "document";
+  // 1) pela presença do nó da mídia, em qualquer nível
+  if (deepFind(payload, /audioMessage|pttMessage/i) !== undefined) return "audio";
+  if (deepFind(payload, /imageMessage|stickerMessage/i) !== undefined) return "image";
+  if (deepFind(payload, /videoMessage|gifMessage/i) !== undefined) return "video";
+  if (deepFind(payload, /documentMessage/i) !== undefined) return "document";
+
+  // 2) pelo mime-type informado no evento
+  const mime = extractMimeType(payload);
+  if (mime) {
+    if (mime.startsWith("audio/")) return "audio";
+    if (mime.startsWith("image/")) return "image";
+    if (mime.startsWith("video/")) return "video";
+    return "document";
   }
+
+  // 3) por campos textuais que descrevem o tipo (messageType, mediaType...)
+  const declared = (
+    deepString(payload, /^(messageType|message_type|mediaType|media_type)$/i) ?? ""
+  ).toLowerCase();
+  if (/audio|ptt|voice/.test(declared)) return "audio";
+  if (/image|sticker|photo/.test(declared)) return "image";
+  if (/video/.test(declared)) return "video";
+  if (/document|file/.test(declared)) return "document";
+
   return "text";
 }
+
 
 function normalizeEventType(payload: unknown, fallback: string | null): string {
   return (
@@ -142,15 +192,18 @@ export async function processWebhookEvent(input: {
   if (!parsed.identifier) return { status: "ignored", reason: "identificador inválido" };
 
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
-  const messageType = detectMessageType(body);
-  const content = extractText(body);
-  let mimeTypeHint: string | null =
-    firstString(body, [
-      "message.audioMessage.mimetype",
-      "message.imageMessage.mimetype",
-      "message.videoMessage.mimetype",
-      "message.documentMessage.mimetype",
-    ]) ?? null;
+  const detected = detectMessageType(body);
+  const messageType = detected === "text" ? detectMessageType(payload) : detected;
+  const content = extractText(body) ?? extractText(payload);
+  const mimeTypeHint: string | null = extractMimeType(body) ?? extractMimeType(payload);
+
+  // Diagnóstico: evento sem texto e sem mídia identificada — registramos o
+  // formato recebido para ajustar a leitura do payload.
+  if (messageType === "text" && !content) {
+    console.warn("[whatsapp] evento sem conteúdo reconhecido", JSON.stringify(payload).slice(0, 1500));
+  }
+
+
 
   if (fromMe) {
     // Mensagem enviada pelo próprio número da empresa. Se ela já existe no
