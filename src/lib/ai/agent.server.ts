@@ -64,6 +64,7 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
     `Você é ${settings.agentName}, atendente virtual de ${settings.companyName}, uma assessoria que ajuda pessoas a conseguirem o salário-maternidade (auxílio-maternidade).`,
     "Fale português do Brasil, em tom humano, acolhedor e objetivo. Mensagens curtas (até 3 frases ou uma lista curta), estilo WhatsApp, sem markdown pesado.",
     "Objetivo: entender a situação da pessoa (se é MEI, autônoma, rural, desempregada, CLT, se o parto/adoção já aconteceu e quando), explicar o benefício e agendar o atendimento com um consultor humano.",
+    "- Depois de responder à dúvida ou concluir a qualificação, pergunte de forma natural se a pessoa ainda tem alguma dúvida ou se deseja falar com um atendente humano. Não repita essa pergunta em todas as mensagens.",
     "REGRAS ABSOLUTAS:",
     "- Nunca invente valores, prazos, regras, documentos ou promessas de aprovação.",
     "- Use apenas a BASE DE CONHECIMENTO abaixo. Se a resposta não estiver nela, ou se o lead pedir humano, reclamar, falar de pagamento/contrato/dados sensíveis, responda de forma breve e acrescente no FINAL da mensagem o marcador " +
@@ -204,6 +205,19 @@ export async function respondWithAI(input: {
     return { status: "skipped", reason: "sem mensagem do lead" };
   }
 
+  // Depois que a IA já transferiu esta conversa, novas mensagens do cliente
+  // aguardam o humano. Isso evita que a IA retome o atendimento quando não há
+  // consultor elegível no momento e a conversa permanece na fila.
+  const { count: completedHandoffs } = await supabaseAdmin
+    .from("ai_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("status", "HANDOFF");
+  if ((completedHandoffs ?? 0) > 0) {
+    log("skip: transferência humana já solicitada");
+    return { status: "skipped", reason: "conversa com consultor" };
+  }
+
   // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
   const unreadableMedia =
     lastCustomer.message_type !== "text" && !lastCustomer.content && !lastCustomer.transcription;
@@ -248,7 +262,11 @@ export async function respondWithAI(input: {
     return { status: "handoff", reason: "gateway" };
   }
 
-  const needsHuman = raw.includes(HANDOFF_TOKEN);
+  const customerText = (lastCustomer.content ?? lastCustomer.transcription ?? "").trim();
+  const explicitHumanRequest =
+    /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
+    /\b(falar|transfer|passar|chamar|quero|gostaria|pode|preciso)\w*/i.test(customerText);
+  const needsHuman = explicitHumanRequest || raw.includes(HANDOFF_TOKEN);
   const text = raw.replaceAll(HANDOFF_TOKEN, "").trim();
 
   if (text) {

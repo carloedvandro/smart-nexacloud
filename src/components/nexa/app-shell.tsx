@@ -1,12 +1,14 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { LogOut, Menu, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { NexaLogo } from "@/components/nexa/logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 import { AVAILABILITY_LABEL } from "@/lib/nexa/domain";
 import { NAV_ITEMS } from "@/lib/nexa/navigation";
 import { cn } from "@/lib/utils";
@@ -43,6 +45,28 @@ export function AppShell({
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const channel = supabase
+      .channel(`queue-offers-${profile.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "assignment_attempts" },
+        (payload) => {
+          const offer = payload.new as { consultant_id?: string };
+          if (offer.consultant_id === profile.id) {
+            toast.info("Novo atendimento disponível", {
+              description: "Você tem 60 segundos para abrir a conversa e responder.",
+            });
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [profile?.id]);
 
   const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
   const items = NAV_ITEMS.filter((item) =>
