@@ -164,6 +164,7 @@ function PlatformPage() {
 
   const platformAdminQuery = useQuery({
     queryKey: ["is-platform-admin"],
+    enabled: hasSession,
     queryFn: async () => {
       const { data } = await supabase.rpc("is_platform_admin");
       return Boolean(data);
@@ -173,15 +174,16 @@ function PlatformPage() {
 
   const companiesQuery = useQuery({
     queryKey: ["platform-companies"],
-    enabled: isPlatformAdmin,
+    enabled: hasSession && isPlatformAdmin,
     queryFn: () => fetchCompanies(),
   });
 
   const instancesQuery = useQuery({
     queryKey: ["platform-instances"],
-    enabled: isPlatformAdmin,
+    enabled: hasSession && isPlatformAdmin,
     queryFn: () => fetchInstances(),
   });
+
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["platform-companies"] });
