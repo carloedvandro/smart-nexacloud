@@ -149,6 +149,7 @@ export async function sendWhatsAppText(input: OutboundInput) {
 
   const connectionId = await resolveConnection({
     companyId: input.companyId,
+    conversationId: input.conversationId,
     userId: input.userId,
     metadata: conversation.metadata as Record<string, unknown> | null,
   });
@@ -199,27 +200,57 @@ export async function sendWhatsAppText(input: OutboundInput) {
     _status: "SENT",
   });
 
+  // O consultor respondeu dentro do prazo: encerra o rodízio da fila nesta conversa.
+  await supabaseAdmin.rpc("queue_register_response", {
+    _conversation_id: input.conversationId,
+    _user_id: input.userId,
+  });
+
   return { ok: true as const, messageId };
 }
 
+/**
+ * Regra de canal: a conversa responde SEMPRE pela instância em que o cliente entrou.
+ * Ordem: canal registrado na conversa → instância da última mensagem recebida →
+ * número tronco conectado → qualquer instância conectada da empresa.
+ * A instância pessoal do consultor nunca troca o canal de uma conversa existente.
+ */
 async function resolveConnection(input: {
   companyId: string;
+  conversationId: string;
   userId: string;
   metadata: Record<string, unknown> | null;
 }): Promise<string | null> {
   const fromConversation = input.metadata?.["connection_id"];
   if (typeof fromConversation === "string") return fromConversation;
 
-  const { data: own } = await supabaseAdmin
+  const { data: inbound } = await supabaseAdmin
+    .from("messages")
+    .select("connection_id")
+    .eq("conversation_id", input.conversationId)
+    .eq("sender_type", "customer")
+    .not("connection_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (inbound?.connection_id) {
+    await supabaseAdmin
+      .from("conversations")
+      .update({ metadata: { ...(input.metadata ?? {}), connection_id: inbound.connection_id } })
+      .eq("id", input.conversationId);
+    return inbound.connection_id;
+  }
+
+  const { data: trunk } = await supabaseAdmin
     .from("whatsapp_connections")
     .select("id")
     .eq("company_id", input.companyId)
-    .eq("user_id", input.userId)
+    .eq("is_trunk", true)
     .eq("status", "CONNECTED")
     .maybeSingle();
-  if (own?.id) return own.id;
+  if (trunk?.id) return trunk.id;
 
-  const { data: any } = await supabaseAdmin
+  const { data: fallback } = await supabaseAdmin
     .from("whatsapp_connections")
     .select("id")
     .eq("company_id", input.companyId)
@@ -227,5 +258,5 @@ async function resolveConnection(input: {
     .order("instance_number", { ascending: true })
     .limit(1)
     .maybeSingle();
-  return any?.id ?? null;
+  return fallback?.id ?? null;
 }

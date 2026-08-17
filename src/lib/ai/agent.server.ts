@@ -111,23 +111,24 @@ async function callGateway(messages: ChatMessage[]): Promise<string | null> {
 
 async function handoff(companyId: string, conversationId: string, reason: string) {
   await supabaseAdmin
-    .from("conversations")
-    .update({ status: "WAITING_HUMAN" })
-    .eq("id", conversationId)
-    .eq("company_id", companyId);
-
-  await supabaseAdmin.from("conversation_events").insert({
-    company_id: companyId,
-    conversation_id: conversationId,
-    event_type: "AI_HANDOFF",
-    metadata: { reason },
-  });
-
-  await supabaseAdmin
     .from("ai_sessions")
     .update({ status: "HANDOFF", ended_at: new Date().toISOString(), handoff_reason: reason })
     .eq("conversation_id", conversationId)
     .eq("status", "ACTIVE");
+
+  // Entra na fila: o motor escolhe o consultor e inicia a contagem do SLA.
+  const { error } = await supabaseAdmin.rpc("enqueue_conversation", {
+    _conversation_id: conversationId,
+    _reason: reason,
+  });
+  if (error) {
+    console.error("[fila] falha ao enfileirar", error.message);
+    await supabaseAdmin
+      .from("conversations")
+      .update({ status: "WAITING_HUMAN" })
+      .eq("id", conversationId)
+      .eq("company_id", companyId);
+  }
 }
 
 /**

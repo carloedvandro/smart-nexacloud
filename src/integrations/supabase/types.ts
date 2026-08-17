@@ -1550,6 +1550,10 @@ export type Database = {
         Returns: string
       }
       current_company_id: { Args: never; Returns: string }
+      enqueue_conversation: {
+        Args: { _conversation_id: string; _reason?: string }
+        Returns: string
+      }
       finalize_outbound_message: {
         Args: {
           _external_message_id: string
@@ -1641,6 +1645,12 @@ export type Database = {
         }
         Returns: string
       }
+      queue_assign_next: { Args: { _conversation_id: string }; Returns: string }
+      queue_register_response: {
+        Args: { _conversation_id: string; _user_id: string }
+        Returns: undefined
+      }
+      queue_tick: { Args: never; Returns: number }
       redeem_invite_link: {
         Args: { _document?: string; _token: string }
         Returns: string

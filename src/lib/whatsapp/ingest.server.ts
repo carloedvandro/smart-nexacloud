@@ -221,7 +221,26 @@ export async function processWebhookEvent(input: {
       connectionId,
     });
     console.info("[ia] resultado", ai.status, ai.reason ?? "");
+
+    // Sem IA (ou IA desligada): a conversa entra na fila para o rodízio humano.
+    if (ai.status === "skipped" && ai.reason !== "conversa com consultor") {
+      const { data: conv } = await supabaseAdmin
+        .from("conversations")
+        .select("status, assigned_user_id")
+        .eq("id", result.conversation_id)
+        .maybeSingle();
+      if (conv && !conv.assigned_user_id && ["WAITING_HUMAN", "QUEUED"].includes(conv.status)) {
+        await supabaseAdmin.rpc("enqueue_conversation", {
+          _conversation_id: result.conversation_id,
+          _reason: "mensagem recebida sem IA ativa",
+        });
+      }
+    }
   }
+
+  // Oportunidade barata de expirar ofertas vencidas (SLA) a cada evento recebido.
+  await supabaseAdmin.rpc("queue_tick");
+
 
   return {
     status: result.duplicate ? "duplicate" : "processed",
