@@ -52,6 +52,7 @@ export const PhoneNormalizationService = {
 
   /** Link direto para o WhatsApp do lead. */
   waLink(raw: string | null | undefined): string | null {
+    if (PhoneNormalizationService.isLid(raw)) return null;
     const n = PhoneNormalizationService.normalize(raw);
     return n ? `https://wa.me/${n}` : null;
   },
