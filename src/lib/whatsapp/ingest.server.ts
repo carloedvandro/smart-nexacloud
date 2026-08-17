@@ -205,6 +205,13 @@ export async function processWebhookEvent(input: {
     lead_id?: string;
   };
 
+  console.info("[whatsapp] mensagem processada", {
+    evento: eventType,
+    tipo: messageType,
+    duplicada: Boolean(result.duplicate),
+    conversa: result.conversation_id ?? null,
+  });
+
   if (!result.duplicate && result.conversation_id) {
     const { respondWithAI } = await import("@/lib/ai/agent.server");
     const ai = await respondWithAI({
@@ -213,9 +220,7 @@ export async function processWebhookEvent(input: {
       leadId: result.lead_id ?? null,
       connectionId,
     });
-    if (ai.status === "handoff") {
-      console.info("[ia] transferido para humano:", ai.reason);
-    }
+    console.info("[ia] resultado", ai.status, ai.reason ?? "");
   }
 
   return {
