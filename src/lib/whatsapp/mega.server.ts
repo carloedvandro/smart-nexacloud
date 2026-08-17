@@ -178,61 +178,32 @@ export const MegaApiService = {
    * mensagem, outras apenas a chave), então tentamos as variações conhecidas.
    */
   async downloadMedia(creds: MegaCredentials, messageKey: unknown, messagePayload: unknown) {
+    type SerializedBuffer = { type?: string; data?: number[] };
     type DownloadResponse = {
       data?: string;
       base64?: string;
-      buffer?: string;
+      buffer?: string | SerializedBuffer | number[];
       mediaUrl?: string;
       fileURL?: string;
       url?: string;
       mimetype?: string;
       mimeType?: string;
+      response?: unknown;
+      result?: unknown;
     };
 
     const key = (messageKey ?? {}) as Record<string, unknown>;
-
-    // Contrato oficial: messageKeys contém os dados criptográficos da mídia e
-    // messageType normalizado (audio|video|document|image). O valor cru do
-    // webhook, como `audioMessage`, não é aceito pela MEGA.
-    const stack: unknown[] = [messagePayload];
-    let mediaNode: Record<string, unknown> | null = null;
-    let messageType: "audio" | "video" | "document" | "image" | null = null;
-    while (stack.length > 0 && !mediaNode) {
-      const current = stack.pop();
-      if (!current || typeof current !== "object") continue;
-      for (const [name, value] of Object.entries(current as Record<string, unknown>)) {
-        if (value && typeof value === "object") {
-          if (/^(audio|video|document|image)Message$/i.test(name)) {
-            mediaNode = value as Record<string, unknown>;
-            const normalizedType = name.replace(/Message$/i, "").toLowerCase();
-            if (
-              normalizedType === "audio" ||
-              normalizedType === "video" ||
-              normalizedType === "document" ||
-              normalizedType === "image"
-            ) {
-              messageType = normalizedType;
-            }
-            break;
-          }
-          stack.push(value);
-        }
-      }
-    }
-
-    const messageKeys = mediaNode && messageType
-      ? {
-          mediaKey: mediaNode["mediaKey"],
-          directPath: mediaNode["directPath"],
-          url: mediaNode["url"],
-          mimetype: mediaNode["mimetype"] ?? mediaNode["mimeType"],
-          messageType,
-        }
-      : null;
     const full = { key, message: messagePayload };
-    const bodies: unknown[] = messageKeys
-      ? [{ messageKeys }]
-      : [{ messageKeys: full }, { messageKeys: key, message: messagePayload }];
+
+    // O endpoint usa `type` para definir o formato de saída do Baileys. Esse
+    // campo é top-level e `messageKeys` é a chave original da mensagem, não os
+    // dados criptográficos do nó audioMessage/imageMessage.
+    const bodies: unknown[] = [
+      { messageKeys: key, type: "base64" },
+      { messageKeys: key, type: "buffer" },
+      { messageKeys: full, type: "base64" },
+      { messageKeys: full, type: "buffer" },
+    ];
 
     const paths = [
       `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
@@ -246,11 +217,18 @@ export const MegaApiService = {
       for (const body of bodies) {
         const result = await request<DownloadResponse>(creds, path, { method: "POST", body });
         if (result.ok) {
-          const data = result.data ?? {};
+          const raw = result.data ?? {};
+          const nested =
+            raw.response && typeof raw.response === "object"
+              ? (raw.response as DownloadResponse)
+              : raw.result && typeof raw.result === "object"
+                ? (raw.result as DownloadResponse)
+                : null;
+          const data = nested ? { ...raw, ...nested } : raw;
           const hasPayload =
             Boolean(data.data ?? data.base64 ?? data.buffer) ||
             typeof (data.url ?? data.mediaUrl ?? data.fileURL) === "string";
-          if (hasPayload) return result;
+          if (hasPayload) return { ok: true, data };
           last = { ok: false, error: "resposta sem mídia" };
           continue;
         }
