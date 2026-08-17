@@ -410,21 +410,27 @@ function TeamCard({
     void queryClient.invalidateQueries({ queryKey: ["company-team", companyId] });
   }
 
+  const sendInviteEmailFn = useServerFn(sendCompanyInviteEmail);
+
   const invite = useMutation({
     mutationFn: async () => {
+      const email = inviteEmail.trim();
       const { error } = await supabase.rpc("company_invite_member", {
-        _email: inviteEmail,
+        _email: email,
         _role: inviteRole,
       });
       if (error) throw error;
+      return await sendInviteEmailFn({ data: { email } });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       setInviteEmail("");
       invalidate();
-      toast.success("Convite registrado");
+      if (result?.sent) toast.success("Convite registrado e e-mail enviado");
+      else toast.warning(`Convite registrado, mas o e-mail não saiu: ${result?.reason ?? "erro"}`);
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const setRole = useMutation({
     mutationFn: async (input: { userId: string; role: "ADMIN" | "CONSULTANT" }) => {
