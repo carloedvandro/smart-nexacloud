@@ -172,9 +172,13 @@ export const MegaApiService = {
     return last;
   },
 
-  /** Download de mídia recebida — endpoint confirmado na integração de referência. */
-  downloadMedia(creds: MegaCredentials, messageKey: unknown, messagePayload: unknown) {
-    return request<{
+  /**
+   * Download de mídia recebida. A MEGA aceita formatos de corpo diferentes
+   * conforme a versão do servidor (algumas exigem o objeto completo da
+   * mensagem, outras apenas a chave), então tentamos as variações conhecidas.
+   */
+  async downloadMedia(creds: MegaCredentials, messageKey: unknown, messagePayload: unknown) {
+    type DownloadResponse = {
       data?: string;
       base64?: string;
       buffer?: string;
@@ -183,11 +187,41 @@ export const MegaApiService = {
       url?: string;
       mimetype?: string;
       mimeType?: string;
-    }>(creds, `/rest/instance/downloadMediaMessage/${creds.instanceKey}`, {
-      method: "POST",
-      body: { messageKeys: messageKey, message: messagePayload },
-    });
+    };
+
+    const key = (messageKey ?? {}) as Record<string, unknown>;
+    const full = { key, message: messagePayload };
+
+    const attempts: unknown[] = [
+      { messageKeys: full },
+      { messageKeys: { ...key, message: messagePayload } },
+      { messageKeys: key, message: messagePayload },
+      full,
+      { messageData: full },
+    ];
+
+    let last: MegaResult<DownloadResponse> = { ok: false, error: "sem tentativa" };
+    for (const body of attempts) {
+      const result = await request<DownloadResponse>(
+        creds,
+        `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
+        { method: "POST", body },
+      );
+      if (result.ok) {
+        const data = result.data ?? {};
+        const hasPayload =
+          Boolean(data.data ?? data.base64 ?? data.buffer) ||
+          typeof (data.url ?? data.mediaUrl ?? data.fileURL) === "string";
+        if (hasPayload) return result;
+        last = { ok: false, error: "resposta sem mídia" };
+        continue;
+      }
+      last = result;
+      if (result.status === 401 || result.status === 403) return result;
+    }
+    return last;
   },
+
 
   /**
    * Situação da instância.
