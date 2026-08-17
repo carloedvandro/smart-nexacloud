@@ -356,3 +356,23 @@ export async function mirrorLeadMessageToConsultant(input: {
   const body = (input.text ?? "").trim() || `[${input.messageType}] veja no sistema NexaAtende`;
   await sendToConsultant(trunk, profile.phone, `💬 ${leadName}: ${body}`);
 }
+
+/** Notifica ofertas pendentes de todas as empresas (usado pelo relógio da fila). */
+export async function notifyAllQueueOffers(): Promise<void> {
+  const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+  const { data } = await supabaseAdmin
+    .from("assignment_attempts")
+    .select("company_id")
+    .in("status", ["WAITING", "TIMEOUT"])
+    .gte("assigned_at", cutoff)
+    .limit(200);
+
+  const companies = [...new Set((data ?? []).map((row) => row.company_id))];
+  for (const companyId of companies) {
+    try {
+      await notifyQueueOffers(companyId);
+    } catch (error) {
+      console.error("[ponte] falha ao notificar empresa", companyId, error);
+    }
+  }
+}
