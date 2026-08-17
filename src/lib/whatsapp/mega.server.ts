@@ -104,6 +104,74 @@ export const MegaApiService = {
     );
   },
 
+  /**
+   * Envio de mídia (áudio, imagem, vídeo, documento).
+   * A MEGA aceita formatos de corpo diferentes conforme a versão do servidor,
+   * então tentamos as variações conhecidas até uma responder com sucesso.
+   */
+  async sendMedia(
+    creds: MegaCredentials,
+    input: {
+      to: string;
+      url: string;
+      mediaType: "audio" | "image" | "video" | "document";
+      mimeType?: string | null;
+      fileName?: string | null;
+      caption?: string | null;
+    },
+  ) {
+    const fileName = input.fileName ?? `arquivo-${Date.now()}`;
+    const caption = input.caption ?? "";
+    const attempts: Array<{ path: string; body: Record<string, unknown> }> = [
+      {
+        path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
+        body: {
+          messageData: {
+            to: input.to,
+            url: input.url,
+            type: input.mediaType,
+            mimeType: input.mimeType ?? undefined,
+            fileName,
+            caption,
+          },
+        },
+      },
+      {
+        path: `/rest/sendMessage/${creds.instanceKey}/${input.mediaType}`,
+        body: {
+          messageData: {
+            to: input.to,
+            url: input.url,
+            mimeType: input.mimeType ?? undefined,
+            fileName,
+            caption,
+          },
+        },
+      },
+      {
+        path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
+        body: {
+          messageData: { to: input.to, url: input.url, type: input.mediaType, caption },
+        },
+      },
+    ];
+
+    let last: MegaResult<{ key?: { id?: string }; messageId?: string }> = {
+      ok: false,
+      error: "Não foi possível enviar a mídia pela MEGA API.",
+    };
+    for (const attempt of attempts) {
+      const result = await request<{ key?: { id?: string }; messageId?: string }>(creds, attempt.path, {
+        method: "POST",
+        body: attempt.body,
+      });
+      if (result.ok) return result;
+      last = result;
+      if (result.status === 401 || result.status === 403) return result;
+    }
+    return last;
+  },
+
   /** Download de mídia recebida — endpoint confirmado na integração de referência. */
   downloadMedia(creds: MegaCredentials, messageKey: unknown, messagePayload: unknown) {
     return request<{ data?: string; base64?: string; mimetype?: string }>(
