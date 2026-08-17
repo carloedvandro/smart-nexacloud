@@ -202,7 +202,7 @@ export const MegaApiService = {
       key,
     ];
     const bodies: unknown[] = [];
-    for (const type of ["base64", "buffer"] as const) {
+    for (const type of ["buffer", "base64", "stream"] as const) {
       for (const messageKeys of messageVariants) {
         bodies.push({ messageKeys, type });
       }
