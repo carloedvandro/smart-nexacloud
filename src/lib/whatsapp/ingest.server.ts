@@ -249,10 +249,25 @@ export async function processWebhookEvent(input: {
         });
       }
     }
+
+    // Conversa já assumida por um consultor: espelha a fala do lead no
+    // WhatsApp dele, mantendo o histórico dentro do sistema.
+    const { mirrorLeadMessageToConsultant } = await import("@/lib/queue/bridge.server");
+    await mirrorLeadMessageToConsultant({
+      companyId,
+      conversationId: result.conversation_id,
+      text: content,
+      messageType,
+    });
   }
 
   // Oportunidade barata de expirar ofertas vencidas (SLA) a cada evento recebido.
   await supabaseAdmin.rpc("queue_tick");
+
+  // Avisa no WhatsApp os consultores com oferta pendente / repassada.
+  const { notifyQueueOffers } = await import("@/lib/queue/bridge.server");
+  await notifyQueueOffers(companyId);
+
 
 
   return {
