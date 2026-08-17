@@ -149,6 +149,7 @@ export async function sendWhatsAppText(input: OutboundInput) {
 
   const connectionId = await resolveConnection({
     companyId: input.companyId,
+    conversationId: input.conversationId,
     userId: input.userId,
     metadata: conversation.metadata as Record<string, unknown> | null,
   });
