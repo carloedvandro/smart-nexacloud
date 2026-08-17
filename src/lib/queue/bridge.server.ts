@@ -366,7 +366,7 @@ export async function handleConsultantInbound(input: {
     _sender_id: consultant.profileId,
     _sender_type: "consultant",
     _sender_name: consultant.fullName ?? "Consultor",
-    _content: text || (media ? `[${messageType}]` : ""),
+    _content: text,
     _message_type: media ? messageType : "text",
     ...(media ? { _media_url: media.path } : {}),
     _connection_id: connectionId,
@@ -425,6 +425,7 @@ export async function mirrorLeadMessageToConsultant(input: {
   conversationId: string;
   text: string | null;
   messageType: string;
+  media?: { path: string; mimeType: string | null } | null;
 }): Promise<void> {
   const { data: conversation } = await supabaseAdmin
     .from("conversations")
@@ -451,7 +452,31 @@ export async function mirrorLeadMessageToConsultant(input: {
   if (!trunk) return;
 
   const leadName = (conversation.lead as { name: string | null } | null)?.name?.trim() || "Lead";
-  const body = (input.text ?? "").trim() || `[${input.messageType}] veja no sistema NexaAtende`;
+  const text = (input.text ?? "").trim();
+
+  // Mídia do lead: encaminha o arquivo em si para o WhatsApp do consultor.
+  if (input.media) {
+    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+    const url = await signedMediaUrl(input.media.path);
+    const to = PhoneNormalizationService.normalize(notificationPhone);
+    if (url && to) {
+      const mediaType = (["audio", "image", "video"].includes(input.messageType)
+        ? input.messageType
+        : "document") as "audio" | "image" | "video" | "document";
+      const sent = await MegaApiService.sendMedia(trunk.creds, {
+        to,
+        url,
+        mediaType,
+        mimeType: input.media.mimeType,
+        fileName: input.media.path.split("/").pop() ?? null,
+        caption: `💬 ${leadName}${text ? `: ${text}` : ""}`,
+      });
+      if (sent.ok) return;
+      console.error("[ponte] falha ao espelhar mídia ao consultor", sent.error);
+    }
+  }
+
+  const body = text || `[${input.messageType}] veja no sistema NexaAtende`;
   await sendToConsultant(trunk, notificationPhone, `💬 ${leadName}: ${body}`);
 }
 
