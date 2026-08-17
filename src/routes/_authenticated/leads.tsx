@@ -279,7 +279,7 @@ function LeadRowView({
         <p className="font-medium">{lead.name ?? "Sem nome"}</p>
         <p className="text-xs text-muted-foreground">{lead.email ?? "—"}</p>
       </TableCell>
-      <TableCell className="text-sm">{PhoneNormalizationService.format(lead.whatsapp)}</TableCell>
+      <TableCell className="text-sm">{PhoneNormalizationService.formatContact(lead.phone, lead.whatsapp)}</TableCell>
       <TableCell><LeadStatusBadge status={lead.status as LeadStatus} /></TableCell>
       <TableCell className="text-sm">{LEAD_SOURCE_LABEL[lead.source] ?? lead.source}</TableCell>
       <TableCell className="text-sm text-muted-foreground">

@@ -113,7 +113,7 @@ export function LeadDetailSheet({
                 <LeadStatusBadge status={lead.status as LeadStatus} />
               </SheetTitle>
               <SheetDescription>
-                {PhoneNormalizationService.format(lead.whatsapp)} ·{" "}
+                {PhoneNormalizationService.formatContact(lead.phone, lead.whatsapp)} ·{" "}
                 {LEAD_SOURCE_LABEL[lead.source] ?? lead.source}
               </SheetDescription>
             </SheetHeader>
