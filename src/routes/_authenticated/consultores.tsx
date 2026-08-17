@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { AdminOnly } from "@/components/nexa/admin-only";
 import { useServerFn } from "@tanstack/react-start";
 import { sendCompanyInviteEmail } from "@/lib/invites/invites.functions";
 
@@ -36,7 +37,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AVAILABILITY_LABEL, type Availability } from "@/lib/nexa/domain";
 import { buildInviteUrl } from "@/lib/nexa/public-url";
-import { AdminOnly } from "@/components/nexa/admin-only";
 
 export const Route = createFileRoute("/_authenticated/consultores")({
   head: () => ({

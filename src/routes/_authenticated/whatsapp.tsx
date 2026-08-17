@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { AdminOnly } from "@/components/nexa/admin-only";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -27,7 +28,6 @@ import { listConsultants } from "@/lib/nexa/crm";
 import { WHATSAPP_INSTANCE_STATUS_LABEL } from "@/lib/nexa/domain";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
-import { AdminOnly } from "@/components/nexa/admin-only";
   assignWhatsAppInstance,
   configureInstanceWebhook,
   connectWhatsAppInstance,
