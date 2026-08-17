@@ -198,7 +198,12 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       .join("\n");
 
     const ok = await sendToConsultant(trunk, notificationPhone, text);
-    if (ok) await logEvent(companyId, attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
+    if (ok) {
+      await logEvent(companyId, attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
+      // A partir de agora, tudo que o consultor responder vai para este lead.
+      await setFocusConversation(companyId, attempt.conversation_id, attempt.consultant_id);
+    }
+
   }
 }
 
