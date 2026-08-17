@@ -248,9 +248,9 @@ function ConsultantsPage() {
       total: members.length,
       online: members.filter((m) => m.availability === "ONLINE").length,
       inactive: members.filter((m) => !m.is_active).length,
-      pending: data?.invites.length ?? 0,
+      pending: data?.invites?.length ?? 0,
     }),
-    [members, data?.invites.length],
+    [members, data?.invites?.length],
   );
 
   return (
@@ -521,11 +521,11 @@ function ConsultantsPage() {
               })
             )}
 
-            {isAdmin && (data?.invites.length ?? 0) > 0 ? (
+            {isAdmin && (data?.invites?.length ?? 0) > 0 ? (
               <>
                 <Separator />
                 <p className="text-sm font-medium">Convites pendentes</p>
-                {data?.invites.map((inv) => (
+                {data?.invites?.map((inv) => (
                   <div
                     key={inv.id}
                     className="flex items-center justify-between rounded-lg border border-dashed border-border p-3"
