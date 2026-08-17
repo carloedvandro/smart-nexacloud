@@ -200,6 +200,12 @@ export async function sendWhatsAppText(input: OutboundInput) {
     _status: "SENT",
   });
 
+  // O consultor respondeu dentro do prazo: encerra o rodízio da fila nesta conversa.
+  await supabaseAdmin.rpc("queue_register_response", {
+    _conversation_id: input.conversationId,
+    _user_id: input.userId,
+  });
+
   return { ok: true as const, messageId };
 }
 
