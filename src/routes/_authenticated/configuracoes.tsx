@@ -36,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AVAILABILITY_LABEL, type Availability } from "@/lib/nexa/domain";
+import { PasswordInput } from "@/components/nexa/password-input";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -228,9 +229,8 @@ function PasswordCard({ email }: { email: string | null }) {
       <CardContent className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="new_password">Nova senha</Label>
-          <Input
+          <PasswordInput
             id="new_password"
-            type="password"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -238,9 +238,8 @@ function PasswordCard({ email }: { email: string | null }) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirm_password">Confirmar nova senha</Label>
-          <Input
+          <PasswordInput
             id="confirm_password"
-            type="password"
             autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}

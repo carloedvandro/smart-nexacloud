@@ -44,6 +44,7 @@ import {
   updateInstanceCredentials,
 
 } from "@/lib/platform/platform.functions";
+import { PasswordInput } from "@/components/nexa/password-input";
 
 
 export const Route = createFileRoute("/_authenticated/plataforma")({
@@ -604,11 +605,10 @@ function PlatformPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Token da MEGA API (opcional)</Label>
-              <Input
+              <PasswordInput
                 value={instanceToken}
                 onChange={(event) => setInstanceToken(event.target.value)}
                 autoComplete="off"
-                type="password"
                 placeholder="Bearer token da instância — em branco usa o token padrão da plataforma"
               />
             </div>
@@ -641,11 +641,10 @@ function PlatformPage() {
           </DialogHeader>
           <div className="space-y-1.5">
             <Label>Token</Label>
-            <Input
+            <PasswordInput
               value={tokenValue}
               onChange={(event) => setTokenValue(event.target.value)}
               autoComplete="off"
-              type="password"
               placeholder="token da instância na MEGA API"
             />
           </div>
