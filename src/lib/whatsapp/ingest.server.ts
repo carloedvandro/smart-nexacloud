@@ -437,6 +437,43 @@ async function handleConnectionEvent(connectionId: string, eventType: string, pa
   });
 }
 
+/** Chave da mensagem (key) em qualquer profundidade do payload. */
+function findMessageKey(payload: unknown): Record<string, unknown> | null {
+  const direct = pick(payload, "key");
+  if (direct && typeof direct === "object") return direct as Record<string, unknown>;
+  const found = deepFind(payload, /^key$/i);
+  if (found && typeof found === "object" && "id" in (found as Json)) {
+    return found as Record<string, unknown>;
+  }
+  return null;
+}
+
+const MEDIA_WRAPPERS = [
+  "ephemeralMessage",
+  "viewOnceMessage",
+  "viewOnceMessageV2",
+  "viewOnceMessageV2Extension",
+  "documentWithCaptionMessage",
+  "editedMessage",
+  "protocolMessage",
+];
+
+/** Nó `message` já desembrulhado dos invólucros (ephemeral, viewOnce...). */
+function findMessageNode(payload: unknown): unknown {
+  let node = pick(payload, "message") ?? deepFind(payload, /^message$/i);
+  for (let i = 0; i < 6; i += 1) {
+    if (!node || typeof node !== "object") break;
+    const entries = Object.keys(node as Json);
+    const wrapper = entries.find((key) => MEDIA_WRAPPERS.includes(key));
+    if (!wrapper) break;
+    const inner = (node as Json)[wrapper];
+    const next = inner && typeof inner === "object" ? ((inner as Json)["message"] ?? inner) : null;
+    if (!next) break;
+    node = next;
+  }
+  return node;
+}
+
 async function downloadAndStoreMedia(input: {
   connectionId: string;
   companyId: string;
@@ -447,15 +484,23 @@ async function downloadAndStoreMedia(input: {
   const creds = await loadMegaCredentials(input.connectionId);
   if (!creds) return null;
 
-  const result = await MegaApiService.downloadMedia(
-    creds,
-    pick(input.body, "key") ?? input.body["key"],
-    pick(input.body, "message"),
-  );
+  const key = findMessageKey(input.body);
+  const messageNode = findMessageNode(input.body);
+  if (!key) {
+    console.error("[whatsapp] mídia sem key no payload", JSON.stringify(input.body).slice(0, 800));
+  }
+
+  const result = await MegaApiService.downloadMedia(creds, key ?? {}, messageNode);
   if (!result.ok) {
-    console.error("[whatsapp] download de mídia falhou", result.error);
+    console.error("[whatsapp] download de mídia falhou", {
+      erro: result.error,
+      tipo: input.messageType,
+      key,
+      temMessage: Boolean(messageNode),
+    });
     return null;
   }
+
 
   const base64 = result.data?.data ?? result.data?.base64 ?? result.data?.buffer;
   let bytes: Uint8Array | null = null;
