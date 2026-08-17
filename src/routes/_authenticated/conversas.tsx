@@ -559,8 +559,19 @@ function MessageBubble({ message, mediaUrl }: { message: MessageRow; mediaUrl?: 
           <p className="mt-1 text-xs opacity-70">Transcrevendo áudio…</p>
         ) : null}
         {!message.media_url && !message.content ? (
-          <p className="opacity-70">(sem conteúdo)</p>
+          <p className="opacity-70">
+            {message.message_type === "audio"
+              ? "🎤 Áudio (não foi possível baixar a mídia)"
+              : message.message_type === "image"
+                ? "🖼️ Imagem (não foi possível baixar a mídia)"
+                : message.message_type === "video"
+                  ? "🎬 Vídeo (não foi possível baixar a mídia)"
+                  : message.message_type === "document"
+                    ? "📄 Documento (não foi possível baixar a mídia)"
+                    : "(sem conteúdo)"}
+          </p>
         ) : null}
+
         <p className="mt-1 text-right text-[10px] opacity-70">
           {new Date(message.created_at).toLocaleTimeString("pt-BR", {
             hour: "2-digit",
