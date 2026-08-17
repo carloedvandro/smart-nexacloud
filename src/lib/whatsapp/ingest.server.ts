@@ -194,13 +194,8 @@ export async function processWebhookEvent(input: {
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
   const messageType = detectMessageType(body);
   const content = extractText(body);
-  let mimeTypeHint: string | null =
-    firstString(body, [
-      "message.audioMessage.mimetype",
-      "message.imageMessage.mimetype",
-      "message.videoMessage.mimetype",
-      "message.documentMessage.mimetype",
-    ]) ?? null;
+  const mimeTypeHint: string | null = extractMimeType(body) ?? extractMimeType(payload);
+
 
   if (fromMe) {
     // Mensagem enviada pelo próprio número da empresa. Se ela já existe no
