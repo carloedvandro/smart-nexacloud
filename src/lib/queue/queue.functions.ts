@@ -145,7 +145,7 @@ export const getQueueOverview = createServerFn({ method: "GET" })
         name: row.full_name ?? row.email ?? "Sem nome",
         availability: row.availability,
         load: load.get(row.id) ?? 0,
-        limit: Number(row.metadata?.max_concurrent ?? settings.maxConcurrentPerConsultant),
+        limit: Math.max(1, Number(row.metadata?.max_concurrent) || settings.maxConcurrentPerConsultant),
       })),
     };
   });
