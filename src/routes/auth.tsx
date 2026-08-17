@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { BRAND } from "@/lib/nexa/domain";
+import { PasswordInput } from "@/components/nexa/password-input";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -130,9 +131,8 @@ function AuthPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input
+                  <PasswordInput
                     id="password"
-                    type="password"
                     autoComplete="current-password"
                     required
                     value={password}
@@ -169,9 +169,8 @@ function AuthPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password-signup">Senha</Label>
-                  <Input
+                  <PasswordInput
                     id="password-signup"
-                    type="password"
                     autoComplete="new-password"
                     minLength={8}
                     required
