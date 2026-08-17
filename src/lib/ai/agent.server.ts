@@ -142,8 +142,13 @@ export async function respondWithAI(input: {
 }): Promise<{ status: "skipped" | "replied" | "handoff"; reason?: string }> {
   const { companyId, conversationId, connectionId } = input;
 
+  const log = (...args: unknown[]) => console.info("[ia]", conversationId, ...args);
+
   const settings = await loadAiSettings(companyId);
-  if (!settings.enabled) return { status: "skipped", reason: "ia desativada" };
+  if (!settings.enabled) {
+    log("skip: ia desativada");
+    return { status: "skipped", reason: "ia desativada" };
+  }
 
   const { data: conversation } = await supabaseAdmin
     .from("conversations")
@@ -151,9 +156,16 @@ export async function respondWithAI(input: {
     .eq("id", conversationId)
     .eq("company_id", companyId)
     .maybeSingle();
-  if (!conversation) return { status: "skipped", reason: "conversa inexistente" };
-  if (conversation.assigned_user_id) return { status: "skipped", reason: "conversa com consultor" };
+  if (!conversation) {
+    log("skip: conversa inexistente");
+    return { status: "skipped", reason: "conversa inexistente" };
+  }
+  if (conversation.assigned_user_id) {
+    log("skip: conversa com consultor");
+    return { status: "skipped", reason: "conversa com consultor" };
+  }
   if (!["AI_ACTIVE", "WAITING_HUMAN", "QUEUED", "WAITING_CUSTOMER"].includes(conversation.status)) {
+    log("skip: status", conversation.status);
     return { status: "skipped", reason: `status ${conversation.status}` };
   }
 
@@ -166,7 +178,10 @@ export async function respondWithAI(input: {
 
   const ordered = (history ?? []).slice().reverse();
   const lastCustomer = ordered.filter((m) => m.sender_type === "customer").at(-1);
-  if (!lastCustomer) return { status: "skipped", reason: "sem mensagem do lead" };
+  if (!lastCustomer) {
+    log("skip: sem mensagem do lead");
+    return { status: "skipped", reason: "sem mensagem do lead" };
+  }
 
   // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
   const unreadableMedia =
@@ -205,6 +220,7 @@ export async function respondWithAI(input: {
   }
 
 
+  log("chamando o modelo", { mensagens: messages.length, conhecimento: knowledge.length });
   const raw = await callGateway(messages);
   if (!raw) {
     await handoff(companyId, conversationId, "falha na geração da resposta");
@@ -220,6 +236,7 @@ export async function respondWithAI(input: {
     const recipient = WhatsAppIdentifierService.toRecipient(destination);
     const creds = recipient ? await loadMegaCredentials(connectionId) : null;
 
+    log("enviando resposta", { destino: recipient, temCredenciais: Boolean(creds) });
     if (recipient && creds) {
       const { data: messageId } = await supabaseAdmin.rpc("create_outbound_message", {
         _conversation_id: conversationId,
@@ -244,6 +261,7 @@ export async function respondWithAI(input: {
         });
       }
       if (!sent.ok) {
+        log("falha no envio", sent.error);
         await handoff(companyId, conversationId, `falha no envio: ${sent.error}`);
         return { status: "handoff", reason: "envio" };
       }
@@ -264,5 +282,6 @@ export async function respondWithAI(input: {
     .eq("id", conversationId)
     .eq("company_id", companyId);
 
+  log("respondido com sucesso");
   return { status: "replied" };
 }
