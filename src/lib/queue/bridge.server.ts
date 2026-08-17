@@ -366,7 +366,7 @@ export async function handleConsultantInbound(input: {
     _sender_id: consultant.profileId,
     _sender_type: "consultant",
     _sender_name: consultant.fullName ?? "Consultor",
-    ...(text ? { _content: text } : {}),
+    _content: text || (media ? `[${messageType}]` : ""),
     _message_type: media ? messageType : "text",
     ...(media ? { _media_url: media.path } : {}),
     _connection_id: connectionId,
