@@ -126,7 +126,13 @@ function ConversasPage() {
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
         <Card className="flex h-[calc(100vh-10rem)] flex-col shadow-panel">
           <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+            {isAdmin ? (
+              <div className="flex justify-end">
+                <PurgeConversationsButton />
+              </div>
+            ) : null}
             <div className="relative">
+
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
