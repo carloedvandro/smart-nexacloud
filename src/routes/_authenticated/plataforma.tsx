@@ -419,6 +419,10 @@ function PlatformPage() {
                             const result = await configureWebhookFn({
                               data: { connectionId: instance.id },
                             });
+                            if (!result.ok) {
+                              toast.error(result.error ?? "Falha ao configurar.");
+                              return;
+                            }
                             setWebhook({ id: instance.id, url: result.current ?? result.url });
                             toast.success("Webhook configurado na MEGA API.");
                           } catch (error) {
