@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import {
+import { AdminOnly } from "@/components/nexa/admin-only";
   deleteKnowledge,
   getAiConfig,
   listKnowledge,
@@ -67,7 +68,7 @@ export const Route = createFileRoute("/_authenticated/conhecimento")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: ConhecimentoPage,
+  component: GuardedConhecimentoPage,
 });
 
 const EMPTY: KnowledgeItem = {
@@ -359,5 +360,13 @@ function ConhecimentoPage() {
         </DialogContent>
       </Dialog>
     </AppShell>
+  );
+}
+
+function GuardedConhecimentoPage() {
+  return (
+    <AdminOnly title="Conhecimento IA" description="Base usada pela inteligência artificial">
+      <ConhecimentoPage />
+    </AdminOnly>
   );
 }

@@ -36,6 +36,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AVAILABILITY_LABEL, type Availability } from "@/lib/nexa/domain";
 import { buildInviteUrl } from "@/lib/nexa/public-url";
+import { AdminOnly } from "@/components/nexa/admin-only";
 
 export const Route = createFileRoute("/_authenticated/consultores")({
   head: () => ({
@@ -51,7 +52,7 @@ export const Route = createFileRoute("/_authenticated/consultores")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: ConsultantsPage,
+  component: GuardedConsultantsPage,
 });
 
 type MemberRow = {
@@ -572,5 +573,13 @@ function StatCard({ label, value }: { label: string; value: number }) {
         <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function GuardedConsultantsPage() {
+  return (
+    <AdminOnly title="Consultores" description="Equipe, papéis e disponibilidade">
+      <ConsultantsPage />
+    </AdminOnly>
   );
 }

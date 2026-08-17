@@ -27,6 +27,7 @@ import { listConsultants } from "@/lib/nexa/crm";
 import { WHATSAPP_INSTANCE_STATUS_LABEL } from "@/lib/nexa/domain";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
+import { AdminOnly } from "@/components/nexa/admin-only";
   assignWhatsAppInstance,
   configureInstanceWebhook,
   connectWhatsAppInstance,
@@ -59,7 +60,7 @@ export const Route = createFileRoute("/_authenticated/whatsapp")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: WhatsAppPage,
+  component: GuardedWhatsAppPage,
 });
 
 function statusTone(status: string) {
@@ -642,5 +643,13 @@ function WebhookCard({ instances }: { instances: WhatsAppInstance[] }) {
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function GuardedWhatsAppPage() {
+  return (
+    <AdminOnly title="WhatsApp" description="Conexões e instâncias">
+      <WhatsAppPage />
+    </AdminOnly>
   );
 }

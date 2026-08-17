@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
+import { AdminOnly } from "@/components/nexa/admin-only";
   enqueueConversation,
   getQueueOverview,
   runQueueTick,
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/_authenticated/fila")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: FilaPage,
+  component: GuardedFilaPage,
 });
 
 function useCountdown(deadline: string) {
@@ -365,5 +366,13 @@ function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: stri
         <span className="rounded-lg bg-primary/10 p-2 text-primary">{icon}</span>
       </CardContent>
     </Card>
+  );
+}
+
+function GuardedFilaPage() {
+  return (
+    <AdminOnly title="Fila" description="Rodízio, SLA e distribuição">
+      <FilaPage />
+    </AdminOnly>
   );
 }
