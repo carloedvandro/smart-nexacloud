@@ -67,7 +67,12 @@ async function request<T>(
         name === "UNAUTHORIZED"
           ? "Token da MEGA API inválido para esta instância. Cadastre o token (Bearer) da instância no painel."
           : rawMessage || `MEGA API respondeu ${response.status} em ${path}`;
-      console.error("[mega] falha", { path, status: response.status, name });
+      console.error("[mega] falha", {
+        path,
+        status: response.status,
+        name,
+        body: text?.slice(0, 500),
+      });
       return { ok: false, error: message, status: response.status };
     }
 
