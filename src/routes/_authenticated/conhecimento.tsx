@@ -30,6 +30,7 @@ import {
   listKnowledge,
   saveAiConfig,
   saveKnowledge,
+  testAiReply,
   type AiConfig,
   type KnowledgeItem,
 } from "@/lib/ai/ai.functions";
@@ -88,6 +89,7 @@ function ConhecimentoPage() {
   const persist = useServerFn(saveKnowledge);
   const remove = useServerFn(deleteKnowledge);
   const persistConfig = useServerFn(saveAiConfig);
+  const runTest = useServerFn(testAiReply);
 
   const { data: items, isLoading } = useQuery({ queryKey: ["knowledge"], queryFn: () => fetchList() });
   const { data: config } = useQuery({ queryKey: ["ai-config"], queryFn: () => fetchConfig() });
@@ -107,6 +109,17 @@ function ConhecimentoPage() {
     onSuccess: () => {
       toast.success("Configuração da IA salva.");
       void queryClient.invalidateQueries({ queryKey: ["ai-config"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const testIa = useMutation({
+    mutationFn: () => runTest({ data: undefined as never }),
+    onSuccess: (result: { status: string; reason: string }) => {
+      if (result.status === "replied") toast.success("A IA respondeu a última conversa.");
+      else if (result.status === "handoff")
+        toast.warning(`Transferido para humano: ${result.reason || "sem motivo"}`);
+      else toast.error(`IA não respondeu: ${result.reason || "sem motivo"}`);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -195,9 +208,16 @@ function ConhecimentoPage() {
               />
             </div>
             {isAdmin ? (
-              <div className="md:col-span-2">
+              <div className="flex flex-wrap gap-2 md:col-span-2">
                 <Button onClick={() => saveConfig.mutate(form)} disabled={saveConfig.isPending}>
                   Salvar configuração
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => testIa.mutate()}
+                  disabled={testIa.isPending}
+                >
+                  {testIa.isPending ? "Testando..." : "Testar IA na última conversa"}
                 </Button>
               </div>
             ) : null}
