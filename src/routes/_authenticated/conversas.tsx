@@ -615,6 +615,9 @@ function DocumentMedia({ url }: { url: string }) {
   const [busy, setBusy] = useState(false);
 
   const withBlob = async (action: "open" | "download") => {
+    // A aba precisa ser aberta no clique (antes do await), senão o navegador
+    // trata como pop-up e bloqueia.
+    const popup = action === "open" ? window.open("", "_blank") : null;
     setBusy(true);
     try {
       const response = await fetch(url);
@@ -633,21 +636,32 @@ function DocumentMedia({ url }: { url: string }) {
             : raw.type || "application/octet-stream";
       const extension = detected === "application/pdf" ? "pdf" : detected.split("/")[1] || "bin";
       const blobUrl = URL.createObjectURL(new Blob([raw], { type: detected }));
-      if (action === "open") {
-        window.open(blobUrl, "_blank", "noopener");
-      } else {
+      const saveFile = () => {
         const link = document.createElement("a");
         link.href = blobUrl;
         link.download = `documento.${extension}`;
         document.body.appendChild(link);
         link.click();
         link.remove();
+      };
+      if (action === "open") {
+        if (popup && !popup.closed) {
+          popup.location.href = blobUrl;
+        } else {
+          // Pop-up bloqueado: baixamos o arquivo para o usuário abrir.
+          saveFile();
+          toast.info("Pop-up bloqueado — o documento foi baixado.");
+        }
+      } else {
+        saveFile();
       }
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
     } catch {
+      popup?.close();
       toast.error("Não foi possível abrir o documento.");
     } finally {
       setBusy(false);
+
     }
   };
 
