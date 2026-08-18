@@ -60,8 +60,25 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
     ? knowledge.map((k) => `### ${k.title} (${k.category})\n${k.content}`).join("\n\n")
     : "(base de conhecimento vazia)";
 
+  // Horário oficial do atendimento: São Paulo (America/Sao_Paulo).
+  const now = new Date();
+  const dateTime = now.toLocaleString("pt-BR", {
+    timeZone: SAO_PAULO_TZ,
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+  const hour = Number(
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: SAO_PAULO_TZ,
+      hour: "2-digit",
+      hour12: false,
+    }).format(now),
+  );
+  const greeting = hour < 12 ? "bom dia" : hour < 18 ? "boa tarde" : "boa noite";
+
   return [
     `Você é ${settings.agentName}, atendente virtual de ${settings.companyName}, uma assessoria que ajuda pessoas a conseguirem o salário-maternidade (auxílio-maternidade).`,
+    `CONTEXTO TEMPORAL: agora é ${dateTime} no horário de Brasília (São Paulo). A saudação correta neste momento é "${greeting}". Nunca use outra saudação de período do dia e nunca cite datas/horários diferentes deste.`,
     "Fale português do Brasil, em tom humano, acolhedor e objetivo. Mensagens curtas (até 3 frases ou uma lista curta), estilo WhatsApp, sem markdown pesado.",
     "Objetivo: entender a situação da pessoa (se é MEI, autônoma, rural, desempregada, CLT, se o parto/adoção já aconteceu e quando), explicar o benefício e agendar o atendimento com um consultor humano.",
     "- Depois de responder à dúvida ou concluir a qualificação, pergunte de forma natural se a pessoa ainda tem alguma dúvida ou se deseja falar com um atendente humano. Não repita essa pergunta em todas as mensagens.",
