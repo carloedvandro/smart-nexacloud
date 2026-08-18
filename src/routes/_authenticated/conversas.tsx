@@ -607,28 +607,51 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
 }
 
 /**
- * O arquivo já é servido com o tipo correto (o servidor corrige documentos
- * antigos), então links normais funcionam: "Abrir" mostra o PDF no navegador e
- * "Baixar" força o download, sem pop-up nem blob (que o Safari bloqueia).
+ * Documentos são baixados direto pelo app (sem abrir aba e sem expor o link
+ * do arquivo): buscamos os bytes e salvamos com o nome e tipo corretos.
  */
 function DocumentMedia({ url }: { url: string }) {
-  const downloadUrl = `${url}${url.includes("?") ? "&" : "?"}download=1`;
+  const [busy, setBusy] = useState(false);
+  const fileName = decodeURIComponent(
+    (url.split("?")[0] ?? "").split("/").pop() || "documento",
+  );
+
+  const download = async () => {
+    setBusy(true);
+    try {
+      const response = await fetch(`${url}${url.includes("?") ? "&" : "?"}download=1`);
+      if (!response.ok) throw new Error("Falha ao baixar o arquivo.");
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    } catch {
+      toast.error("Não foi possível baixar o documento.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="mb-1 flex items-center gap-3 text-xs">
-      <a
-        href={url}
-        target="_blank"
-        rel="noreferrer"
-        className="flex items-center gap-2 underline"
+    <div className="mb-1 flex items-center gap-2 text-xs">
+      <button
+        type="button"
+        onClick={download}
+        disabled={busy}
+        className="flex items-center gap-2 underline disabled:opacity-60"
       >
-        <FileText className="size-4" /> Abrir documento
-      </a>
-      <a href={downloadUrl} download className="underline opacity-80">
-        Baixar
-      </a>
+        <FileText className="size-4" />
+        {busy ? "Baixando…" : `Baixar ${fileName}`}
+      </button>
     </div>
   );
 }
+
 
 
 
