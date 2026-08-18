@@ -49,7 +49,6 @@ async function sendToConsultant(trunk: TrunkContext, phone: string, text: string
   return sent.ok;
 }
 
-
 async function claimNotification(
   companyId: string,
   conversationId: string,
@@ -179,7 +178,6 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       continue;
     }
 
-
     if (attempt.status === "TIMEOUT") {
       const claimed = await claimNotification(
         companyId,
@@ -194,11 +192,7 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
         "⌛ O tempo de resposta expirou e este atendimento foi repassado para outro consultor.",
       );
       if (!timeoutSent) {
-        await releaseNotificationClaim(
-          attempt.conversation_id,
-          EVENT_TIMEOUT_NOTIFIED,
-          attempt.id,
-        );
+        await releaseNotificationClaim(attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id);
       }
       continue;
     }
