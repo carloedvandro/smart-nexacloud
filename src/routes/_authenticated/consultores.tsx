@@ -273,6 +273,27 @@ function ConsultantsPage() {
           <StatCard label="Convites pendentes" value={stats.pending} />
         </div>
 
+        <Card className="shadow-panel">
+          <CardHeader>
+            <CardTitle className="text-base">Licença contratada</CardTitle>
+            <CardDescription>
+              Uso da licença desta empresa. Para ampliar, fale com o administrador da plataforma.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Badge variant="secondary">
+              Usuários: {license?.users ?? 0} de {license?.maxInternalUsers ?? 8}
+            </Badge>
+            <Badge variant="secondary">
+              Consultores: {license?.consultants ?? 0} de {license?.maxConsultants ?? 7}
+            </Badge>
+            <Badge variant="outline">
+              O WhatsApp tronco não ocupa licença; consultores atendem pelo painel.
+            </Badge>
+          </CardContent>
+        </Card>
+
+
         {isAdmin ? (
           <>
             <Card className="shadow-panel">
