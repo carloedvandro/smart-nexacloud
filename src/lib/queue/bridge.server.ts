@@ -436,9 +436,18 @@ export async function handleConsultantInbound(input: {
   const conversationId = await findConsultantConversation(companyId, consultant.profileId);
 
   if (!conversationId) {
-    await reply("ℹ️ Você não tem nenhum atendimento ativo no momento.");
+    await reply(
+      "ℹ️ Você não tem nenhum atendimento ativo no momento. Se você recebeu uma oferta, ela expirou e já foi repassada a outro consultor.",
+    );
     return true;
   }
+
+  // Revalida na hora do envio: a oferta pode ter expirado enquanto ele digitava.
+  if (!(await consultantCanHandle(companyId, conversationId, consultant.profileId))) {
+    await reply("⌛ Esta oportunidade expirou e já está com outro consultor. Sua mensagem não foi enviada ao lead.");
+    return true;
+  }
+
 
   if (!text && !media) {
     await reply("ℹ️ Não consegui ler esse conteúdo. Envie texto, áudio, imagem ou documento.");
