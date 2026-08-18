@@ -42,28 +42,35 @@ async function sendToConsultant(trunk: TrunkContext, phone: string, text: string
   return sent.ok;
 }
 
-async function alreadyLogged(conversationId: string, eventType: string, attemptId: string) {
-  const { count } = await supabaseAdmin
-    .from("conversation_events")
-    .select("id", { count: "exact", head: true })
-    .eq("conversation_id", conversationId)
-    .eq("event_type", eventType)
-    .eq("metadata->>attempt_id", attemptId);
-  return (count ?? 0) > 0;
-}
-
-async function logEvent(
+async function claimNotification(
   companyId: string,
   conversationId: string,
   eventType: string,
   attemptId: string,
-) {
-  await supabaseAdmin.from("conversation_events").insert({
+): Promise<boolean> {
+  const { error } = await supabaseAdmin.from("conversation_events").insert({
     company_id: companyId,
     conversation_id: conversationId,
     event_type: eventType,
     metadata: { attempt_id: attemptId },
   });
+  if (!error) return true;
+  if (error.code === "23505") return false;
+  console.error("[ponte] falha ao reservar notificação", error.message);
+  return false;
+}
+
+async function releaseNotificationClaim(
+  conversationId: string,
+  eventType: string,
+  attemptId: string,
+) {
+  await supabaseAdmin
+    .from("conversation_events")
+    .delete()
+    .eq("conversation_id", conversationId)
+    .eq("event_type", eventType)
+    .eq("metadata->>attempt_id", attemptId);
 }
 
 function firstName(name: string | null | undefined) {
@@ -140,19 +147,35 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
     }
 
     if (attempt.status === "TIMEOUT") {
-      if (await alreadyLogged(attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id)) continue;
+      const claimed = await claimNotification(
+        companyId,
+        attempt.conversation_id,
+        EVENT_TIMEOUT_NOTIFIED,
+        attempt.id,
+      );
+      if (!claimed) continue;
       const timeoutSent = await sendToConsultant(
         trunk,
         notificationPhone,
         "⌛ O tempo de resposta expirou e este atendimento foi repassado para outro consultor.",
       );
-      if (timeoutSent) {
-        await logEvent(companyId, attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id);
+      if (!timeoutSent) {
+        await releaseNotificationClaim(
+          attempt.conversation_id,
+          EVENT_TIMEOUT_NOTIFIED,
+          attempt.id,
+        );
       }
       continue;
     }
 
-    if (await alreadyLogged(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id)) continue;
+    const claimed = await claimNotification(
+      companyId,
+      attempt.conversation_id,
+      EVENT_OFFER_NOTIFIED,
+      attempt.id,
+    );
+    if (!claimed) continue;
 
     const { data: conversation } = await supabaseAdmin
       .from("conversations")
@@ -199,9 +222,10 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
 
     const ok = await sendToConsultant(trunk, notificationPhone, text);
     if (ok) {
-      await logEvent(companyId, attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
       // A partir de agora, tudo que o consultor responder vai para este lead.
       await setFocusConversation(companyId, attempt.conversation_id, attempt.consultant_id);
+    } else {
+      await releaseNotificationClaim(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
     }
 
   }
