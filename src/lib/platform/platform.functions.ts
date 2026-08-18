@@ -62,7 +62,7 @@ export const listPlatformCompanies = createServerFn({ method: "GET" })
     const [{ data: companies, error }, { data: connections }] = await Promise.all([
       supabaseAdmin
         .from("companies")
-        .select("id, name, legal_name, document, status, created_at")
+        .select("id, name, legal_name, document, status, created_at, max_internal_users, max_consultants")
         .order("name", { ascending: true }),
       supabaseAdmin.from("whatsapp_connections").select("id, company_id"),
     ]);
@@ -78,6 +78,9 @@ export const listPlatformCompanies = createServerFn({ method: "GET" })
       name: row.name,
       legalName: row.legal_name,
       document: row.document,
+      maxInternalUsers: row.max_internal_users ?? 8,
+      maxConsultants: row.max_consultants ?? 7,
+
       status: row.status,
       instanceCount: counts.get(row.id) ?? 0,
       createdAt: row.created_at,
