@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { AppShell } from "@/components/nexa/app-shell";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
 import { ConnectionStatusPanel } from "@/components/nexa/connection-status-panel";
 import { useAuth } from "@/hooks/use-auth";
 
