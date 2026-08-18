@@ -28,6 +28,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { WHATSAPP_INSTANCE_STATUS_LABEL } from "@/lib/nexa/domain";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { sendCompanyInviteEmail } from "@/lib/invites/invites.functions";
+import { setCompanyLicenseLimits } from "@/lib/platform/license.functions";
+
 import {
 
   configurePlatformWebhook,
