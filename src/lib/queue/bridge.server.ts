@@ -367,7 +367,13 @@ async function findConsultantConversation(
     .eq("status", "WAITING")
     .order("assigned_at", { ascending: false })
     .limit(1);
-  if (waiting?.[0]) return waiting[0].conversation_id;
+  if (
+    waiting?.[0] &&
+    (await consultantCanHandle(companyId, waiting[0].conversation_id, profileId))
+  ) {
+    return waiting[0].conversation_id;
+  }
+
 
   const { data: active } = await supabaseAdmin
     .from("conversations")
