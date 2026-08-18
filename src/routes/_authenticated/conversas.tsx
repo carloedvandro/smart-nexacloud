@@ -259,6 +259,7 @@ function ConversationThread({
     [messages],
   );
   const fetchMediaUrls = useServerFn(getConversationMediaUrls);
+  const checkAccess = useServerFn(getConversationAccess);
   const { data: mediaUrls } = useQuery({
     queryKey: ["media-urls", conversation.id, mediaPaths.join("|")],
     queryFn: () => fetchMediaUrls({ data: { paths: mediaPaths } }),
