@@ -292,6 +292,8 @@ export type Database = {
           email: string | null
           id: string
           legal_name: string | null
+          max_consultants: number
+          max_internal_users: number
           name: string
           phone: string | null
           settings: Json
@@ -307,6 +309,8 @@ export type Database = {
           email?: string | null
           id?: string
           legal_name?: string | null
+          max_consultants?: number
+          max_internal_users?: number
           name: string
           phone?: string | null
           settings?: Json
@@ -322,6 +326,8 @@ export type Database = {
           email?: string | null
           id?: string
           legal_name?: string | null
+          max_consultants?: number
+          max_internal_users?: number
           name?: string
           phone?: string | null
           settings?: Json
@@ -1486,6 +1492,14 @@ export type Database = {
         Args: { _email: string; _user_id: string }
         Returns: string
       }
+      assert_company_license: {
+        Args: {
+          _company: string
+          _new_user?: boolean
+          _role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: undefined
+      }
       assert_company_member: {
         Args: { _company_id: string }
         Returns: undefined
@@ -1523,6 +1537,7 @@ export type Database = {
         }
         Returns: Json
       }
+      company_license_usage: { Args: { _company?: string }; Returns: Json }
       company_remove_member: { Args: { _user_id: string }; Returns: undefined }
       company_set_member_role: {
         Args: {
@@ -1630,6 +1645,14 @@ export type Database = {
         Args: { _company_id: string; _user_id: string }
         Returns: undefined
       }
+      platform_set_company_limits: {
+        Args: {
+          _company_id: string
+          _max_consultants: number
+          _max_internal_users: number
+        }
+        Returns: undefined
+      }
       platform_set_member_role: {
         Args: {
           _company_id: string
@@ -1669,6 +1692,7 @@ export type Database = {
         Returns: undefined
       }
       queue_tick: { Args: never; Returns: number }
+      raise_license_limit: { Args: { _company: string }; Returns: undefined }
       redeem_invite_link: {
         Args: { _document?: string; _token: string }
         Returns: string
