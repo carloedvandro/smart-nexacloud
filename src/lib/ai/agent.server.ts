@@ -55,6 +55,8 @@ async function loadKnowledge(companyId: string) {
   return data ?? [];
 }
 
+const SAO_PAULO_TZ = "America/Sao_Paulo";
+
 function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; category: string; content: string }[]) {
   const base = knowledge.length
     ? knowledge.map((k) => `### ${k.title} (${k.category})\n${k.content}`).join("\n\n")
