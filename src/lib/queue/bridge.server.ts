@@ -1,10 +1,10 @@
 /**
- * Ponte WhatsApp <-> Sistema para consultores.
+ * Avisos de fila no WhatsApp pessoal do consultor.
  *
- * Regra do NexaAtende: o lead NUNCA fala com o número pessoal do consultor.
- * Toda a conversa passa pelo número tronco da empresa e fica registrada no
- * sistema. O consultor recebe a oferta e as mensagens do lead no WhatsApp dele
- * (via tronco) e tudo o que ele responder é retransmitido para o lead.
+ * Regra do NexaAtende: existe UM único número conectado à MEGA API — o
+ * WhatsApp tronco da empresa. O consultor NÃO conecta o WhatsApp dele à
+ * plataforma e NÃO atende pelo telefone: ele apenas recebe o aviso da oferta
+ * (enviado pelo tronco) com o link da conversa e responde pelo painel.
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
@@ -14,14 +14,10 @@ import { getPublicBaseUrl } from "@/lib/nexa/public-url";
 
 const EVENT_OFFER_NOTIFIED = "CONSULTANT_NOTIFIED";
 const EVENT_TIMEOUT_NOTIFIED = "CONSULTANT_TIMEOUT_NOTIFIED";
-/** Marca qual lead o consultor está respondendo pelo WhatsApp neste momento. */
-const EVENT_BRIDGE_FOCUS = "BRIDGE_FOCUS";
-const END_COMMANDS = ["#encerrar", "#fim", "#finalizar"];
-
 
 type TrunkContext = { connectionId: string; creds: MegaCredentials };
 
-/** Instância tronco da empresa (ponto único de saída para consultores). */
+/** Instância tronco da empresa (ponto único de entrada e saída). */
 async function loadTrunk(companyId: string): Promise<TrunkContext | null> {
   const { data } = await supabaseAdmin
     .from("whatsapp_connections")
@@ -38,7 +34,7 @@ async function sendToConsultant(trunk: TrunkContext, phone: string, text: string
   const to = PhoneNormalizationService.normalize(phone);
   if (!to) return false;
   const sent = await MegaApiService.sendText(trunk.creds, to, text);
-  if (!sent.ok) console.error("[ponte] falha ao avisar consultor", sent.error);
+  if (!sent.ok) console.error("[aviso] falha ao avisar consultor", sent.error);
   return sent.ok;
 }
 
@@ -56,7 +52,7 @@ async function claimNotification(
   });
   if (!error) return true;
   if (error.code === "23505") return false;
-  console.error("[ponte] falha ao reservar notificação", error.message);
+  console.error("[aviso] falha ao reservar notificação", error.message);
   return false;
 }
 
@@ -78,28 +74,11 @@ function firstName(name: string | null | undefined) {
 }
 
 /**
- * O número operacional do consultor é, preferencialmente, o WhatsApp conectado
- * à instância que foi vinculada a ele. O telefone do perfil fica como fallback
- * para empresas que usam uma instância apenas para avisos.
+ * O aviso vai sempre para o WhatsApp pessoal cadastrado no perfil do
+ * consultor. Instância própria não é requisito para participar do rodízio.
  */
-async function consultantNotificationPhone(
-  companyId: string,
-  consultantId: string,
-  profilePhone: string | null,
-): Promise<string | null> {
-  const { data: connection } = await supabaseAdmin
-    .from("whatsapp_connections")
-    .select("phone_number")
-    .eq("company_id", companyId)
-    .eq("user_id", consultantId)
-    .eq("status", "CONNECTED")
-    .eq("is_trunk", false)
-    .not("phone_number", "is", null)
-    .order("instance_number", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  return connection?.phone_number ?? profilePhone;
+function consultantNotificationPhone(profilePhone: string | null): string | null {
+  return PhoneNormalizationService.normalize(profilePhone);
 }
 
 /**
@@ -122,7 +101,7 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
 
   const trunk = await loadTrunk(companyId);
   if (!trunk) {
-    console.error("[ponte] empresa sem instância tronco com credenciais", companyId);
+    console.error("[aviso] empresa sem instância tronco com credenciais", companyId);
     return;
   }
 
@@ -136,13 +115,9 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       .maybeSingle();
     if (!profile) continue;
 
-    const notificationPhone = await consultantNotificationPhone(
-      companyId,
-      attempt.consultant_id,
-      profile.phone,
-    );
+    const notificationPhone = consultantNotificationPhone(profile.phone);
     if (!notificationPhone) {
-      console.error("[ponte] consultor sem WhatsApp vinculado", attempt.consultant_id);
+      console.error("[aviso] consultor sem WhatsApp pessoal cadastrado", attempt.consultant_id);
       continue;
     }
 
@@ -210,35 +185,23 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       lead?.city ? `📍 ${lead.city}${lead.state ? `/${lead.state}` : ""}` : "",
       lastText ? `💬 "${lastText.slice(0, 220)}"` : "",
       "",
-      `⏱️ Você tem ${seconds || 60}s para assumir, senão passa para o próximo.`,
+      `⏱️ Você tem ${seconds || 60}s para assumir no painel, senão passa para o próximo.`,
       "",
-      "👉 Responda AQUI mesmo nesta conversa: tudo o que você escrever é enviado ao lead pelo número da empresa (ele não vê seu número).",
-      `🖥️ Ou abra no sistema: ${getPublicBaseUrl()}/conversas?c=${attempt.conversation_id}`,
+      `🖥️ Abra e responda pelo NexaAtende: ${getPublicBaseUrl()}/conversas?c=${attempt.conversation_id}`,
       "",
-      "Digite #encerrar para finalizar o atendimento.",
+      "⚠️ Não responda por aqui: o atendimento acontece somente no painel, e a resposta ao lead sai pelo número da empresa.",
     ]
       .filter((line) => line !== "")
       .join("\n");
 
     const ok = await sendToConsultant(trunk, notificationPhone, text);
-    if (ok) {
-      // A partir de agora, tudo que o consultor responder vai para este lead.
-      await setFocusConversation(companyId, attempt.conversation_id, attempt.consultant_id);
-    } else {
+    if (!ok) {
       await releaseNotificationClaim(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
     }
-
   }
 }
 
-export type ConsultantTarget = {
-  profileId: string;
-  fullName: string | null;
-  conversationId: string;
-  companyId: string;
-};
-
-/** O número que enviou a mensagem pertence a um consultor da empresa? */
+/** O número que enviou a mensagem pertence a um colaborador da empresa? */
 export async function resolveConsultantByPhone(
   companyId: string,
   phone: string | null,
@@ -255,32 +218,14 @@ export async function resolveConsultantByPhone(
   const match = (data ?? []).find(
     (p) => p.is_active && PhoneNormalizationService.normalize(p.phone) === normalized,
   );
-  if (match) return { profileId: match.id, fullName: match.full_name };
-
-  const { data: connections } = await supabaseAdmin
-    .from("whatsapp_connections")
-    .select("user_id, phone_number, profile:profiles!whatsapp_connections_user_id_fkey(full_name, is_active)")
-    .eq("company_id", companyId)
-    .eq("status", "CONNECTED")
-    .not("user_id", "is", null)
-    .not("phone_number", "is", null);
-
-  const connectionMatch = (connections ?? []).find(
-    (connection) => PhoneNormalizationService.normalize(connection.phone_number) === normalized,
-  );
-  const connectionProfile = connectionMatch?.profile as {
-    full_name: string | null;
-    is_active: boolean;
-  } | null;
-  if (!connectionMatch?.user_id || !connectionProfile?.is_active) return null;
-  return { profileId: connectionMatch.user_id, fullName: connectionProfile.full_name };
+  return match ? { profileId: match.id, fullName: match.full_name } : null;
 }
 
 /**
  * O consultor só pode falar com o lead enquanto a oportunidade for dele:
  * ou a conversa está atribuída a ele, ou ele tem uma oferta ainda em aberto
  * (WAITING). Quando a oferta expira e passa para o próximo, o acesso do
- * anterior deixa de valer imediatamente — evitando dois consultores no mesmo lead.
+ * anterior deixa de valer imediatamente — inclusive pelo link já aberto.
  */
 export async function consultantCanHandle(
   companyId: string,
@@ -308,318 +253,56 @@ export async function consultantCanHandle(
 }
 
 /**
- * Conversa "em foco" do consultor no WhatsApp: é sempre o último lead que o
- * sistema apresentou a ele. Sem isso, uma resposta poderia cair no lead errado
- * quando existem vários atendimentos abertos ao mesmo tempo.
- */
-async function currentFocusConversation(
-  companyId: string,
-  profileId: string,
-): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from("conversation_events")
-    .select("conversation_id, created_at")
-    .eq("company_id", companyId)
-    .eq("event_type", EVENT_BRIDGE_FOCUS)
-    .eq("metadata->>consultant_id", profileId)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  for (const row of data ?? []) {
-    if (await consultantCanHandle(companyId, row.conversation_id, profileId)) {
-      return row.conversation_id;
-    }
-  }
-  return null;
-}
-
-
-/** Define o lead em foco. Retorna true quando o foco mudou de lead. */
-async function setFocusConversation(
-  companyId: string,
-  conversationId: string,
-  profileId: string,
-): Promise<boolean> {
-  const current = await currentFocusConversation(companyId, profileId);
-  if (current === conversationId) return false;
-  await supabaseAdmin.from("conversation_events").insert({
-    company_id: companyId,
-    conversation_id: conversationId,
-    event_type: EVENT_BRIDGE_FOCUS,
-    metadata: { consultant_id: profileId },
-  });
-  return true;
-}
-
-/** Conversa que o consultor está atendendo (foco atual, oferta ou assumida). */
-async function findConsultantConversation(
-  companyId: string,
-  profileId: string,
-): Promise<string | null> {
-  const focused = await currentFocusConversation(companyId, profileId);
-  if (focused) return focused;
-
-  const { data: waiting } = await supabaseAdmin
-    .from("assignment_attempts")
-    .select("conversation_id")
-    .eq("company_id", companyId)
-    .eq("consultant_id", profileId)
-    .eq("status", "WAITING")
-    .order("assigned_at", { ascending: false })
-    .limit(1);
-  if (
-    waiting?.[0] &&
-    (await consultantCanHandle(companyId, waiting[0].conversation_id, profileId))
-  ) {
-    return waiting[0].conversation_id;
-  }
-
-
-  const { data: active } = await supabaseAdmin
-    .from("conversations")
-    .select("id")
-    .eq("company_id", companyId)
-    .eq("assigned_user_id", profileId)
-    .not("status", "in", "(CLOSED,PAUSED)")
-    .order("last_message_at", { ascending: false, nullsFirst: false })
-    .limit(1);
-  return active?.[0]?.id ?? null;
-}
-
-
-/** Instância pela qual o lead entrou (mantém a "grudação" de canal). */
-async function conversationConnectionId(
-  conversationId: string,
-  fallback: string,
-): Promise<string> {
-  const { data } = await supabaseAdmin
-    .from("messages")
-    .select("connection_id")
-    .eq("conversation_id", conversationId)
-    .not("connection_id", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  return data?.[0]?.connection_id ?? fallback;
-}
-
-/**
- * Mensagem recebida de um consultor: retransmite para o lead pelo número da
- * empresa e registra tudo no sistema. Retorna true quando tratou a mensagem.
+ * Mensagem recebida no tronco vinda do número pessoal de um colaborador.
+ * A plataforma NÃO retransmite mais essa mensagem ao lead: o atendimento é
+ * feito no painel. Aqui apenas evitamos que o consultor vire lead e
+ * respondemos com o link do sistema. Retorna true quando tratou a mensagem.
  */
 export async function handleConsultantInbound(input: {
   companyId: string;
   trunkConnectionId: string;
   phone: string | null;
   text: string | null;
-  messageType?: string;
-  media?: { path: string; mimeType: string | null } | null;
 }): Promise<boolean> {
-  const { companyId, trunkConnectionId } = input;
+  const { companyId } = input;
   const consultant = await resolveConsultantByPhone(companyId, input.phone);
   if (!consultant) return false;
 
   const trunk = await loadTrunk(companyId);
-  const reply = async (message: string) => {
-    if (trunk && input.phone) await sendToConsultant(trunk, input.phone, message);
-  };
+  if (!trunk || !input.phone) return true;
 
-  const text = (input.text ?? "").trim();
-  const messageType = (input.messageType ?? "text") as
-    | "text"
-    | "audio"
-    | "image"
-    | "video"
-    | "document"
-    | "system"
-    | "other";
-  const media = input.media ?? null;
-  const conversationId = await findConsultantConversation(companyId, consultant.profileId);
+  // Conversa em aberto dele (oferta pendente ou já assumida), se houver.
+  const { data: waiting } = await supabaseAdmin
+    .from("assignment_attempts")
+    .select("conversation_id")
+    .eq("company_id", companyId)
+    .eq("consultant_id", consultant.profileId)
+    .eq("status", "WAITING")
+    .order("assigned_at", { ascending: false })
+    .limit(1);
 
-  if (!conversationId) {
-    await reply(
-      "ℹ️ Você não tem nenhum atendimento ativo no momento. Se você recebeu uma oferta, ela expirou e já foi repassada a outro consultor.",
-    );
-    return true;
-  }
-
-  // Revalida na hora do envio: a oferta pode ter expirado enquanto ele digitava.
-  if (!(await consultantCanHandle(companyId, conversationId, consultant.profileId))) {
-    await reply("⌛ Esta oportunidade expirou e já está com outro consultor. Sua mensagem não foi enviada ao lead.");
-    return true;
-  }
-
-
-  if (!text && !media) {
-    await reply("ℹ️ Não consegui ler esse conteúdo. Envie texto, áudio, imagem ou documento.");
-    return true;
-  }
-
-  if (text && END_COMMANDS.includes(text.toLowerCase())) {
-    await supabaseAdmin.rpc("set_conversation_status", {
-      _conversation_id: conversationId,
-      _status: "CLOSED",
-    });
-    await reply("✅ Atendimento encerrado. Obrigado!");
-    return true;
-  }
-
-  const { data: conversation } = await supabaseAdmin
+  const { data: active } = await supabaseAdmin
     .from("conversations")
-    .select("channel_id, lead:leads(whatsapp)")
-    .eq("id", conversationId)
-    .maybeSingle();
-  const destination =
-    (conversation?.lead as { whatsapp: string | null } | null)?.whatsapp ??
-    conversation?.channel_id ??
-    null;
-  const recipient = destination
-    ? destination.includes("@")
-      ? destination
-      : PhoneNormalizationService.normalize(destination)
-    : null;
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("assigned_user_id", consultant.profileId)
+    .not("status", "in", "(CLOSED,PAUSED)")
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(1);
 
-  const connectionId = await conversationConnectionId(conversationId, trunkConnectionId);
-  const creds = await loadMegaCredentials(connectionId);
+  const conversationId = waiting?.[0]?.conversation_id ?? active?.[0]?.id ?? null;
+  const link = conversationId
+    ? `${getPublicBaseUrl()}/conversas?c=${conversationId}`
+    : `${getPublicBaseUrl()}/conversas`;
 
-  if (!recipient || !creds) {
-    await reply("⚠️ Não consegui enviar sua mensagem ao lead. Use o sistema NexaAtende.");
-    return true;
-  }
-
-  const { data: messageId } = await supabaseAdmin.rpc("create_outbound_message", {
-    _conversation_id: conversationId,
-    _company_id: companyId,
-    _sender_id: consultant.profileId,
-    _sender_type: "consultant",
-    _sender_name: consultant.fullName ?? "Consultor",
-    _content: text,
-    _message_type: media ? messageType : "text",
-    ...(media ? { _media_url: media.path } : {}),
-    _connection_id: connectionId,
-  });
-
-  let sent: Awaited<ReturnType<typeof MegaApiService.sendText>>;
-  if (media) {
-    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
-    const url = await signedMediaUrl(media.path);
-    sent = url
-      ? await MegaApiService.sendMedia(creds, {
-          to: recipient,
-          url,
-          mediaType: (["audio", "image", "video"].includes(messageType)
-            ? messageType
-            : "document") as "audio" | "image" | "video" | "document",
-          mimeType: media.mimeType,
-          fileName: media.path.split("/").pop() ?? null,
-          caption: text || null,
-        })
-      : { ok: false as const, error: "Não consegui preparar o arquivo para envio." };
-  } else {
-    sent = await MegaApiService.sendText(creds, recipient, text);
-  }
-
-  if (messageId) {
-    await supabaseAdmin.rpc("finalize_outbound_message", {
-      _message_id: messageId,
-      _external_message_id: (sent.ok
-        ? (sent.data?.key?.id ?? sent.data?.messageId ?? null)
-        : null) as unknown as string,
-      _status: sent.ok ? "SENT" : "FAILED",
-      ...(sent.ok ? {} : { _reason: sent.error }),
-    });
-  }
-  if (!sent.ok) {
-    await reply(`⚠️ Falha ao entregar sua mensagem ao lead: ${sent.error}`);
-    return true;
-  }
-
-  // Só encerra o rodízio depois que a primeira mensagem foi realmente entregue
-  // à API do WhatsApp. Uma falha de envio não pode prender o lead ao consultor.
-  const { error: responseError } = await supabaseAdmin.rpc("queue_register_response", {
-    _conversation_id: conversationId,
-    _user_id: consultant.profileId,
-  });
-  if (responseError) {
-    console.error("[ponte] mensagem entregue, mas aceite da fila falhou", responseError.message);
-  }
+  await sendToConsultant(
+    trunk,
+    input.phone,
+    conversationId
+      ? `🖥️ O atendimento é feito no painel do NexaAtende — mensagens enviadas por aqui não chegam ao lead.\n\n👉 ${link}`
+      : "ℹ️ Você não tem nenhum atendimento ativo no momento. Quando receber uma oferta, atenda pelo painel do NexaAtende.",
+  );
   return true;
-}
-
-/** Espelha no WhatsApp do consultor a mensagem que o lead enviou. */
-export async function mirrorLeadMessageToConsultant(input: {
-  companyId: string;
-  conversationId: string;
-  text: string | null;
-  messageType: string;
-  media?: { path: string; mimeType: string | null } | null;
-}): Promise<void> {
-  const { data: conversation } = await supabaseAdmin
-    .from("conversations")
-    .select("assigned_user_id, status, lead:leads(name)")
-    .eq("id", input.conversationId)
-    .maybeSingle();
-  if (!conversation?.assigned_user_id) return;
-  if (["CLOSED", "PAUSED"].includes(conversation.status)) return;
-
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("phone")
-    .eq("id", conversation.assigned_user_id)
-    .maybeSingle();
-
-  const notificationPhone = await consultantNotificationPhone(
-    input.companyId,
-    conversation.assigned_user_id,
-    profile?.phone ?? null,
-  );
-  if (!notificationPhone) return;
-
-  const trunk = await loadTrunk(input.companyId);
-  if (!trunk) return;
-
-  const leadName = (conversation.lead as { name: string | null } | null)?.name?.trim() || "Lead";
-  const text = (input.text ?? "").trim();
-
-  // Trocou o lead em foco: avisa o consultor para não responder ao lead errado.
-  const focusChanged = await setFocusConversation(
-    input.companyId,
-    input.conversationId,
-    conversation.assigned_user_id,
-  );
-  if (focusChanged) {
-    await sendToConsultant(
-      trunk,
-      notificationPhone,
-      `🔄 Você está agora respondendo ao lead *${leadName}*. Suas próximas mensagens vão para ele.`,
-    );
-  }
-
-
-
-  // Mídia do lead: encaminha o arquivo em si para o WhatsApp do consultor.
-  if (input.media) {
-    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
-    const url = await signedMediaUrl(input.media.path);
-    const to = PhoneNormalizationService.normalize(notificationPhone);
-    if (url && to) {
-      const mediaType = (["audio", "image", "video"].includes(input.messageType)
-        ? input.messageType
-        : "document") as "audio" | "image" | "video" | "document";
-      const sent = await MegaApiService.sendMedia(trunk.creds, {
-        to,
-        url,
-        mediaType,
-        mimeType: input.media.mimeType,
-        fileName: input.media.path.split("/").pop() ?? null,
-        caption: `💬 ${leadName}${text ? `: ${text}` : ""}`,
-      });
-      if (sent.ok) return;
-      console.error("[ponte] falha ao espelhar mídia ao consultor", sent.error);
-    }
-  }
-
-  const body = text || `[${input.messageType}] veja no sistema NexaAtende`;
-  await sendToConsultant(trunk, notificationPhone, `💬 ${leadName}: ${body}`);
 }
 
 /** Notifica ofertas pendentes de todas as empresas (usado pelo relógio da fila). */
@@ -637,7 +320,7 @@ export async function notifyAllQueueOffers(): Promise<void> {
     try {
       await notifyQueueOffers(companyId);
     } catch (error) {
-      console.error("[ponte] falha ao notificar empresa", companyId, error);
+      console.error("[aviso] falha ao notificar empresa", companyId, error);
     }
   }
 }
