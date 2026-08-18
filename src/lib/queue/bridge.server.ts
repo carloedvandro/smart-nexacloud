@@ -277,6 +277,37 @@ export async function resolveConsultantByPhone(
 }
 
 /**
+ * O consultor só pode falar com o lead enquanto a oportunidade for dele:
+ * ou a conversa está atribuída a ele, ou ele tem uma oferta ainda em aberto
+ * (WAITING). Quando a oferta expira e passa para o próximo, o acesso do
+ * anterior deixa de valer imediatamente — evitando dois consultores no mesmo lead.
+ */
+async function consultantCanHandle(
+  companyId: string,
+  conversationId: string,
+  profileId: string,
+): Promise<boolean> {
+  const { data: conversation } = await supabaseAdmin
+    .from("conversations")
+    .select("id, status, assigned_user_id")
+    .eq("id", conversationId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!conversation) return false;
+  if (["CLOSED", "PAUSED"].includes(conversation.status)) return false;
+  if (conversation.assigned_user_id) return conversation.assigned_user_id === profileId;
+
+  const { data: waiting } = await supabaseAdmin
+    .from("assignment_attempts")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("consultant_id", profileId)
+    .eq("status", "WAITING")
+    .limit(1);
+  return Boolean(waiting?.length);
+}
+
+/**
  * Conversa "em foco" do consultor no WhatsApp: é sempre o último lead que o
  * sistema apresentou a ele. Sem isso, uma resposta poderia cair no lead errado
  * quando existem vários atendimentos abertos ao mesmo tempo.
@@ -295,18 +326,13 @@ async function currentFocusConversation(
     .limit(10);
 
   for (const row of data ?? []) {
-    const { data: conversation } = await supabaseAdmin
-      .from("conversations")
-      .select("id, status, assigned_user_id")
-      .eq("id", row.conversation_id)
-      .maybeSingle();
-    if (!conversation) continue;
-    if (["CLOSED", "PAUSED"].includes(conversation.status)) continue;
-    if (conversation.assigned_user_id && conversation.assigned_user_id !== profileId) continue;
-    return conversation.id;
+    if (await consultantCanHandle(companyId, row.conversation_id, profileId)) {
+      return row.conversation_id;
+    }
   }
   return null;
 }
+
 
 /** Define o lead em foco. Retorna true quando o foco mudou de lead. */
 async function setFocusConversation(
