@@ -275,8 +275,8 @@ export async function processWebhookEvent(input: {
     };
   }
 
-  // Ponte do consultor: se o número é de um colaborador da empresa, a mensagem
-  // não vira lead — ela é retransmitida ao lead pelo número da empresa.
+  // Número pessoal de colaborador falando com o tronco: não vira lead e não é
+  // retransmitido. O atendimento acontece exclusivamente no painel.
   if (!parsed.isLid && parsed.phone) {
     const { handleConsultantInbound } = await import("@/lib/queue/bridge.server");
     const handled = await handleConsultantInbound({
@@ -284,15 +284,10 @@ export async function processWebhookEvent(input: {
       trunkConnectionId: connectionId,
       phone: parsed.phone,
       text: content,
-      messageType,
-      ...(messageType === "text"
-        ? {}
-        : {
-            media: await downloadAndStoreMedia({ connectionId, companyId, body, messageType }),
-          }),
     });
     if (handled) return { status: "processed", reason: "mensagem de consultor" };
   }
+
   let mediaUrl: string | null = null;
   let mimeType: string | null = mimeTypeHint;
 
@@ -388,16 +383,9 @@ export async function processWebhookEvent(input: {
       }
     }
 
-    // Conversa já assumida por um consultor: espelha a fala do lead no
-    // WhatsApp dele, mantendo o histórico dentro do sistema.
-    const { mirrorLeadMessageToConsultant } = await import("@/lib/queue/bridge.server");
-    await mirrorLeadMessageToConsultant({
-      companyId,
-      conversationId: result.conversation_id,
-      text: content,
-      messageType,
-      media: mediaUrl ? { path: mediaUrl, mimeType } : null,
-    });
+    // O consultor acompanha a conversa pelo painel (realtime); nada é
+    // espelhado para o WhatsApp pessoal dele.
+
   }
 
   // Oportunidade barata de expirar ofertas vencidas (SLA) a cada evento recebido.

@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdminOnly } from "@/components/nexa/admin-only";
 import { useServerFn } from "@tanstack/react-start";
 import { sendCompanyInviteEmail } from "@/lib/invites/invites.functions";
+import { getCompanyLicense } from "@/lib/platform/license.functions";
+
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -78,6 +80,14 @@ function ConsultantsPage() {
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("CONSULTANT");
   const [linkHours, setLinkHours] = useState(168);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  const fetchLicense = useServerFn(getCompanyLicense);
+  const { data: license } = useQuery({
+    queryKey: ["company-license", companyId],
+    enabled: Boolean(companyId),
+    queryFn: () => fetchLicense({ data: {} }),
+  });
+
 
   const { data, isLoading } = useQuery({
     queryKey: ["consultants", companyId],
@@ -272,6 +282,27 @@ function ConsultantsPage() {
           <StatCard label="Inativos" value={stats.inactive} />
           <StatCard label="Convites pendentes" value={stats.pending} />
         </div>
+
+        <Card className="shadow-panel">
+          <CardHeader>
+            <CardTitle className="text-base">Licença contratada</CardTitle>
+            <CardDescription>
+              Uso da licença desta empresa. Para ampliar, fale com o administrador da plataforma.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Badge variant="secondary">
+              Usuários: {license?.users ?? 0} de {license?.maxInternalUsers ?? 8}
+            </Badge>
+            <Badge variant="secondary">
+              Consultores: {license?.consultants ?? 0} de {license?.maxConsultants ?? 7}
+            </Badge>
+            <Badge variant="outline">
+              O WhatsApp tronco não ocupa licença; consultores atendem pelo painel.
+            </Badge>
+          </CardContent>
+        </Card>
+
 
         {isAdmin ? (
           <>

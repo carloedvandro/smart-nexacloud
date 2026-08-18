@@ -28,6 +28,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { WHATSAPP_INSTANCE_STATUS_LABEL } from "@/lib/nexa/domain";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { sendCompanyInviteEmail } from "@/lib/invites/invites.functions";
+import { setCompanyLicenseLimits } from "@/lib/platform/license.functions";
+
 import {
 
   configurePlatformWebhook,
@@ -102,6 +104,29 @@ function PlatformPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("ADMIN");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  const [licenseTarget, setLicenseTarget] = useState<{ id: string; name: string } | null>(null);
+  const [licenseUsers, setLicenseUsers] = useState(8);
+  const [licenseConsultants, setLicenseConsultants] = useState(7);
+  const setLimitsFn = useServerFn(setCompanyLicenseLimits);
+
+  const licenseMutation = useMutation({
+    mutationFn: () =>
+      setLimitsFn({
+        data: {
+          companyId: licenseTarget?.id ?? "",
+          maxInternalUsers: licenseUsers,
+          maxConsultants: licenseConsultants,
+        },
+      }),
+    onSuccess: () => {
+      setLicenseTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["platform-companies"] });
+      toast.success("Limites da licença atualizados");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
 
   const linkMutation = useMutation({
     mutationFn: async () => {
@@ -353,6 +378,20 @@ function PlatformPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">{company.instanceCount} instâncias</Badge>
+                    <Badge variant="secondary">
+                      Licença: {company.maxConsultants} consultores / {company.maxInternalUsers} usuários
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setLicenseTarget({ id: company.id, name: company.name });
+                        setLicenseUsers(company.maxInternalUsers);
+                        setLicenseConsultants(company.maxConsultants);
+                      }}
+                    >
+                      Licença
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -360,6 +399,7 @@ function PlatformPage() {
                     >
                       Membros
                     </Button>
+
                     <Button
                       size="sm"
                       variant="ghost"
@@ -522,7 +562,46 @@ function PlatformPage() {
         </Card>
       </div>
 
+      <Dialog open={Boolean(licenseTarget)} onOpenChange={(open) => !open && setLicenseTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Licença — {licenseTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Defina quantos usuários internos e consultores esta empresa pode ter ativos. Somente a
+              plataforma altera estes limites.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Total de usuários internos</Label>
+              <Input
+                type="number"
+                min={1}
+                value={licenseUsers}
+                onChange={(event) => setLicenseUsers(Number(event.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Limite de consultores</Label>
+              <Input
+                type="number"
+                min={0}
+                value={licenseConsultants}
+                onChange={(event) => setLicenseConsultants(Number(event.target.value))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => licenseMutation.mutate()} disabled={licenseMutation.isPending}>
+              {licenseMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Salvar limites
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={companyOpen} onOpenChange={setCompanyOpen}>
+
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cadastrar empresa</DialogTitle>
