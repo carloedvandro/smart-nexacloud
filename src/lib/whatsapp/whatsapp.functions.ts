@@ -368,9 +368,14 @@ export const getConversationMediaUrls = createServerFn({ method: "POST" })
 
     // Só liberamos arquivos do prefixo da própria empresa.
     const allowed = data.paths.filter((path) => path.startsWith(`${profile.company_id}/`));
-    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+    const { signedMediaUrl, repairMediaContentType } = await import("@/lib/whatsapp/media.server");
     const entries = await Promise.all(
-      allowed.map(async (path) => [path, await signedMediaUrl(path)] as const),
+      allowed.map(async (path) => {
+        // Corrige arquivos antigos salvos sem o tipo correto (PDF abrindo em branco).
+        const fixed = await repairMediaContentType(path);
+        return [path, await signedMediaUrl(fixed)] as const;
+      }),
     );
     return Object.fromEntries(entries.filter(([, url]) => Boolean(url)) as [string, string][]);
   });
+

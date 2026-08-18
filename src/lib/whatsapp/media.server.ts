@@ -130,3 +130,42 @@ export function bytesToBase64(bytes: Uint8Array): string {
   }
   return btoa(binary);
 }
+
+/**
+ * Arquivos antigos foram salvos como application/octet-stream, e por isso o
+ * navegador abre uma aba em branco em vez do PDF. Aqui detectamos o tipo real
+ * pelos bytes e regravamos o arquivo com o tipo e a extensão corretos,
+ * devolvendo o novo caminho (ou o mesmo, quando nada precisa mudar).
+ */
+export async function repairMediaContentType(path: string): Promise<string> {
+  if (!/\.(bin|dat)$/i.test(path)) return path;
+  const file = await downloadStoredMedia(path);
+  if (!file) return path;
+  const detected = sniffMimeType(file.bytes);
+  if (!detected) return path;
+
+  const kind: MediaKind = detected.startsWith("image/")
+    ? "image"
+    : detected.startsWith("audio/")
+      ? "audio"
+      : detected.startsWith("video/")
+        ? "video"
+        : "document";
+  const extension = extensionFor(kind, detected);
+  const newPath = `${path.replace(/\.[^.]+$/, "")}.${extension}`;
+
+  const { error } = await supabaseAdmin.storage.from(MEDIA_BUCKET).upload(newPath, file.bytes, {
+    contentType: detected,
+    upsert: true,
+  });
+  if (error) {
+    console.error("[midia] regravação falhou", error.message);
+    return path;
+  }
+  await supabaseAdmin
+    .from("messages")
+    .update({ media_url: newPath })
+    .eq("media_url", path);
+  await supabaseAdmin.storage.from(MEDIA_BUCKET).remove([path]);
+  return newPath;
+}
