@@ -196,3 +196,43 @@
 @utility shadow-panel {
   box-shadow: var(--shadow-panel);
 }
+
+/*
+ * Central de conversas — paleta de mensageria (familiar, sóbria, própria do NexaAtende).
+ */
+:root {
+  --chat-brand: #128c7e;
+  --chat-brand-dark: #075e54;
+  --chat-bubble-out: #dcf8c6;
+  --chat-bubble-in: #ffffff;
+  --chat-surface: #efeae2;
+  --chat-shell: #f0f2f5;
+  --chat-ink: #111b21;
+  --chat-ink-muted: #667781;
+  --chat-line: #e9edef;
+  --chat-warning: #f9c74f;
+  --chat-danger: #d9534f;
+}
+
+.dark {
+  --chat-brand: #25a08f;
+  --chat-brand-dark: #0d7a6c;
+  --chat-bubble-out: #1f3d33;
+  --chat-bubble-in: #202c33;
+  --chat-surface: #0e1a20;
+  --chat-shell: #111b21;
+  --chat-ink: #e9edef;
+  --chat-ink-muted: #8696a0;
+  --chat-line: #24343d;
+}
+
+/* Textura discreta e própria para o fundo da conversa. */
+@utility bg-chat-canvas {
+  background-color: var(--chat-surface);
+  background-image:
+    radial-gradient(currentColor 0.5px, transparent 0.5px),
+    radial-gradient(currentColor 0.5px, transparent 0.5px);
+  background-size: 22px 22px;
+  background-position: 0 0, 11px 11px;
+  color: color-mix(in oklab, var(--chat-ink) 7%, transparent);
+}
