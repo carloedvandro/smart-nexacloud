@@ -81,6 +81,14 @@ function ConsultantsPage() {
   const [linkHours, setLinkHours] = useState(168);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
 
+  const fetchLicense = useServerFn(getCompanyLicense);
+  const { data: license } = useQuery({
+    queryKey: ["company-license", companyId],
+    enabled: Boolean(companyId),
+    queryFn: () => fetchLicense({ data: {} }),
+  });
+
+
   const { data, isLoading } = useQuery({
     queryKey: ["consultants", companyId],
     enabled: Boolean(companyId),
