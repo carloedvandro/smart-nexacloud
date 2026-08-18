@@ -420,6 +420,10 @@ function ConversationThread({
           <p className="text-center text-sm text-muted-foreground">
             Conversa encerrada. Reabra para responder.
           </p>
+        ) : expired ? (
+          <p className="text-center text-sm text-destructive">
+            {access?.message ?? "Este link expirou: a oportunidade foi repassada a outro consultor."}
+          </p>
         ) : !canWrite ? (
           <p className="text-center text-sm text-muted-foreground">
             Assuma o atendimento para responder este cliente.
