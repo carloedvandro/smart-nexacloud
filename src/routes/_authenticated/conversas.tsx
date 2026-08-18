@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, FileText, Loader2, Mic, Paperclip, Search, Send, Square, UserCheck, X } from "lucide-react";
+import { Bot, Check, Download, FileText, Loader2, Mic, Paperclip, Search, Send, Square, UserCheck, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/nexa/app-shell";
@@ -606,48 +606,25 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
   return <DocumentMedia url={url} />;
 }
 
-/**
- * Documentos são baixados direto pelo app (sem abrir aba e sem expor o link
- * do arquivo): buscamos os bytes e salvamos com o nome e tipo corretos.
- */
+/** Documentos são entregues como anexo pelo próprio domínio do app. */
 function DocumentMedia({ url }: { url: string }) {
-  const [busy, setBusy] = useState(false);
   const fileName = decodeURIComponent(
     (url.split("?")[0] ?? "").split("/").pop() || "documento",
   );
-
-  const download = async () => {
-    setBusy(true);
-    try {
-      const response = await fetch(`${url}${url.includes("?") ? "&" : "?"}download=1`);
-      if (!response.ok) throw new Error("Falha ao baixar o arquivo.");
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = fileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
-    } catch {
-      toast.error("Não foi possível baixar o documento.");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const downloadUrl = `${url}${url.includes("?") ? "&" : "?"}download=1`;
 
   return (
-    <div className="mb-1 flex items-center gap-2 text-xs">
-      <button
-        type="button"
-        onClick={download}
-        disabled={busy}
-        className="flex items-center gap-2 underline disabled:opacity-60"
-      >
-        <FileText className="size-4" />
-        {busy ? "Baixando…" : `Baixar ${fileName}`}
-      </button>
+    <div className="mb-1 flex min-w-0 items-center gap-2">
+      <FileText className="size-5 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate text-xs" title={fileName}>
+        Documento PDF
+      </span>
+      <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 gap-1.5">
+        <a href={downloadUrl} download={fileName} aria-label={`Baixar ${fileName}`}>
+          <Download className="size-4" aria-hidden="true" />
+          Baixar
+        </a>
+      </Button>
     </div>
   );
 }
