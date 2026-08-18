@@ -59,7 +59,19 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --shadow-elevated: var(--shadow-elevated);
   --shadow-panel: var(--shadow-panel);
+  --color-chat-brand: var(--chat-brand);
+  --color-chat-brand-dark: var(--chat-brand-dark);
+  --color-chat-bubble-out: var(--chat-bubble-out);
+  --color-chat-bubble-in: var(--chat-bubble-in);
+  --color-chat-surface: var(--chat-surface);
+  --color-chat-shell: var(--chat-shell);
+  --color-chat-ink: var(--chat-ink);
+  --color-chat-ink-muted: var(--chat-ink-muted);
+  --color-chat-line: var(--chat-line);
+  --color-chat-warning: var(--chat-warning);
+  --color-chat-danger: var(--chat-danger);
 }
+
 
 :root {
   --radius: 0.75rem;
