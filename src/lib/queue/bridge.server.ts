@@ -81,6 +81,39 @@ async function releaseNotificationClaim(
     .eq("metadata->>attempt_id", attemptId);
 }
 
+async function cancelInvalidTrunkOffer(
+  companyId: string,
+  conversationId: string,
+  attemptId: string,
+  consultantId: string,
+) {
+  const resolvedAt = new Date().toISOString();
+  await Promise.all([
+    supabaseAdmin
+      .from("assignment_attempts")
+      .update({ status: "CANCELLED", resolved_at: resolvedAt })
+      .eq("id", attemptId)
+      .in("status", ["WAITING", "TIMEOUT"]),
+    supabaseAdmin
+      .from("conversation_assignments")
+      .update({
+        status: "RELEASED",
+        ended_at: resolvedAt,
+        reason: "telefone do consultor coincide com o tronco",
+      })
+      .eq("company_id", companyId)
+      .eq("conversation_id", conversationId)
+      .eq("consultant_id", consultantId)
+      .eq("status", "ACTIVE"),
+    supabaseAdmin
+      .from("conversations")
+      .update({ assigned_user_id: null, status: "WAITING_HUMAN" })
+      .eq("id", conversationId)
+      .eq("company_id", companyId)
+      .eq("assigned_user_id", consultantId),
+  ]);
+}
+
 function firstName(name: string | null | undefined) {
   return (name ?? "").trim().split(/\s+/)[0] || "consultor(a)";
 }
@@ -134,7 +167,13 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
     }
     if (trunk.phone && notificationPhone === trunk.phone) {
       console.warn(
-        "[aviso] consultor usa o mesmo número do tronco — aviso ignorado",
+        "[aviso] consultor usa o mesmo número do tronco — oferta cancelada",
+        attempt.consultant_id,
+      );
+      await cancelInvalidTrunkOffer(
+        companyId,
+        attempt.conversation_id,
+        attempt.id,
         attempt.consultant_id,
       );
       continue;
