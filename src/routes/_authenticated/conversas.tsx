@@ -603,24 +603,74 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
   if (type === "video") {
     return <video controls src={url} className="mb-1 max-h-64 w-64 max-w-full rounded-lg" />;
   }
-  // Documentos: "Abrir" tenta visualizar no navegador e "Baixar" força o
-  // download com nome de arquivo — necessário quando o WhatsApp não informa o
-  // tipo do arquivo e o navegador se recusa a exibir.
-  const downloadUrl = `${url}${url.includes("?") ? "&" : "?"}download=documento`;
+  return <DocumentMedia url={url} />;
+}
+
+/**
+ * Documentos antigos foram guardados sem o tipo correto, então o navegador
+ * abre uma aba preta. Aqui baixamos os bytes, descobrimos o tipo real (PDF,
+ * imagem, etc.) e abrimos/baixamos a partir de um blob com o tipo certo.
+ */
+function DocumentMedia({ url }: { url: string }) {
+  const [busy, setBusy] = useState(false);
+
+  const withBlob = async (action: "open" | "download") => {
+    setBusy(true);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("falha ao baixar");
+      const raw = await response.blob();
+      const head = new Uint8Array(await raw.slice(0, 8).arrayBuffer());
+      const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+      const isPng = head[0] === 0x89 && head[1] === 0x50;
+      const isJpg = head[0] === 0xff && head[1] === 0xd8;
+      const detected = isPdf
+        ? "application/pdf"
+        : isPng
+          ? "image/png"
+          : isJpg
+            ? "image/jpeg"
+            : raw.type || "application/octet-stream";
+      const extension = detected === "application/pdf" ? "pdf" : detected.split("/")[1] || "bin";
+      const blobUrl = URL.createObjectURL(new Blob([raw], { type: detected }));
+      if (action === "open") {
+        window.open(blobUrl, "_blank", "noopener");
+      } else {
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `documento.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch {
+      toast.error("Não foi possível abrir o documento.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mb-1 flex items-center gap-3 text-xs">
-      <a
-        href={url}
-        target="_blank"
-        rel="noreferrer"
-        className="flex items-center gap-2 underline"
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void withBlob("open")}
+        className="flex items-center gap-2 underline disabled:opacity-60"
       >
         <FileText className="size-4" /> Abrir documento
-      </a>
-      <a href={downloadUrl} className="underline opacity-80">
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void withBlob("download")}
+        className="underline opacity-80 disabled:opacity-60"
+      >
         Baixar
-      </a>
+      </button>
     </div>
   );
 }
+
 
