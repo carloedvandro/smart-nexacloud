@@ -282,7 +282,7 @@ export async function resolveConsultantByPhone(
  * (WAITING). Quando a oferta expira e passa para o próximo, o acesso do
  * anterior deixa de valer imediatamente — evitando dois consultores no mesmo lead.
  */
-async function consultantCanHandle(
+export async function consultantCanHandle(
   companyId: string,
   conversationId: string,
   profileId: string,
