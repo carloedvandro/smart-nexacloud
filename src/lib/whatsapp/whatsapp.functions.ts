@@ -296,6 +296,10 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
 
     const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
 
+    const { checkConversationAccess } = await import("@/lib/queue/access.server");
+    const access = await checkConversationAccess(context.supabase, context.userId, data.conversationId);
+    if (!access.allowed) throw new Error(access.message ?? "Atendimento indisponível.");
+
     const { sendWhatsAppText } = await import("@/lib/whatsapp/actions.server");
     const result = await sendWhatsAppText({
       companyId: profile.company_id,
