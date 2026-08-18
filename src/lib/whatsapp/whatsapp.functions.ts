@@ -384,3 +384,105 @@ export const getConversationMediaUrls = createServerFn({ method: "POST" })
     return Object.fromEntries(entries.filter(([, url]) => Boolean(url)) as [string, string][]);
   });
 
+
+/**
+ * Convida o lead a continuar a conversa no WhatsApp pessoal do consultor.
+ * A mensagem sai pelo número da empresa (fica registrada na conversa) e o
+ * consultor recebe o link para abrir o chat direto com o lead.
+ */
+export const inviteLeadToPersonalWhatsApp = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { conversationId: string }) => {
+    if (!data.conversationId) throw new Error("Conversa inválida.");
+    return data;
+  })
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ consultantPhone: string; leadPhone: string | null; waMeUrl: string | null }> => {
+      const { data: profile } = await context.supabase
+        .from("profiles")
+        .select("company_id, full_name, email, phone")
+        .eq("id", context.userId)
+        .maybeSingle();
+      if (!profile?.company_id) throw new Error("Usuário sem empresa.");
+
+      const { PhoneNormalizationService } = await import("@/lib/nexa/phone");
+
+      // Número pessoal: o telefone do perfil ou o WhatsApp da instância dele.
+      let personal = PhoneNormalizationService.normalize(profile.phone);
+      if (!personal) {
+        const { data: connection } = await context.supabase
+          .from("whatsapp_connections")
+          .select("phone_number")
+          .eq("user_id", context.userId)
+          .eq("is_trunk", false)
+          .not("phone_number", "is", null)
+          .limit(1)
+          .maybeSingle();
+        personal = PhoneNormalizationService.normalize(connection?.phone_number ?? null);
+      }
+      if (!personal) {
+        throw new Error(
+          "Cadastre seu WhatsApp pessoal em Configurações › Perfil para poder enviar o convite.",
+        );
+      }
+
+      const { data: conversation } = await context.supabase
+        .from("conversations")
+        .select("id, lead:leads(name, whatsapp, phone)")
+        .eq("id", data.conversationId)
+        .maybeSingle();
+      if (!conversation) throw new Error("Conversa inexistente.");
+      const lead = conversation.lead as {
+        name: string | null;
+        whatsapp: string | null;
+        phone: string | null;
+      } | null;
+
+      const consultantName = (profile.full_name ?? profile.email ?? "seu consultor").trim();
+      const invite = [
+        `Olá${lead?.name ? ` ${lead.name.split(" ")[0]}` : ""}! Aqui é ${consultantName}.`,
+        "",
+        "Para continuarmos seu atendimento com mais agilidade, pode falar comigo direto no meu WhatsApp:",
+        `📱 ${PhoneNormalizationService.format(personal)}`,
+        `👉 https://wa.me/${personal}`,
+        "",
+        "É só clicar no link e me chamar por lá. 😊",
+      ].join("\n");
+
+      const { sendWhatsAppText } = await import("@/lib/whatsapp/actions.server");
+      const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+      const result = await sendWhatsAppText({
+        companyId: profile.company_id,
+        conversationId: data.conversationId,
+        userId: context.userId,
+        senderName: profile.full_name ?? profile.email ?? null,
+        senderType: isAdmin ? "admin" : "consultant",
+        content: invite,
+      });
+      if (!result.ok) throw new Error(result.error);
+
+      const rawLead = lead?.phone ?? lead?.whatsapp ?? null;
+      const leadPhone =
+        rawLead && !PhoneNormalizationService.isLid(rawLead) ? PhoneNormalizationService.normalize(rawLead) : null;
+
+      // Registro para a empresa: o consultor puxou este lead para o WhatsApp dele.
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("audit_logs").insert({
+        company_id: profile.company_id,
+        user_id: context.userId,
+        action: "INVITE_LEAD_TO_PERSONAL_WHATSAPP",
+        entity_type: "conversation",
+        entity_id: data.conversationId,
+        metadata: { consultant_phone: personal, lead_phone: leadPhone },
+      });
+
+      return {
+        consultantPhone: personal,
+        leadPhone,
+        waMeUrl: leadPhone ? `https://wa.me/${leadPhone}` : null,
+      };
+    },
+  );

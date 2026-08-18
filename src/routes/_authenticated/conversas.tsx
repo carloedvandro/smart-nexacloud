@@ -9,6 +9,8 @@ import { AppShell } from "@/components/nexa/app-shell";
 import { ConversationStatusBadge } from "@/components/nexa/status-badge";
 import { LeadDetailSheet } from "@/components/nexa/lead-detail-sheet";
 import { PurgeConversationsButton } from "@/components/nexa/purge-conversations-button";
+import { InvitePersonalWhatsAppButton } from "@/components/nexa/invite-personal-whatsapp-button";
+
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -361,6 +363,10 @@ function ConversationThread({
           </Button>
         ) : null}
 
+        {canWrite && conversation.status !== "CLOSED" ? (
+          <InvitePersonalWhatsAppButton conversationId={conversation.id} onSent={refresh} />
+        ) : null}
+
         {conversation.status !== "CLOSED" ? (
           <Button size="sm" variant="outline" onClick={() => changeStatus.mutate("CLOSED")}>
             <Check className="size-4" /> Encerrar
@@ -371,6 +377,7 @@ function ConversationThread({
           </Button>
         )}
       </div>
+
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-muted/30 p-4">
         {isLoading ? (
