@@ -277,6 +277,37 @@ export async function resolveConsultantByPhone(
 }
 
 /**
+ * O consultor só pode falar com o lead enquanto a oportunidade for dele:
+ * ou a conversa está atribuída a ele, ou ele tem uma oferta ainda em aberto
+ * (WAITING). Quando a oferta expira e passa para o próximo, o acesso do
+ * anterior deixa de valer imediatamente — evitando dois consultores no mesmo lead.
+ */
+async function consultantCanHandle(
+  companyId: string,
+  conversationId: string,
+  profileId: string,
+): Promise<boolean> {
+  const { data: conversation } = await supabaseAdmin
+    .from("conversations")
+    .select("id, status, assigned_user_id")
+    .eq("id", conversationId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!conversation) return false;
+  if (["CLOSED", "PAUSED"].includes(conversation.status)) return false;
+  if (conversation.assigned_user_id) return conversation.assigned_user_id === profileId;
+
+  const { data: waiting } = await supabaseAdmin
+    .from("assignment_attempts")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("consultant_id", profileId)
+    .eq("status", "WAITING")
+    .limit(1);
+  return Boolean(waiting?.length);
+}
+
+/**
  * Conversa "em foco" do consultor no WhatsApp: é sempre o último lead que o
  * sistema apresentou a ele. Sem isso, uma resposta poderia cair no lead errado
  * quando existem vários atendimentos abertos ao mesmo tempo.
@@ -295,18 +326,13 @@ async function currentFocusConversation(
     .limit(10);
 
   for (const row of data ?? []) {
-    const { data: conversation } = await supabaseAdmin
-      .from("conversations")
-      .select("id, status, assigned_user_id")
-      .eq("id", row.conversation_id)
-      .maybeSingle();
-    if (!conversation) continue;
-    if (["CLOSED", "PAUSED"].includes(conversation.status)) continue;
-    if (conversation.assigned_user_id && conversation.assigned_user_id !== profileId) continue;
-    return conversation.id;
+    if (await consultantCanHandle(companyId, row.conversation_id, profileId)) {
+      return row.conversation_id;
+    }
   }
   return null;
 }
+
 
 /** Define o lead em foco. Retorna true quando o foco mudou de lead. */
 async function setFocusConversation(
@@ -341,7 +367,13 @@ async function findConsultantConversation(
     .eq("status", "WAITING")
     .order("assigned_at", { ascending: false })
     .limit(1);
-  if (waiting?.[0]) return waiting[0].conversation_id;
+  if (
+    waiting?.[0] &&
+    (await consultantCanHandle(companyId, waiting[0].conversation_id, profileId))
+  ) {
+    return waiting[0].conversation_id;
+  }
+
 
   const { data: active } = await supabaseAdmin
     .from("conversations")
@@ -404,9 +436,18 @@ export async function handleConsultantInbound(input: {
   const conversationId = await findConsultantConversation(companyId, consultant.profileId);
 
   if (!conversationId) {
-    await reply("ℹ️ Você não tem nenhum atendimento ativo no momento.");
+    await reply(
+      "ℹ️ Você não tem nenhum atendimento ativo no momento. Se você recebeu uma oferta, ela expirou e já foi repassada a outro consultor.",
+    );
     return true;
   }
+
+  // Revalida na hora do envio: a oferta pode ter expirado enquanto ele digitava.
+  if (!(await consultantCanHandle(companyId, conversationId, consultant.profileId))) {
+    await reply("⌛ Esta oportunidade expirou e já está com outro consultor. Sua mensagem não foi enviada ao lead.");
+    return true;
+  }
+
 
   if (!text && !media) {
     await reply("ℹ️ Não consegui ler esse conteúdo. Envie texto, áudio, imagem ou documento.");
