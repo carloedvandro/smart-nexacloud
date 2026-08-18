@@ -368,7 +368,13 @@ function ConversationThread({
           </Select>
         ) : null}
 
-        {!isMine && currentUserId ? (
+        {expired ? (
+          <Badge variant="outline" className="border-destructive/40 text-destructive">
+            Link expirado
+          </Badge>
+        ) : null}
+
+        {!isMine && currentUserId && !expired ? (
           <Button size="sm" variant="outline" onClick={() => assign.mutate(currentUserId)}>
             <UserCheck className="size-4" /> Assumir
           </Button>
