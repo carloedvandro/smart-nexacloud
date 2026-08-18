@@ -41,6 +41,7 @@ import {
   getConversationMediaUrls,
   sendWhatsAppMediaMessage,
 } from "@/lib/whatsapp/whatsapp.functions";
+import { getConversationAccess } from "@/lib/queue/access.functions";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { cn } from "@/lib/utils";
 
@@ -258,6 +259,7 @@ function ConversationThread({
     [messages],
   );
   const fetchMediaUrls = useServerFn(getConversationMediaUrls);
+  const checkAccess = useServerFn(getConversationAccess);
   const { data: mediaUrls } = useQuery({
     queryKey: ["media-urls", conversation.id, mediaPaths.join("|")],
     queryFn: () => fetchMediaUrls({ data: { paths: mediaPaths } }),
@@ -327,7 +329,16 @@ function ConversationThread({
   });
 
   const isMine = conversation.assigned_user_id === currentUserId;
-  const canWrite = isAdmin || isMine;
+
+  // O link do rodízio expira: se a oferta já passou para outro consultor,
+  // o servidor recusa e a interface fica somente leitura.
+  const { data: access } = useQuery({
+    queryKey: ["conversation-access", conversation.id],
+    queryFn: () => checkAccess({ data: { conversationId: conversation.id } }),
+    refetchInterval: 20000,
+  });
+  const expired = access ? !access.allowed : false;
+  const canWrite = (isAdmin || isMine) && !expired;
 
   return (
     <Card className="flex h-[calc(100vh-10rem)] flex-col shadow-panel">
@@ -357,7 +368,13 @@ function ConversationThread({
           </Select>
         ) : null}
 
-        {!isMine && currentUserId ? (
+        {expired ? (
+          <Badge variant="outline" className="border-destructive/40 text-destructive">
+            Link expirado
+          </Badge>
+        ) : null}
+
+        {!isMine && currentUserId && !expired ? (
           <Button size="sm" variant="outline" onClick={() => assign.mutate(currentUserId)}>
             <UserCheck className="size-4" /> Assumir
           </Button>
@@ -402,6 +419,10 @@ function ConversationThread({
         {conversation.status === "CLOSED" ? (
           <p className="text-center text-sm text-muted-foreground">
             Conversa encerrada. Reabra para responder.
+          </p>
+        ) : expired ? (
+          <p className="text-center text-sm text-destructive">
+            {access?.message ?? "Este link expirou: a oportunidade foi repassada a outro consultor."}
           </p>
         ) : !canWrite ? (
           <p className="text-center text-sm text-muted-foreground">
