@@ -607,84 +607,28 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
 }
 
 /**
- * Documentos antigos foram guardados sem o tipo correto, então o navegador
- * abre uma aba preta. Aqui baixamos os bytes, descobrimos o tipo real (PDF,
- * imagem, etc.) e abrimos/baixamos a partir de um blob com o tipo certo.
+ * O arquivo já é servido com o tipo correto (o servidor corrige documentos
+ * antigos), então links normais funcionam: "Abrir" mostra o PDF no navegador e
+ * "Baixar" força o download, sem pop-up nem blob (que o Safari bloqueia).
  */
 function DocumentMedia({ url }: { url: string }) {
-  const [busy, setBusy] = useState(false);
-
-  const withBlob = async (action: "open" | "download") => {
-    // A aba precisa ser aberta no clique (antes do await), senão o navegador
-    // trata como pop-up e bloqueia.
-    const popup = action === "open" ? window.open("", "_blank") : null;
-    setBusy(true);
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("falha ao baixar");
-      const raw = await response.blob();
-      const head = new Uint8Array(await raw.slice(0, 8).arrayBuffer());
-      const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
-      const isPng = head[0] === 0x89 && head[1] === 0x50;
-      const isJpg = head[0] === 0xff && head[1] === 0xd8;
-      const detected = isPdf
-        ? "application/pdf"
-        : isPng
-          ? "image/png"
-          : isJpg
-            ? "image/jpeg"
-            : raw.type || "application/octet-stream";
-      const extension = detected === "application/pdf" ? "pdf" : detected.split("/")[1] || "bin";
-      const blobUrl = URL.createObjectURL(new Blob([raw], { type: detected }));
-      const saveFile = () => {
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = `documento.${extension}`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      };
-      if (action === "open") {
-        if (popup && !popup.closed) {
-          popup.location.href = blobUrl;
-        } else {
-          // Pop-up bloqueado: baixamos o arquivo para o usuário abrir.
-          saveFile();
-          toast.info("Pop-up bloqueado — o documento foi baixado.");
-        }
-      } else {
-        saveFile();
-      }
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-    } catch {
-      popup?.close();
-      toast.error("Não foi possível abrir o documento.");
-    } finally {
-      setBusy(false);
-
-    }
-  };
-
+  const downloadUrl = `${url}${url.includes("?") ? "&" : "?"}download=documento`;
   return (
     <div className="mb-1 flex items-center gap-3 text-xs">
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void withBlob("open")}
-        className="flex items-center gap-2 underline disabled:opacity-60"
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-2 underline"
       >
         <FileText className="size-4" /> Abrir documento
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void withBlob("download")}
-        className="underline opacity-80 disabled:opacity-60"
-      >
+      </a>
+      <a href={downloadUrl} target="_blank" rel="noreferrer" className="underline opacity-80">
         Baixar
-      </button>
+      </a>
     </div>
   );
 }
+
 
 
