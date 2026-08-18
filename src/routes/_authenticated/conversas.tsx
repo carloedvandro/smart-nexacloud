@@ -1,8 +1,26 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, Download, FileText, Loader2, Mic, Paperclip, Search, Send, Square, UserCheck, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Bot,
+  Check,
+  ChevronDown,
+  Download,
+  FileText,
+  Info,
+  Loader2,
+  Lock,
+  Mic,
+  Paperclip,
+  Search,
+  Send,
+  Square,
+  Timer,
+  UserCheck,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/nexa/app-shell";
@@ -11,10 +29,8 @@ import { LeadDetailSheet } from "@/components/nexa/lead-detail-sheet";
 import { PurgeConversationsButton } from "@/components/nexa/purge-conversations-button";
 import { InvitePersonalWhatsAppButton } from "@/components/nexa/invite-personal-whatsapp-button";
 
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,6 +89,39 @@ const FILTERS: { key: string; label: string; statuses: ConversationStatus[] }[] 
   { key: "CLOSED", label: "Encerradas", statuses: ["CLOSED"] },
 ];
 
+/** Iniciais do lead para o avatar do cabeçalho e da lista. */
+function initials(name?: string | null, fallback?: string | null) {
+  const source = (name ?? "").trim();
+  if (source) {
+    const parts = source.split(/\s+/).slice(0, 2);
+    return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
+  }
+  const digits = (fallback ?? "").replace(/\D/g, "");
+  return digits.slice(-2) || "?";
+}
+
+function Avatar({
+  name,
+  phone,
+  size = "md",
+}: {
+  name?: string | null | undefined;
+  phone?: string | null | undefined;
+  size?: "sm" | "md";
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "grid shrink-0 place-items-center rounded-full bg-chat-brand/12 font-semibold text-chat-brand-dark",
+        size === "sm" ? "size-9 text-xs" : "size-10 text-sm",
+      )}
+    >
+      {initials(name, phone)}
+    </span>
+  );
+}
+
 function ConversasPage() {
   const { companyId, user, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -128,65 +177,82 @@ function ConversasPage() {
 
   return (
     <AppShell title="Conversas" description="Central de atendimento em tempo real">
-      <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
-        <Card className="flex h-[calc(100vh-10rem)] flex-col shadow-panel">
-          <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+      <div className="grid h-[calc(100dvh-9rem)] gap-4 lg:grid-cols-[21rem_1fr]">
+        <section
+          className={cn(
+            "min-h-0 flex-col overflow-hidden rounded-xl border border-chat-line bg-card shadow-panel",
+            selectedId ? "hidden lg:flex" : "flex",
+          )}
+          aria-label="Lista de conversas"
+        >
+          <div className="space-y-3 border-b border-chat-line bg-chat-shell/60 p-3">
             {isAdmin ? (
               <div className="flex justify-end">
                 <PurgeConversationsButton />
               </div>
             ) : null}
             <div className="relative">
-
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-chat-ink-muted" />
               <Input
-                className="pl-9"
+                className="rounded-full border-chat-line bg-card pl-9"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar lead ou telefone"
+                aria-label="Buscar conversa"
               />
             </div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {FILTERS.map((f) => (
-                <Button
+                <button
                   key={f.key}
-                  size="sm"
-                  variant={filter === f.key ? "default" : "outline"}
                   onClick={() => setFilter(f.key)}
+                  aria-pressed={filter === f.key}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chat-brand",
+                    filter === f.key
+                      ? "bg-chat-brand text-white"
+                      : "bg-card text-chat-ink-muted ring-1 ring-chat-line hover:bg-chat-shell",
+                  )}
                 >
                   {f.label}
-                </Button>
+                </button>
               ))}
             </div>
+          </div>
 
-            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
-              {isLoading ? (
-                Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
-              ) : (conversations ?? []).length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhuma conversa neste filtro.
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="space-y-2 p-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : (conversations ?? []).length === 0 ? (
+              <div className="px-6 py-14 text-center">
+                <p className="text-sm font-medium text-chat-ink">Nenhuma conversa neste filtro</p>
+                <p className="mt-1 text-xs text-chat-ink-muted">
+                  Novos atendimentos aparecem aqui em tempo real.
                 </p>
-              ) : (
-                (conversations ?? []).map((conv) => (
-                  <button
-                    key={conv.id}
-                    onClick={() => select(conv.id)}
-                    className={cn(
-                      "w-full rounded-lg border border-transparent p-3 text-left transition-colors hover:bg-muted",
-                      selectedId === conv.id && "border-border bg-muted",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {conv.lead?.name ?? PhoneNormalizationService.formatContact(conv.lead?.phone, conv.lead?.whatsapp)}
+              </div>
+            ) : (
+              (conversations ?? []).map((conv) => (
+                <button
+                  key={conv.id}
+                  onClick={() => select(conv.id)}
+                  aria-current={selectedId === conv.id}
+                  className={cn(
+                    "flex w-full items-start gap-3 border-b border-chat-line/70 px-3 py-3 text-left transition-colors hover:bg-chat-shell focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-chat-brand",
+                    selectedId === conv.id && "bg-chat-shell",
+                  )}
+                >
+                  <Avatar name={conv.lead?.name} phone={conv.lead?.whatsapp ?? conv.lead?.phone} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium text-chat-ink">
+                        {conv.lead?.name ??
+                          PhoneNormalizationService.formatContact(conv.lead?.phone, conv.lead?.whatsapp)}
                       </span>
-                      {conv.unread_count > 0 ? (
-                        <Badge className="shrink-0">{conv.unread_count}</Badge>
-                      ) : null}
-                    </div>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <ConversationStatusBadge status={conv.status as ConversationStatus} />
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                      <span className="shrink-0 text-[11px] text-chat-ink-muted">
                         {conv.last_message_at
                           ? new Date(conv.last_message_at).toLocaleTimeString("pt-BR", {
                               hour: "2-digit",
@@ -194,16 +260,22 @@ function ConversasPage() {
                             })
                           : ""}
                       </span>
-                    </div>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                    </span>
+                    <span className="mt-1 flex items-center justify-between gap-2">
+                      <ConversationStatusBadge status={conv.status as ConversationStatus} />
+                      {conv.unread_count > 0 ? (
+                        <Badge className="shrink-0 bg-chat-brand text-white">{conv.unread_count}</Badge>
+                      ) : null}
+                    </span>
+                    <span className="mt-1 block truncate text-xs text-chat-ink-muted">
                       {conv.consultant?.full_name ?? conv.consultant?.email ?? "Sem consultor"}
-                    </p>
-                  </button>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                    </span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
 
         {selected ? (
           <ConversationThread
@@ -212,12 +284,18 @@ function ConversasPage() {
             isAdmin={isAdmin}
             currentUserId={user?.id ?? null}
             companyId={companyId as string}
+            onBack={() => void navigate({ to: "/conversas", search: {} })}
             onOpenLead={() => selected.lead && setLeadSheet(selected.lead.id)}
           />
         ) : (
-          <Card className="flex h-[calc(100vh-10rem)] items-center justify-center shadow-panel">
-            <p className="text-sm text-muted-foreground">Selecione uma conversa para atender.</p>
-          </Card>
+          <section className="hidden min-h-0 items-center justify-center rounded-xl border border-chat-line bg-chat-canvas lg:flex">
+            <div className="max-w-sm rounded-xl bg-card/90 px-8 py-10 text-center shadow-panel">
+              <p className="text-sm font-semibold text-chat-ink">Selecione uma conversa</p>
+              <p className="mt-1 text-xs text-chat-ink-muted">
+                Todo o atendimento acontece aqui no NexaAtende e sai pelo WhatsApp da empresa.
+              </p>
+            </div>
+          </section>
         )}
       </div>
 
@@ -232,16 +310,20 @@ function ConversationThread({
   currentUserId,
   companyId,
   onOpenLead,
+  onBack,
 }: {
   conversation: ConversationListItem;
   isAdmin: boolean;
   currentUserId: string | null;
   companyId: string;
   onOpenLead: () => void;
+  onBack: () => void;
 }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
 
   const { data: messages, isLoading } = useQuery({
     queryKey: ["messages", conversation.id],
@@ -267,6 +349,11 @@ function ConversationThread({
     staleTime: 30 * 60_000,
   });
 
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["messages", conversation.id] });
+    void queryClient.invalidateQueries({ queryKey: ["conversations", companyId] });
+  }, [queryClient, conversation.id, companyId]);
+
   const sendMediaFn = useServerFn(sendWhatsAppMediaMessage);
   const sendMedia = useMutation({
     mutationFn: async (file: { blob: Blob; name: string; kind: MediaKind }) => {
@@ -289,14 +376,10 @@ function ConversationThread({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Rola para a última mensagem apenas quem já estava no fim da conversa.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ["messages", conversation.id] });
-    void queryClient.invalidateQueries({ queryKey: ["conversations", companyId] });
-  };
+    if (atBottom) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, atBottom]);
 
   const send = useMutation({
     mutationFn: () =>
@@ -307,6 +390,7 @@ function ConversationThread({
       }),
     onSuccess: () => {
       setDraft("");
+      setAtBottom(true);
       refresh();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -339,70 +423,134 @@ function ConversationThread({
   });
   const expired = access ? !access.allowed : false;
   const canWrite = (isAdmin || isMine) && !expired;
+  const closed = conversation.status === "CLOSED";
+
+  const offerOpen =
+    !isAdmin &&
+    !isMine &&
+    !expired &&
+    !closed &&
+    Boolean(access?.allowed) &&
+    (conversation.status === "QUEUED" || conversation.status === "WAITING_HUMAN");
+
+  const busy = send.isPending || sendMedia.isPending;
 
   return (
-    <Card className="flex h-[calc(100vh-10rem)] flex-col shadow-panel">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-        <button className="min-w-0 flex-1 text-left" onClick={onOpenLead}>
-          <p className="truncate text-sm font-semibold">
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-chat-line bg-card shadow-panel">
+      {/* Cabeçalho */}
+      <header className="flex items-center gap-2 border-b border-chat-line bg-card px-3 py-2.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden"
+          aria-label="Voltar para a lista de conversas"
+          onClick={onBack}
+        >
+          <ArrowLeft className="size-5" />
+        </Button>
+        <Avatar name={conversation.lead?.name} phone={conversation.lead?.whatsapp ?? conversation.lead?.phone} />
+        <button
+          className="min-w-0 flex-1 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chat-brand"
+          onClick={onOpenLead}
+        >
+          <p className="truncate text-sm font-semibold text-chat-ink">
             {conversation.lead?.name ?? "Lead sem nome"}
           </p>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate text-xs text-chat-ink-muted">
             {PhoneNormalizationService.formatContact(conversation.lead?.phone, conversation.lead?.whatsapp)}
+            {conversation.consultant ? (
+              <> · {conversation.consultant.full_name ?? conversation.consultant.email}</>
+            ) : null}
           </p>
         </button>
-        <ConversationStatusBadge status={conversation.status as ConversationStatus} />
+
+        <div className="hidden items-center gap-2 sm:flex">
+          <ConversationStatusBadge status={conversation.status as ConversationStatus} />
+          {expired ? (
+            <Badge variant="outline" className="gap-1 border-chat-danger/40 text-chat-danger">
+              <Lock className="size-3" aria-hidden="true" /> Link expirado
+            </Badge>
+          ) : isMine ? (
+            <Badge variant="outline" className="gap-1 border-chat-brand/40 text-chat-brand-dark">
+              <UserCheck className="size-3" aria-hidden="true" /> Sua conversa
+            </Badge>
+          ) : null}
+        </div>
+
+        <Button variant="ghost" size="icon" aria-label="Detalhes do lead" onClick={onOpenLead}>
+          <Info className="size-5 text-chat-ink-muted" />
+        </Button>
+      </header>
+
+      {/* Ações */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-chat-line bg-chat-shell/60 px-3 py-2">
+        <span className="sm:hidden">
+          <ConversationStatusBadge status={conversation.status as ConversationStatus} />
+        </span>
 
         {isAdmin ? (
-          <Select
-            value={conversation.assigned_user_id ?? "NONE"}
-            onValueChange={(v) => assign.mutate(v)}
-          >
-            <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
+          <Select value={conversation.assigned_user_id ?? "NONE"} onValueChange={(v) => assign.mutate(v)}>
+            <SelectTrigger className="h-8 w-44 bg-card text-xs" aria-label="Consultor responsável">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="NONE">Sem consultor</SelectItem>
               {(consultants ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.full_name ?? c.email}</SelectItem>
+                <SelectItem key={c.id} value={c.id}>
+                  {c.full_name ?? c.email}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         ) : null}
 
-        {expired ? (
-          <Badge variant="outline" className="border-destructive/40 text-destructive">
-            Link expirado
-          </Badge>
-        ) : null}
-
-        {!isMine && currentUserId && !expired ? (
+        {!isMine && currentUserId && !expired && !closed ? (
           <Button size="sm" variant="outline" onClick={() => assign.mutate(currentUserId)}>
             <UserCheck className="size-4" /> Assumir
           </Button>
         ) : null}
 
-        {canWrite && conversation.status !== "CLOSED" ? (
-          <InvitePersonalWhatsAppButton conversationId={conversation.id} onSent={refresh} />
-        ) : null}
-
-        {conversation.status !== "CLOSED" ? (
-          <Button size="sm" variant="outline" onClick={() => changeStatus.mutate("CLOSED")}>
-            <Check className="size-4" /> Encerrar
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" onClick={() => changeStatus.mutate("HUMAN_ACTIVE")}>
-            <X className="size-4" /> Reabrir
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {canWrite && !closed ? (
+            <InvitePersonalWhatsAppButton conversationId={conversation.id} onSent={refresh} />
+          ) : null}
+          {!closed ? (
+            <Button size="sm" variant="ghost" onClick={() => changeStatus.mutate("CLOSED")}>
+              <Check className="size-4" /> Encerrar
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => changeStatus.mutate("HUMAN_ACTIVE")}>
+              <X className="size-4" /> Reabrir
+            </Button>
+          )}
+        </div>
       </div>
 
+      {offerOpen ? <OfferBanner startedAt={conversation.updated_at} /> : null}
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-muted/30 p-4">
+      {/* Mensagens */}
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+        }}
+        className="relative min-h-0 flex-1 space-y-2 overflow-y-auto bg-chat-canvas px-3 py-4 sm:px-6"
+      >
         {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-2/3" />)
+          Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton
+              key={i}
+              className={cn("h-14 w-2/3 rounded-2xl", i % 2 ? "ml-auto" : "")}
+            />
+          ))
         ) : (messages ?? []).length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            Nenhuma mensagem nesta conversa ainda.
-          </p>
+          <div className="py-16 text-center">
+            <p className="text-sm font-medium text-chat-ink">Nenhuma mensagem ainda</p>
+            <p className="mt-1 text-xs text-chat-ink-muted">
+              As mensagens trocadas com o cliente aparecem aqui.
+            </p>
+          </div>
         ) : (
           (messages ?? []).map((m) => (
             <MessageBubble
@@ -415,44 +563,115 @@ function ConversationThread({
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t border-border p-3">
-        {conversation.status === "CLOSED" ? (
-          <p className="text-center text-sm text-muted-foreground">
+      {!atBottom ? (
+        <div className="relative">
+          <Button
+            size="icon"
+            variant="secondary"
+            aria-label="Ir para a última mensagem"
+            className="absolute -top-14 right-4 z-10 rounded-full shadow-panel"
+            onClick={() => {
+              setAtBottom(true);
+              bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            <ChevronDown className="size-5" />
+          </Button>
+        </div>
+      ) : null}
+
+      {/* Composer */}
+      <div className="border-t border-chat-line bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {closed ? (
+          <p className="rounded-lg bg-chat-shell px-4 py-3 text-center text-sm text-chat-ink-muted">
             Conversa encerrada. Reabra para responder.
           </p>
         ) : expired ? (
-          <p className="text-center text-sm text-destructive">
-            {access?.message ?? "Este link expirou: a oportunidade foi repassada a outro consultor."}
-          </p>
+          <div
+            role="status"
+            className="rounded-lg border border-chat-danger/30 bg-chat-danger/8 px-4 py-3 text-center"
+          >
+            <p className="flex items-center justify-center gap-2 text-sm font-medium text-chat-danger">
+              <Lock className="size-4" aria-hidden="true" />
+              Esta oportunidade foi repassada para outro consultor.
+            </p>
+            <p className="mt-1 text-xs text-chat-ink-muted">
+              {access?.message ?? "O link expirou."} Nenhuma mensagem será enviada ao cliente. O
+              histórico continua visível apenas para consulta.
+            </p>
+          </div>
         ) : !canWrite ? (
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="rounded-lg bg-chat-shell px-4 py-3 text-center text-sm text-chat-ink-muted">
             Assuma o atendimento para responder este cliente.
           </p>
         ) : (
           <div className="flex items-end gap-2">
-            <MediaComposer
-              disabled={sendMedia.isPending}
-              onFile={(file) => sendMedia.mutate(file)}
-            />
+            <MediaComposer disabled={busy} onFile={(file) => sendMedia.mutate(file)} />
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (draft.trim()) send.mutate();
+                  if (draft.trim() && !busy) send.mutate();
                 }
               }}
-              rows={2}
-              placeholder="Escreva sua mensagem… (Enter envia, Shift+Enter quebra linha)"
+              rows={1}
+              aria-label="Mensagem para o cliente"
+              className="max-h-32 min-h-11 flex-1 resize-none rounded-2xl border-chat-line bg-chat-shell px-4 py-3 text-base sm:text-sm"
+              placeholder="Escreva sua mensagem…"
             />
-            <Button disabled={!draft.trim() || send.isPending} onClick={() => send.mutate()}>
-              <Send className="size-4" />
+            <Button
+              size="icon"
+              aria-label="Enviar mensagem"
+              className="size-11 shrink-0 rounded-full bg-chat-brand text-white hover:bg-chat-brand-dark"
+              disabled={!draft.trim() || busy}
+              onClick={() => send.mutate()}
+            >
+              {send.isPending ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : (
+                <Send className="size-5" />
+              )}
             </Button>
           </div>
         )}
       </div>
-    </Card>
+    </section>
+  );
+}
+
+/** Faixa de rodízio: prazo para assumir o atendimento enviando a primeira mensagem. */
+function OfferBanner({ startedAt }: { startedAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const elapsed = Math.floor((now - new Date(startedAt).getTime()) / 1000);
+  const left = Math.max(0, 60 - elapsed);
+  const tone =
+    left <= 10
+      ? "border-chat-danger/40 bg-chat-danger/10 text-chat-danger"
+      : left <= 25
+        ? "border-chat-warning/50 bg-chat-warning/15 text-chat-ink"
+        : "border-chat-brand/30 bg-chat-brand/10 text-chat-brand-dark";
+
+  return (
+    <div
+      role="status"
+      className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2 text-sm", tone)}
+    >
+      <Timer className="size-4 shrink-0" aria-hidden="true" />
+      <span className="font-medium">Novo lead disponível para você</span>
+      <span className="rounded-full bg-card/80 px-2 py-0.5 font-mono text-xs font-semibold tabular-nums">
+        {left > 0 ? `${String(left).padStart(2, "0")}s restantes` : "prazo encerrado"}
+      </span>
+      <span className="w-full text-xs text-chat-ink-muted sm:w-auto">
+        Envie sua primeira mensagem para assumir este atendimento.
+      </span>
+    </div>
   );
 }
 
@@ -525,22 +744,28 @@ function MediaComposer({
       <Button
         type="button"
         size="icon"
-        variant="outline"
+        variant="ghost"
+        className="size-11 shrink-0 rounded-full text-chat-ink-muted hover:bg-chat-shell"
         disabled={disabled}
-        aria-label="Anexar arquivo"
+        aria-label="Anexar foto, vídeo ou documento"
         onClick={() => inputRef.current?.click()}
       >
-        {disabled ? <Loader2 className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
+        {disabled ? <Loader2 className="size-5 animate-spin" /> : <Paperclip className="size-5" />}
       </Button>
       <Button
         type="button"
         size="icon"
-        variant={recording ? "destructive" : "outline"}
+        className={cn(
+          "size-11 shrink-0 rounded-full",
+          recording
+            ? "bg-chat-danger text-white hover:bg-chat-danger/90"
+            : "bg-transparent text-chat-ink-muted hover:bg-chat-shell",
+        )}
         disabled={disabled}
-        aria-label={recording ? "Parar gravação" : "Gravar áudio"}
+        aria-label={recording ? "Parar gravação de áudio" : "Gravar áudio"}
         onClick={() => (recording ? recorderRef.current?.stop() : void startRecording())}
       >
-        {recording ? <Square className="size-4" /> : <Mic className="size-4" />}
+        {recording ? <Square className="size-5" /> : <Mic className="size-5" />}
       </Button>
     </div>
   );
@@ -553,7 +778,11 @@ function MessageBubble({ message, mediaUrl }: { message: MessageRow; mediaUrl?: 
 
   if (isSystem) {
     return (
-      <p className="text-center text-xs text-muted-foreground">{message.content}</p>
+      <div className="flex justify-center py-1">
+        <p className="max-w-[85%] rounded-lg bg-card/85 px-3 py-1 text-center text-[11px] text-chat-ink-muted shadow-sm">
+          {message.content}
+        </p>
+      </div>
     );
   }
 
@@ -561,33 +790,31 @@ function MessageBubble({ message, mediaUrl }: { message: MessageRow; mediaUrl?: 
     <div className={cn("flex", isCustomer ? "justify-start" : "justify-end")}>
       <div
         className={cn(
-          "max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm",
+          "max-w-[85%] rounded-xl px-3 py-2 text-sm text-chat-ink shadow-sm sm:max-w-[70%]",
           isCustomer
-            ? "rounded-bl-sm bg-card text-card-foreground"
+            ? "rounded-tl-sm bg-chat-bubble-in"
             : isAi
-              ? "rounded-br-sm bg-primary/10 text-foreground"
-              : "rounded-br-sm bg-primary text-primary-foreground",
+              ? "rounded-tr-sm bg-chat-bubble-in ring-1 ring-chat-brand/25"
+              : "rounded-tr-sm bg-chat-bubble-out",
         )}
       >
         {!isCustomer ? (
-          <p className="mb-1 flex items-center gap-1 text-[11px] opacity-80">
-            {isAi ? <Bot className="size-3" /> : null}
+          <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-chat-brand-dark">
+            {isAi ? <Bot className="size-3" aria-hidden="true" /> : null}
             {isAi ? "IA" : (message.sender_name ?? "Consultor")}
           </p>
         ) : null}
-        {message.media_url ? (
-          <MessageMedia type={message.message_type} url={mediaUrl ?? null} />
-        ) : null}
-        {message.content ? <p className="whitespace-pre-wrap">{message.content}</p> : null}
+        {message.media_url ? <MessageMedia type={message.message_type} url={mediaUrl ?? null} /> : null}
+        {message.content ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : null}
         {message.transcription ? (
-          <p className="mt-1 rounded-md bg-background/40 px-2 py-1 text-xs italic opacity-90">
+          <p className="mt-1 rounded-md bg-chat-shell px-2 py-1 text-xs italic text-chat-ink-muted">
             “{message.transcription}”
           </p>
         ) : message.message_type === "audio" && message.transcription_status === "PROCESSING" ? (
-          <p className="mt-1 text-xs opacity-70">Transcrevendo áudio…</p>
+          <p className="mt-1 text-xs text-chat-ink-muted">Transcrevendo áudio…</p>
         ) : null}
         {!message.media_url && !message.content ? (
-          <p className="opacity-70">
+          <p className="text-chat-ink-muted">
             {message.message_type === "audio"
               ? "🎤 Áudio (não foi possível baixar a mídia)"
               : message.message_type === "image"
@@ -600,7 +827,7 @@ function MessageBubble({ message, mediaUrl }: { message: MessageRow; mediaUrl?: 
           </p>
         ) : null}
 
-        <p className="mt-1 text-right text-[10px] opacity-70">
+        <p className="mt-1 text-right text-[10px] text-chat-ink-muted">
           {new Date(message.created_at).toLocaleTimeString("pt-BR", {
             hour: "2-digit",
             minute: "2-digit",
@@ -616,44 +843,42 @@ export const CONVERSATION_LABELS = CONVERSATION_STATUS_LABEL;
 /** Renderiza áudio, imagem, vídeo ou documento da mensagem. */
 function MessageMedia({ type, url }: { type: string; url: string | null }) {
   if (!url) {
-    return <p className="mb-1 text-xs opacity-70">Carregando mídia…</p>;
+    return <p className="mb-1 text-xs text-chat-ink-muted">Carregando mídia…</p>;
   }
   if (type === "audio") {
-    return <audio controls src={url} className="mb-1 w-64 max-w-full" />;
+    return <audio controls src={url} className="mb-1 w-60 max-w-full sm:w-64" />;
   }
   if (type === "image") {
     return (
-      <a href={url} target="_blank" rel="noreferrer">
-        <img src={url} alt="Imagem enviada na conversa" className="mb-1 max-h-64 rounded-lg" />
+      <a href={url} target="_blank" rel="noreferrer" className="block">
+        <img
+          src={url}
+          alt="Imagem enviada na conversa"
+          loading="lazy"
+          className="mb-1 max-h-72 rounded-lg"
+        />
       </a>
     );
   }
   if (type === "video") {
-    return <video controls src={url} className="mb-1 max-h-64 w-64 max-w-full rounded-lg" />;
+    return <video controls src={url} className="mb-1 max-h-72 w-64 max-w-full rounded-lg" />;
   }
   return <DocumentMedia url={url} />;
 }
 
 /** Documentos são entregues como anexo pelo próprio domínio do app. */
 function DocumentMedia({ url }: { url: string }) {
-  const fileName = decodeURIComponent(
-    (url.split("?")[0] ?? "").split("/").pop() || "documento",
-  );
+  const fileName = decodeURIComponent((url.split("?")[0] ?? "").split("/").pop() || "documento");
   const downloadUrl = `${url}${url.includes("?") ? "&" : "?"}download=1`;
 
   return (
-    <div className="mb-1 flex min-w-0 items-center gap-2">
-      <FileText className="size-5 shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate text-xs" title={fileName}>
+    <div className="mb-1 flex min-w-0 items-center gap-2 rounded-lg bg-chat-shell px-2.5 py-2">
+      <FileText className="size-5 shrink-0 text-chat-brand-dark" aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate text-xs text-chat-ink" title={fileName}>
         Documento PDF
       </span>
       <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 gap-1.5">
-        <a
-          href={downloadUrl}
-          target="_top"
-          aria-label={`Baixar ${fileName}`}
-          title={`Baixar ${fileName}`}
-        >
+        <a href={downloadUrl} target="_top" aria-label={`Baixar ${fileName}`} title={`Baixar ${fileName}`}>
           <Download className="size-4" aria-hidden="true" />
           Baixar
         </a>
@@ -661,7 +886,3 @@ function DocumentMedia({ url }: { url: string }) {
     </div>
   );
 }
-
-
-
-
