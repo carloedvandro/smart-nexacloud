@@ -275,8 +275,8 @@ export async function processWebhookEvent(input: {
     };
   }
 
-  // Ponte do consultor: se o número é de um colaborador da empresa, a mensagem
-  // não vira lead — ela é retransmitida ao lead pelo número da empresa.
+  // Número pessoal de colaborador falando com o tronco: não vira lead e não é
+  // retransmitido. O atendimento acontece exclusivamente no painel.
   if (!parsed.isLid && parsed.phone) {
     const { handleConsultantInbound } = await import("@/lib/queue/bridge.server");
     const handled = await handleConsultantInbound({
@@ -284,15 +284,10 @@ export async function processWebhookEvent(input: {
       trunkConnectionId: connectionId,
       phone: parsed.phone,
       text: content,
-      messageType,
-      ...(messageType === "text"
-        ? {}
-        : {
-            media: await downloadAndStoreMedia({ connectionId, companyId, body, messageType }),
-          }),
     });
     if (handled) return { status: "processed", reason: "mensagem de consultor" };
   }
+
   let mediaUrl: string | null = null;
   let mimeType: string | null = mimeTypeHint;
 
