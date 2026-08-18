@@ -619,16 +619,16 @@ function DocumentMedia({ url }: { url: string }) {
       <span className="min-w-0 flex-1 truncate text-xs" title={fileName}>
         Documento PDF
       </span>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        className="h-8 shrink-0 gap-1.5"
-        aria-label={`Baixar ${fileName}`}
-        onClick={() => window.location.assign(downloadUrl)}
-      >
-        <Download className="size-4" aria-hidden="true" />
-        Baixar
+      <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 gap-1.5">
+        <a
+          href={downloadUrl}
+          target="_top"
+          aria-label={`Baixar ${fileName}`}
+          title={`Baixar ${fileName}`}
+        >
+          <Download className="size-4" aria-hidden="true" />
+          Baixar
+        </a>
       </Button>
     </div>
   );
