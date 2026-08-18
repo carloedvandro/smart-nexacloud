@@ -100,7 +100,15 @@ function initials(name?: string | null, fallback?: string | null) {
   return digits.slice(-2) || "?";
 }
 
-function Avatar({ name, phone, size = "md" }: { name?: string | null; phone?: string | null; size?: "sm" | "md" }) {
+function Avatar({
+  name,
+  phone,
+  size = "md",
+}: {
+  name?: string | null | undefined;
+  phone?: string | null | undefined;
+  size?: "sm" | "md";
+}) {
   return (
     <span
       aria-hidden="true"
