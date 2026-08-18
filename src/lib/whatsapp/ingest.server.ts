@@ -383,16 +383,9 @@ export async function processWebhookEvent(input: {
       }
     }
 
-    // Conversa já assumida por um consultor: espelha a fala do lead no
-    // WhatsApp dele, mantendo o histórico dentro do sistema.
-    const { mirrorLeadMessageToConsultant } = await import("@/lib/queue/bridge.server");
-    await mirrorLeadMessageToConsultant({
-      companyId,
-      conversationId: result.conversation_id,
-      text: content,
-      messageType,
-      media: mediaUrl ? { path: mediaUrl, mimeType } : null,
-    });
+    // O consultor acompanha a conversa pelo painel (realtime); nada é
+    // espelhado para o WhatsApp pessoal dele.
+
   }
 
   // Oportunidade barata de expirar ofertas vencidas (SLA) a cada evento recebido.
