@@ -562,7 +562,46 @@ function PlatformPage() {
         </Card>
       </div>
 
+      <Dialog open={Boolean(licenseTarget)} onOpenChange={(open) => !open && setLicenseTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Licença — {licenseTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Defina quantos usuários internos e consultores esta empresa pode ter ativos. Somente a
+              plataforma altera estes limites.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Total de usuários internos</Label>
+              <Input
+                type="number"
+                min={1}
+                value={licenseUsers}
+                onChange={(event) => setLicenseUsers(Number(event.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Limite de consultores</Label>
+              <Input
+                type="number"
+                min={0}
+                value={licenseConsultants}
+                onChange={(event) => setLicenseConsultants(Number(event.target.value))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => licenseMutation.mutate()} disabled={licenseMutation.isPending}>
+              {licenseMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Salvar limites
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={companyOpen} onOpenChange={setCompanyOpen}>
+
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cadastrar empresa</DialogTitle>
