@@ -353,6 +353,20 @@ function PlatformPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">{company.instanceCount} instâncias</Badge>
+                    <Badge variant="secondary">
+                      Licença: {company.maxConsultants} consultores / {company.maxInternalUsers} usuários
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setLicenseTarget({ id: company.id, name: company.name });
+                        setLicenseUsers(company.maxInternalUsers);
+                        setLicenseConsultants(company.maxConsultants);
+                      }}
+                    >
+                      Licença
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -360,6 +374,7 @@ function PlatformPage() {
                     >
                       Membros
                     </Button>
+
                     <Button
                       size="sm"
                       variant="ghost"
