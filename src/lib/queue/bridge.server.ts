@@ -15,28 +15,40 @@ import { getPublicBaseUrl } from "@/lib/nexa/public-url";
 const EVENT_OFFER_NOTIFIED = "CONSULTANT_NOTIFIED";
 const EVENT_TIMEOUT_NOTIFIED = "CONSULTANT_TIMEOUT_NOTIFIED";
 
-type TrunkContext = { connectionId: string; creds: MegaCredentials };
+type TrunkContext = { connectionId: string; creds: MegaCredentials; phone: string | null };
 
 /** Instância tronco da empresa (ponto único de entrada e saída). */
 async function loadTrunk(companyId: string): Promise<TrunkContext | null> {
   const { data } = await supabaseAdmin
     .from("whatsapp_connections")
-    .select("id")
+    .select("id, phone_number")
     .eq("company_id", companyId)
     .eq("is_trunk", true)
     .maybeSingle();
   if (!data) return null;
   const creds = await loadMegaCredentials(data.id);
-  return creds ? { connectionId: data.id, creds } : null;
+  return creds
+    ? {
+        connectionId: data.id,
+        creds,
+        phone: PhoneNormalizationService.normalize(data.phone_number),
+      }
+    : null;
 }
 
 async function sendToConsultant(trunk: TrunkContext, phone: string, text: string) {
   const to = PhoneNormalizationService.normalize(phone);
   if (!to) return false;
+  // Nunca enviar para o próprio tronco: geraria eco/loop do número consigo mesmo.
+  if (trunk.phone && to === trunk.phone) {
+    console.warn("[aviso] destino é o próprio número tronco — envio ignorado");
+    return false;
+  }
   const sent = await MegaApiService.sendText(trunk.creds, to, text);
   if (!sent.ok) console.error("[aviso] falha ao avisar consultor", sent.error);
   return sent.ok;
 }
+
 
 async function claimNotification(
   companyId: string,
