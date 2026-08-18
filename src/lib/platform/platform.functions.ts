@@ -9,8 +9,11 @@ export type PlatformCompany = {
   document: string | null;
   status: string;
   instanceCount: number;
+  maxInternalUsers: number;
+  maxConsultants: number;
   createdAt: string;
 };
+
 
 export type PlatformInstance = {
   id: string;
