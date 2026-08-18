@@ -408,7 +408,7 @@ export const inviteLeadToPersonalWhatsApp = createServerFn({ method: "POST" })
         .maybeSingle();
       if (!profile?.company_id) throw new Error("Usuário sem empresa.");
 
-      const { PhoneNormalizationService, isLid } = await import("@/lib/nexa/phone");
+      const { PhoneNormalizationService } = await import("@/lib/nexa/phone");
 
       // Número pessoal: o telefone do perfil ou o WhatsApp da instância dele.
       let personal = PhoneNormalizationService.normalize(profile.phone);
@@ -466,7 +466,7 @@ export const inviteLeadToPersonalWhatsApp = createServerFn({ method: "POST" })
 
       const rawLead = lead?.phone ?? lead?.whatsapp ?? null;
       const leadPhone =
-        rawLead && !isLid(rawLead) ? PhoneNormalizationService.normalize(rawLead) : null;
+        rawLead && !PhoneNormalizationService.isLid(rawLead) ? PhoneNormalizationService.normalize(rawLead) : null;
 
       // Registro para a empresa: o consultor puxou este lead para o WhatsApp dele.
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
