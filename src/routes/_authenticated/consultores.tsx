@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdminOnly } from "@/components/nexa/admin-only";
 import { useServerFn } from "@tanstack/react-start";
 import { sendCompanyInviteEmail } from "@/lib/invites/invites.functions";
+import { getCompanyLicense } from "@/lib/platform/license.functions";
+
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
