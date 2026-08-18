@@ -41,6 +41,7 @@ import {
   getConversationMediaUrls,
   sendWhatsAppMediaMessage,
 } from "@/lib/whatsapp/whatsapp.functions";
+import { getConversationAccess } from "@/lib/queue/access.functions";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { cn } from "@/lib/utils";
 
