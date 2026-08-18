@@ -103,6 +103,29 @@ function PlatformPage() {
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("ADMIN");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
 
+  const [licenseTarget, setLicenseTarget] = useState<{ id: string; name: string } | null>(null);
+  const [licenseUsers, setLicenseUsers] = useState(8);
+  const [licenseConsultants, setLicenseConsultants] = useState(7);
+  const setLimitsFn = useServerFn(setCompanyLicenseLimits);
+
+  const licenseMutation = useMutation({
+    mutationFn: () =>
+      setLimitsFn({
+        data: {
+          companyId: licenseTarget?.id ?? "",
+          maxInternalUsers: licenseUsers,
+          maxConsultants: licenseConsultants,
+        },
+      }),
+    onSuccess: () => {
+      setLicenseTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["platform-companies"] });
+      toast.success("Limites da licença atualizados");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+
   const linkMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.rpc("create_invite_link", {
