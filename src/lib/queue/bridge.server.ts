@@ -132,6 +132,14 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       console.error("[aviso] consultor sem WhatsApp pessoal cadastrado", attempt.consultant_id);
       continue;
     }
+    if (trunk.phone && notificationPhone === trunk.phone) {
+      console.warn(
+        "[aviso] consultor usa o mesmo número do tronco — aviso ignorado",
+        attempt.consultant_id,
+      );
+      continue;
+    }
+
 
     if (attempt.status === "TIMEOUT") {
       const claimed = await claimNotification(
