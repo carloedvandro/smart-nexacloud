@@ -612,7 +612,7 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
  * "Baixar" força o download, sem pop-up nem blob (que o Safari bloqueia).
  */
 function DocumentMedia({ url }: { url: string }) {
-  const downloadUrl = `${url}${url.includes("?") ? "&" : "?"}download=documento`;
+  const downloadUrl = `${url}${url.includes("?") ? "&" : "?"}download=1`;
   return (
     <div className="mb-1 flex items-center gap-3 text-xs">
       <a
@@ -623,7 +623,7 @@ function DocumentMedia({ url }: { url: string }) {
       >
         <FileText className="size-4" /> Abrir documento
       </a>
-      <a href={downloadUrl} target="_blank" rel="noreferrer" className="underline opacity-80">
+      <a href={downloadUrl} download className="underline opacity-80">
         Baixar
       </a>
     </div>

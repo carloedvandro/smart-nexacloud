@@ -369,11 +369,16 @@ export const getConversationMediaUrls = createServerFn({ method: "POST" })
     // Só liberamos arquivos do prefixo da própria empresa.
     const allowed = data.paths.filter((path) => path.startsWith(`${profile.company_id}/`));
     const { signedMediaUrl, repairMediaContentType } = await import("@/lib/whatsapp/media.server");
+    const { mediaProxyUrl } = await import("@/lib/whatsapp/media-token.server");
+    const streamable = /\.(ogg|mp3|m4a|wav|webm|mp4|jpg|jpeg|png|gif|webp)$/i;
     const entries = await Promise.all(
       allowed.map(async (path) => {
         // Corrige arquivos antigos salvos sem o tipo correto (PDF abrindo em branco).
         const fixed = await repairMediaContentType(path);
-        return [path, await signedMediaUrl(fixed)] as const;
+        // Documentos são servidos pelo próprio domínio, com o tipo correto,
+        // porque o link do storage abria em branco no Safari.
+        const url = streamable.test(fixed) ? await signedMediaUrl(fixed) : mediaProxyUrl(fixed);
+        return [path, url] as const;
       }),
     );
     return Object.fromEntries(entries.filter(([, url]) => Boolean(url)) as [string, string][]);
