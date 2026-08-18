@@ -46,6 +46,32 @@ export function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
+/**
+ * Descobre o tipo real pelo início do arquivo. Necessário porque a MEGA nem
+ * sempre devolve o mimetype: sem isso o PDF ficava salvo como
+ * application/octet-stream e o navegador baixava um arquivo que não abre.
+ */
+export function sniffMimeType(bytes: Uint8Array): string | null {
+  const starts = (...sig: number[]) => sig.every((byte, index) => bytes[index] === byte);
+  if (starts(0x25, 0x50, 0x44, 0x46)) return "application/pdf";
+  if (starts(0x89, 0x50, 0x4e, 0x47)) return "image/png";
+  if (starts(0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (starts(0x47, 0x49, 0x46, 0x38)) return "image/gif";
+  if (starts(0x4f, 0x67, 0x67, 0x53)) return "audio/ogg";
+  if (starts(0x49, 0x44, 0x33)) return "audio/mpeg";
+  if (starts(0x1a, 0x45, 0xdf, 0xa3)) return "video/webm";
+  if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+    return "video/mp4";
+  }
+  if (starts(0x50, 0x4b, 0x03, 0x04)) return "application/zip";
+  return null;
+}
+
+function isGeneric(mimeType: string | null | undefined): boolean {
+  const clean = (mimeType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  return !clean || clean === "application/octet-stream" || clean === "binary/octet-stream";
+}
+
 /** Sobe bytes para o bucket da empresa e devolve o caminho salvo. */
 export async function storeMedia(input: {
   companyId: string;
@@ -55,10 +81,12 @@ export async function storeMedia(input: {
   kind: MediaKind;
   fileName?: string | null;
 }): Promise<string | null> {
-  const extension = extensionFor(input.kind, input.mimeType);
+  const sniffed = sniffMimeType(input.bytes);
+  const mimeType = isGeneric(input.mimeType) ? (sniffed ?? input.mimeType) : input.mimeType;
+  const extension = extensionFor(input.kind, mimeType);
   const path = `${input.companyId}/${input.connectionId}/${crypto.randomUUID()}.${extension}`;
   const { error } = await supabaseAdmin.storage.from(MEDIA_BUCKET).upload(path, input.bytes, {
-    contentType: input.mimeType ?? "application/octet-stream",
+    contentType: mimeType ?? "application/octet-stream",
     upsert: false,
   });
   if (error) {
@@ -67,6 +95,7 @@ export async function storeMedia(input: {
   }
   return path;
 }
+
 
 /** Link temporário para ouvir/ver/baixar o arquivo. */
 export async function signedMediaUrl(path: string, expiresIn = 60 * 60): Promise<string | null> {

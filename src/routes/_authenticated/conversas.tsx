@@ -603,14 +603,24 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
   if (type === "video") {
     return <video controls src={url} className="mb-1 max-h-64 w-64 max-w-full rounded-lg" />;
   }
+  // Documentos: "Abrir" tenta visualizar no navegador e "Baixar" força o
+  // download com nome de arquivo — necessário quando o WhatsApp não informa o
+  // tipo do arquivo e o navegador se recusa a exibir.
+  const downloadUrl = `${url}${url.includes("?") ? "&" : "?"}download=documento`;
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="mb-1 flex items-center gap-2 text-xs underline"
-    >
-      <FileText className="size-4" /> Abrir documento
-    </a>
+    <div className="mb-1 flex items-center gap-3 text-xs">
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-2 underline"
+      >
+        <FileText className="size-4" /> Abrir documento
+      </a>
+      <a href={downloadUrl} className="underline opacity-80">
+        Baixar
+      </a>
+    </div>
   );
 }
+
