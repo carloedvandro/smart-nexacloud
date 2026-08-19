@@ -100,6 +100,9 @@ function LeadsPage() {
         pageSize: PAGE_SIZE,
       }),
     enabled: Boolean(companyId),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 
   const { data: consultants } = useQuery({
@@ -110,11 +113,14 @@ function LeadsPage() {
 
   useEffect(() => {
     if (!companyId) return;
+    const invalidate = () => {
+      void queryClient.invalidateQueries({ queryKey: ["leads", companyId] });
+    };
     const channel = supabase
       .channel("leads-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => {
-        void queryClient.invalidateQueries({ queryKey: ["leads", companyId] });
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, invalidate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, invalidate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignment_attempts" }, invalidate)
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
