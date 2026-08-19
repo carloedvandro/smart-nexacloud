@@ -34,7 +34,24 @@ async function handle(request: Request): Promise<Response> {
   // Avisa no WhatsApp os consultores com oferta pendente ou repassada.
   const { notifyAllQueueOffers } = await import("@/lib/queue/bridge.server");
   await notifyAllQueueOffers();
+
+  // Pede avaliação nos leads que ficaram abandonados após o rodízio.
+  const { data: companies } = await supabaseAdmin
+    .from("conversations")
+    .select("company_id")
+    .is("assigned_user_id", null)
+    .in("status", ["WAITING_HUMAN", "QUEUED"])
+    .gte("last_message_at", new Date(Date.now() - 60 * 60_000).toISOString())
+    .limit(200);
+  const { requestAbandonedRatings } = await import("@/lib/rating/rating.server");
+  for (const companyId of [...new Set((companies ?? []).map((c) => c.company_id))]) {
+    await requestAbandonedRatings(companyId).catch((e) =>
+      console.error("[avaliação] falha", companyId, e),
+    );
+  }
+
   return new Response(JSON.stringify({ ok: true, processed: Number(data ?? 0) }), init());
+
 }
 
 function init(status = 200): ResponseInit {
