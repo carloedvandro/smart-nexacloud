@@ -11,7 +11,7 @@ const MODEL = "openai/gpt-4o-mini-tts";
 const VOICE = "shimmer";
 // O webhook do provedor tem uma janela curta. A voz precisa terminar antes
 // dela; caso contrário cancelamos e o agente envia o mesmo conteúdo em texto.
-const TTS_TIMEOUT_MS = 5_000;
+const TTS_TIMEOUT_MS = 45_000;
 
 const INSTRUCTIONS = [
   "Fale em português do Brasil com voz feminina, jovem e simpática.",
