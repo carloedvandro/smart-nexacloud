@@ -800,9 +800,18 @@ function MediaComposer({
         stream.getTracks().forEach((track) => track.stop());
         const mime = recorder.mimeType || preferred || "audio/webm";
         const blob = new Blob(chunksRef.current, { type: mime });
-        const extension = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "m4a" : "webm";
         setRecording(false);
-        if (blob.size > 0) onFile({ blob, name: `audio-${Date.now()}.${extension}`, kind: "audio" });
+        if (blob.size === 0) return;
+
+        void import("@/lib/whatsapp/audio-encoding")
+          .then(({ recordingToWhatsAppAudio }) => recordingToWhatsAppAudio(blob))
+          .then((mp3) => {
+            onFile({ blob: mp3, name: `audio-${Date.now()}.mp3`, kind: "audio" });
+          })
+          .catch((error: unknown) => {
+            console.error("[audio] conversão para WhatsApp falhou", error);
+            toast.error("Não consegui preparar o áudio para o WhatsApp. Grave novamente.");
+          });
       };
       recorder.start();
       recorderRef.current = recorder;

@@ -14,7 +14,19 @@ export type MegaCredentials = {
 
 export type MegaResult<T> = { ok: true; data: T } | { ok: false; error: string; status?: number };
 
-const TIMEOUT_MS = 20_000;
+function externalMessageId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const body = payload as Record<string, unknown>;
+  const key = body["key"];
+  if (key && typeof key === "object") {
+    const id = (key as Record<string, unknown>)["id"];
+    if (typeof id === "string" && id.trim()) return id;
+  }
+  const direct = body["messageId"] ?? body["id"];
+  if (typeof direct === "string" && direct.trim()) return direct;
+  const nested = body["data"] ?? body["response"] ?? body["result"];
+  return nested === payload ? null : externalMessageId(nested);
+}
 
 function baseUrl(host: string) {
   const clean = host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
@@ -35,7 +47,6 @@ async function request<T>(
         Authorization: `Bearer ${creds.apiKey}`,
       },
       ...(init?.body ? { body: JSON.stringify(init.body) } : {}),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
     const text = await response.text();
@@ -224,8 +235,17 @@ export const MegaApiService = {
         body: attempt.body,
       });
       if (result.ok) {
-        console.info("[mega] mídia enviada", { path: attempt.path, tipo: input.mediaType });
-        return result;
+        const messageId = externalMessageId(result.data);
+        if (messageId) {
+          console.info("[mega] mídia aceita", { path: attempt.path, tipo: input.mediaType, messageId });
+          return { ok: true as const, data: { ...result.data, messageId } };
+        }
+        last = {
+          ok: false,
+          error: "A MEGA API respondeu sem confirmar o envio da mídia.",
+        };
+        console.warn("[mega] mídia sem confirmação", { path: attempt.path, tipo: input.mediaType });
+        continue;
       }
       last = result;
       if (result.status === 401 || result.status === 403) return result;
