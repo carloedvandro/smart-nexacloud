@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { LogOut, Menu, X } from "lucide-react";
+import { LogOut, Menu, Moon, Sun, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { NexaLogo } from "@/components/nexa/logo";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/integrations/supabase/client";
 import { AVAILABILITY_LABEL } from "@/lib/nexa/domain";
 import { NAV_ITEMS } from "@/lib/nexa/navigation";
@@ -25,6 +26,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { profile, isAdmin, roles, loading, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -167,6 +169,15 @@ export function AppShell({
           </div>
           <div className="flex items-center gap-2">
             {actions}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
+              title={theme === "dark" ? "Modo claro" : "Modo escuro"}
+            >
+              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </Button>
             <Badge variant="secondary" className="hidden sm:inline-flex">
               Tempo real ativo
             </Badge>

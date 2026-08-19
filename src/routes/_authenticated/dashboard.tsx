@@ -1,20 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import {
-  Bot,
-  Clock3,
-  MessagesSquare,
-  Repeat2,
-  TimerReset,
-  UserCheck,
-  Users,
-  Wifi,
-} from "lucide-react";
+import { MessagesSquare, Users } from "lucide-react";
 
 import { AppShell } from "@/components/nexa/app-shell";
 import { PlatformDashboard } from "@/components/nexa/platform-dashboard";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -139,11 +130,6 @@ function DashboardPage() {
   const cards = [
     { label: "Leads hoje", value: data?.leadsToday, icon: Users },
     { label: "Conversas abertas", value: data?.openConversations, icon: MessagesSquare },
-    { label: "IA atendendo", value: data?.aiActive, icon: Bot },
-    { label: "Aguardando consultor", value: data?.waitingHuman, icon: Clock3 },
-    { label: "Consultores online", value: data?.onlineConsultants, icon: UserCheck },
-    { label: "Transferências hoje", value: data?.transfers, icon: Repeat2 },
-    { label: "Timeouts hoje", value: data?.timeouts, icon: TimerReset },
   ];
 
   if (isPlatformAdmin) {
@@ -162,7 +148,7 @@ function DashboardPage() {
       title="Dashboard"
       description={`Bem-vindo, ${profile?.full_name ?? profile?.email ?? ""}`}
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         {cards.map((card) => (
           <Card key={card.label} className="bg-surface-gradient shadow-panel">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
@@ -180,33 +166,7 @@ function DashboardPage() {
             </CardContent>
           </Card>
         ))}
-
-        <Card className="bg-surface-gradient shadow-panel">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tempo médio de 1ª resposta
-            </CardTitle>
-            <Wifi className="size-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold tracking-tight text-muted-foreground">—</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Disponível quando o motor de fila entrar em operação.
-            </p>
-          </CardContent>
-        </Card>
       </div>
-
-      <Card className="mt-6 shadow-panel">
-        <CardHeader>
-          <CardTitle className="text-base">Fundação concluída</CardTitle>
-          <CardDescription>
-            Banco multi-tenant, autenticação, papéis, políticas de acesso, armazenamento privado e
-            tempo real já operando. Os indicadores acima leem dados reais da sua empresa e se
-            atualizam automaticamente quando conversas e atribuições mudam.
-          </CardDescription>
-        </CardHeader>
-      </Card>
     </AppShell>
   );
 }
