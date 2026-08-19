@@ -531,7 +531,10 @@ async function downloadAndStoreMedia(input: {
     console.error("[whatsapp] mídia sem key no payload", JSON.stringify(input.body).slice(0, 800));
   }
 
-  const result = await MegaApiService.downloadMedia(creds, key ?? {}, messageNode);
+  // Enviamos o payload completo. Em figurinhas, algumas versões da MEGA não
+  // incluem stickerMessage dentro de `message`, mas ainda resolvem o arquivo
+  // usando a key presente no evento.
+  const result = await MegaApiService.downloadMedia(creds, key ?? {}, input.body);
   if (!result.ok) {
     console.error("[whatsapp] download de mídia falhou", {
       erro: result.error,
@@ -543,9 +546,39 @@ async function downloadAndStoreMedia(input: {
   }
 
 
-  const encoded = result.data?.data ?? result.data?.base64 ?? result.data?.buffer;
+  const findDownloadValue = (
+    source: unknown,
+    keys: string[],
+    accepts: (value: unknown) => boolean,
+    depth = 0,
+  ): unknown => {
+    if (!source || typeof source !== "object" || depth > 6) return undefined;
+    const object = source as Json;
+    for (const keyName of keys) {
+      const value = object[keyName];
+      if (accepts(value)) return value;
+    }
+    for (const value of Object.values(object)) {
+      const found = findDownloadValue(value, keys, accepts, depth + 1);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  };
+  const encoded = findDownloadValue(
+    result.data,
+    ["data", "base64", "buffer"],
+    (value) =>
+      (typeof value === "string" && Boolean(value.trim())) ||
+      Array.isArray(value) ||
+      Boolean(value && typeof value === "object" && "data" in (value as Json)),
+  );
   let bytes: Uint8Array | null = null;
-  let mimeType: string | null = result.data?.mimetype ?? result.data?.mimeType ?? null;
+  const returnedMime = findDownloadValue(
+    result.data,
+    ["mimetype", "mimeType"],
+    (value) => typeof value === "string" && value.includes("/"),
+  );
+  let mimeType: string | null = typeof returnedMime === "string" ? returnedMime : null;
 
   if (typeof encoded === "string" && encoded.trim()) {
     bytes = base64ToBytes(encoded);
@@ -560,7 +593,11 @@ async function downloadAndStoreMedia(input: {
     const values = (encoded as { data: unknown[] }).data;
     if (values.every((value) => typeof value === "number")) bytes = new Uint8Array(values as number[]);
   } else {
-    const url = result.data?.url ?? result.data?.mediaUrl ?? result.data?.fileURL;
+    const url = findDownloadValue(
+      result.data,
+      ["url", "mediaUrl", "fileURL"],
+      (value) => typeof value === "string" && /^https?:\/\//i.test(value),
+    );
     if (typeof url === "string" && url.startsWith("http")) {
       const response = await fetch(url);
       if (response.ok) {
@@ -569,7 +606,18 @@ async function downloadAndStoreMedia(input: {
       }
     }
   }
-  if (!bytes || bytes.byteLength === 0) return null;
+  if (!bytes || bytes.byteLength === 0) {
+    console.error("[whatsapp] resposta de mídia sem bytes utilizáveis", {
+      tipo: input.messageType,
+      campos: result.data && typeof result.data === "object" ? Object.keys(result.data) : [],
+    });
+    return null;
+  }
+
+  // Figurinhas do WhatsApp são WebP, inclusive quando animadas. Detectar pelos
+  // bytes evita salvá-las como JPG quando a resposta omite o Content-Type.
+  const { sniffMimeType } = await import("@/lib/whatsapp/media.server");
+  mimeType = sniffMimeType(bytes) ?? mimeType;
 
   const kind = (
     ["audio", "image", "video", "document"].includes(input.messageType)
