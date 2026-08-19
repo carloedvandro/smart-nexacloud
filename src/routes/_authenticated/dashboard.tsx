@@ -1,16 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import {
-  Bot,
-  Clock3,
-  MessagesSquare,
-  Repeat2,
-  TimerReset,
-  UserCheck,
-  Users,
-  Wifi,
-} from "lucide-react";
+import { MessagesSquare, Users } from "lucide-react";
 
 import { AppShell } from "@/components/nexa/app-shell";
 import { PlatformDashboard } from "@/components/nexa/platform-dashboard";
