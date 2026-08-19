@@ -310,12 +310,16 @@ export async function respondWithAI(input: {
   // Depois que a IA já transferiu esta conversa, novas mensagens do cliente
   // aguardam o humano. Isso evita que a IA retome o atendimento quando não há
   // consultor elegível no momento e a conversa permanece na fila.
-  const { count: completedHandoffs } = await supabaseAdmin
+  const { data: completedHandoffs } = await supabaseAdmin
     .from("ai_sessions")
-    .select("id", { count: "exact", head: true })
+    .select("handoff_reason")
     .eq("conversation_id", conversationId)
     .eq("status", "HANDOFF");
-  if ((completedHandoffs ?? 0) > 0) {
+  const hasIntentionalHandoff = (completedHandoffs ?? []).some((session) => {
+    const reason = session.handoff_reason?.toLowerCase() ?? "";
+    return !reason.includes("falha na geração") && !reason.includes("falha permanente da ia");
+  });
+  if (hasIntentionalHandoff) {
     log("skip: transferência humana já solicitada");
     return { status: "skipped", reason: "conversa com consultor" };
   }
