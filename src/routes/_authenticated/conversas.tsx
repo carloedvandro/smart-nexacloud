@@ -626,6 +626,12 @@ function ConversationThread({
         ) : (
           <div className="flex items-end gap-2">
             <MediaComposer disabled={busy} onFile={(file) => sendMedia.mutate(file)} />
+            <EmojiGifPicker
+              disabled={busy}
+              onEmoji={(emoji) => setDraft((current) => `${current}${emoji}`)}
+              resolveUrl={(path) => mediaUrls?.[path] ?? null}
+              onSendFavorite={(favorite) => void sendFavorite(favorite)}
+            />
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
