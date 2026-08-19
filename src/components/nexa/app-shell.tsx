@@ -26,6 +26,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { profile, isAdmin, roles, loading, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
