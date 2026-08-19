@@ -418,12 +418,21 @@ export async function processWebhookEvent(input: {
 
   // Áudio do lead: transcreve antes da IA responder, para que ela entenda.
   if (!result.duplicate && result.message_id && messageType === "audio" && mediaUrl) {
-    const { transcribeAudioMessage } = await import("@/lib/ai/transcribe.server");
-    await transcribeAudioMessage({
-      messageId: result.message_id,
-      mediaPath: mediaUrl,
-      mimeType,
-    });
+    try {
+      const { transcribeAudioMessage } = await import("@/lib/ai/transcribe.server");
+      await transcribeAudioMessage({
+        messageId: result.message_id,
+        mediaPath: mediaUrl,
+        mimeType,
+      });
+    } catch (error) {
+      // Uma indisponibilidade momentânea da transcrição não pode interromper
+      // todo o webhook nem impedir o encaminhamento/resposta subsequente.
+      console.error("[transcrição] falha não bloqueante", {
+        messageId: result.message_id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   // Resposta do lead à pergunta de avaliação (1 a 5 estrelas): registra a nota
@@ -565,10 +574,23 @@ async function downloadAndStoreMedia(input: {
     console.error("[whatsapp] mídia sem key no payload", JSON.stringify(input.body).slice(0, 800));
   }
 
+  // Algumas versões já entregam a mídia no webhook. Usá-la diretamente evita
+  // depender de um segundo request e elimina expiração do descritor criptográfico.
+  const inlineBase64 = deepString(input.body, /^(base64|mediaBase64|fileBase64)$/i);
+  const inlineUrl = deepString(input.body, /^(mediaUrl|fileURL|downloadUrl)$/i);
+  let directData: unknown = null;
+  if (inlineBase64) {
+    directData = { base64: inlineBase64 };
+  } else if (inlineUrl && /^https?:\/\//i.test(inlineUrl)) {
+    directData = { mediaUrl: inlineUrl };
+  }
+
   // Enviamos o payload completo. Em figurinhas, algumas versões da MEGA não
   // incluem stickerMessage dentro de `message`, mas ainda resolvem o arquivo
   // usando a key presente no evento.
-  const result = await MegaApiService.downloadMedia(creds, key ?? {}, input.body);
+  const result = directData
+    ? { ok: true as const, data: directData }
+    : await MegaApiService.downloadMedia(creds, key ?? {}, input.body);
   if (!result.ok) {
     console.error("[whatsapp] download de mídia falhou", {
       erro: result.error,
@@ -600,7 +622,7 @@ async function downloadAndStoreMedia(input: {
   };
   const encoded = findDownloadValue(
     result.data,
-    ["data", "base64", "buffer"],
+    ["base64", "mediaBase64", "fileBase64", "buffer", "data"],
     (value) =>
       (typeof value === "string" && Boolean(value.trim())) ||
       Array.isArray(value) ||
@@ -615,7 +637,11 @@ async function downloadAndStoreMedia(input: {
   let mimeType: string | null = typeof returnedMime === "string" ? returnedMime : null;
 
   if (typeof encoded === "string" && encoded.trim()) {
-    bytes = base64ToBytes(encoded);
+    try {
+      bytes = base64ToBytes(encoded);
+    } catch (error) {
+      console.error("[whatsapp] base64 de mídia inválido", error);
+    }
   } else if (Array.isArray(encoded) && encoded.every((value) => typeof value === "number")) {
     bytes = new Uint8Array(encoded);
   } else if (
@@ -633,7 +659,10 @@ async function downloadAndStoreMedia(input: {
       (value) => typeof value === "string" && /^https?:\/\//i.test(value),
     );
     if (typeof url === "string" && url.startsWith("http")) {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${creds.apiKey}` },
+        signal: AbortSignal.timeout(20_000),
+      });
       if (response.ok) {
         bytes = new Uint8Array(await response.arrayBuffer());
         mimeType = mimeType ?? response.headers.get("content-type");

@@ -83,7 +83,7 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
   return [
     `Você é ${settings.agentName}, atendente virtual de ${settings.companyName}, uma assessoria que ajuda pessoas a conseguirem o salário-maternidade (auxílio-maternidade).`,
     `CONTEXTO TEMPORAL: agora é ${dateTime} no horário de Brasília (São Paulo). A saudação correta neste momento é "${greeting}". Nunca use outra saudação de período do dia e nunca cite datas/horários diferentes deste.`,
-    "Fale português do Brasil, em tom humano, acolhedor e objetivo. Mensagens curtas (até 3 frases ou uma lista curta), estilo WhatsApp, sem markdown pesado.",
+    "Fale português do Brasil, em tom humano, acolhedor e objetivo. Responda com no máximo 240 caracteres e até 3 frases curtas, estilo WhatsApp, sem markdown pesado.",
     "ÁUDIO: você ouve e entende áudios do cliente (eles chegam transcritos, marcados como \"(áudio enviado pelo cliente)\") e você também responde em áudio automaticamente quando o cliente manda áudio. NUNCA diga que é uma inteligência artificial que não consegue ouvir ou enviar áudios, nem peça para o cliente escrever em texto. Apenas responda normalmente ao conteúdo do áudio.",
     "Se a mensagem do cliente for confusa, vazia ou só um sinal como \"?\", peça gentilmente que ele repita ou explique melhor a dúvida — nunca invente que houve um problema técnico.",
     "Objetivo: entender a situação da pessoa (se é MEI, autônoma, rural, desempregada, CLT, se o parto/adoção já aconteceu e quando), explicar o benefício e agendar o atendimento com um consultor humano.",
@@ -322,13 +322,19 @@ export async function respondWithAI(input: {
       const wantsVoice = ["audio", "ptt", "voice"].includes(
         String(lastCustomer.message_type ?? "").toLowerCase(),
       );
-      const voice = wantsVoice
-        ? await synthesizeReplyAudio({ companyId, connectionId, text })
-        : null;
-      const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
+      let voice: Awaited<ReturnType<typeof synthesizeReplyAudio>> = null;
+      let voiceUrl: string | null = null;
+      if (wantsVoice) {
+        try {
+          voice = await synthesizeReplyAudio({ companyId, connectionId, text });
+          voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
+        } catch (error) {
+          log("voz indisponível; resposta seguirá em texto", error);
+        }
+      }
       const useVoice = Boolean(voice && voiceUrl);
 
-      const { data: messageId } = await supabaseAdmin.rpc("create_outbound_message", {
+      const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc("create_outbound_message", {
         _conversation_id: conversationId,
         _company_id: companyId,
         _sender_id: null as unknown as string,
@@ -336,19 +342,30 @@ export async function respondWithAI(input: {
         _sender_name: "IA",
         _content: text,
         _message_type: useVoice ? "audio" : "text",
-        ...(useVoice ? { _media_url: voice!.path } : {}),
+        ...(useVoice && voice ? { _media_url: voice.path } : {}),
         _connection_id: connectionId,
       });
 
-      const sent = useVoice
+      if (createMessageError) {
+        log("falha ao registrar resposta; enviando texto de contingência", createMessageError.message);
+      }
+
+      let sent = useVoice && voice && voiceUrl
         ? await MegaApiService.sendMedia(creds, {
             to: recipient,
-            url: voiceUrl!,
+            url: voiceUrl,
             mediaType: "audio",
-            mimeType: voice!.mimeType,
+            mimeType: voice.mimeType,
             fileName: `resposta-${Date.now()}.mp3`,
           })
         : await MegaApiService.sendText(creds, recipient, text);
+
+      // A voz é uma melhoria, nunca um ponto único de falha: se a MEGA não
+      // aceitar o áudio, o cliente ainda recebe a mesma resposta em texto.
+      if (!sent.ok && useVoice) {
+        log("falha no envio da voz; tentando texto", sent.error);
+        sent = await MegaApiService.sendText(creds, recipient, text);
+      }
 
       if (messageId) {
         await supabaseAdmin.rpc("finalize_outbound_message", {
