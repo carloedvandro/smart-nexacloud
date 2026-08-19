@@ -4,7 +4,7 @@
  * do usuário, para reenviar com um clique sem depender do histórico.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Send, Smile, Star, Trash2 } from "lucide-react";
+import { Send, Smile, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
