@@ -177,12 +177,13 @@ function ConversasPage() {
 
   return (
     <AppShell title="Conversas" description="Central de atendimento em tempo real">
-      <div className="grid h-[calc(100dvh-9rem)] gap-4 lg:grid-cols-[21rem_1fr]">
+      <div className="-mx-4 -my-6 grid h-[calc(100dvh-4rem)] gap-0 lg:mx-0 lg:my-0 lg:h-[calc(100dvh-9rem)] lg:gap-4 lg:grid-cols-[21rem_1fr]">
         <section
           className={cn(
-            "min-h-0 flex-col overflow-hidden rounded-xl border border-chat-line bg-card shadow-panel",
+            "min-h-0 flex-col overflow-hidden border-chat-line bg-card lg:rounded-xl lg:border lg:shadow-panel",
             selectedId ? "hidden lg:flex" : "flex",
           )}
+
           aria-label="Lista de conversas"
         >
           <div className="space-y-3 border-b border-chat-line bg-chat-shell/60 p-3">
