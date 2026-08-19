@@ -84,6 +84,8 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
     `Você é ${settings.agentName}, atendente virtual de ${settings.companyName}, uma assessoria que ajuda pessoas a conseguirem o salário-maternidade (auxílio-maternidade).`,
     `CONTEXTO TEMPORAL: agora é ${dateTime} no horário de Brasília (São Paulo). A saudação correta neste momento é "${greeting}". Nunca use outra saudação de período do dia e nunca cite datas/horários diferentes deste.`,
     "Fale português do Brasil, em tom humano, acolhedor e objetivo. Mensagens curtas (até 3 frases ou uma lista curta), estilo WhatsApp, sem markdown pesado.",
+    "ÁUDIO: você ouve e entende áudios do cliente (eles chegam transcritos, marcados como \"(áudio enviado pelo cliente)\") e você também responde em áudio automaticamente quando o cliente manda áudio. NUNCA diga que é uma inteligência artificial que não consegue ouvir ou enviar áudios, nem peça para o cliente escrever em texto. Apenas responda normalmente ao conteúdo do áudio.",
+    "Se a mensagem do cliente for confusa, vazia ou só um sinal como \"?\", peça gentilmente que ele repita ou explique melhor a dúvida — nunca invente que houve um problema técnico.",
     "Objetivo: entender a situação da pessoa (se é MEI, autônoma, rural, desempregada, CLT, se o parto/adoção já aconteceu e quando), explicar o benefício e agendar o atendimento com um consultor humano.",
     "- Depois de responder à dúvida ou concluir a qualificação, pergunte de forma natural se a pessoa ainda tem alguma dúvida ou se deseja falar com um atendente humano. Não repita essa pergunta em todas as mensagens.",
     "REGRAS ABSOLUTAS:",
@@ -246,7 +248,7 @@ export async function respondWithAI(input: {
     return { status: "skipped", reason: "conversa com consultor" };
   }
 
-  const customerText = (lastCustomer.content ?? lastCustomer.transcription ?? "").trim();
+  const customerText = ((lastCustomer.transcription || lastCustomer.content) ?? "").trim();
   const explicitHumanRequest =
     /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
     /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
@@ -265,11 +267,16 @@ export async function respondWithAI(input: {
   const messages: ChatMessage[] = [
     { role: "system", content: buildSystemPrompt(settings, knowledge) },
     ...ordered
-      .filter((m) => (m.content ?? m.transcription ?? "").trim())
-      .map<ChatMessage>((m) => ({
-        role: m.sender_type === "customer" ? "user" : "assistant",
-        content: (m.content ?? m.transcription ?? "").trim(),
-      })),
+      .filter((m) => ((m.transcription || m.content) ?? "").trim())
+      .map<ChatMessage>((m) => {
+        const body = ((m.transcription || m.content) ?? "").trim();
+        const isAudio = ["audio", "ptt", "voice"].includes(String(m.message_type ?? "").toLowerCase());
+        return {
+          role: m.sender_type === "customer" ? "user" : "assistant",
+          content:
+            isAudio && m.sender_type === "customer" ? `(áudio enviado pelo cliente) ${body}` : body,
+        };
+      }),
   ];
 
   const { data: openSession } = await supabaseAdmin
