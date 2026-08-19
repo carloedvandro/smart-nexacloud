@@ -36,14 +36,21 @@ export async function loadTrunk(companyId: string): Promise<TrunkContext | null>
     : null;
 }
 
-export async function sendToConsultant(trunk: TrunkContext, phone: string, text: string) {
+export async function sendToConsultant(
+  trunk: TrunkContext,
+  phone: string,
+  text: string,
+  button?: { url: string; buttonText: string; footer?: string },
+) {
   const to = PhoneNormalizationService.normalize(phone);
   if (!to) return false;
   // Avisos de atribuição são mensagens ativas do sistema. Mesmo quando o
   // responsável utiliza o número atualmente conectado ao tronco, a tentativa
   // precisa chegar à MEGA: descartá-la aqui produzia um falso erro local e
   // impedia qualquer entrega. O webhook já trata ecos pelo ID da mensagem.
-  const sent = await MegaApiService.sendText(trunk.creds, to, text);
+  const sent = button
+    ? await MegaApiService.sendButtonMessage(trunk.creds, { to, text, ...button })
+    : await MegaApiService.sendText(trunk.creds, to, text);
   if (!sent.ok) console.error("[aviso] falha ao avisar consultor", sent.error);
   return sent.ok;
 }
@@ -266,14 +273,16 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       "",
       `⏱️ Você tem ${seconds || 60}s para assumir no painel, senão passa para o próximo.`,
       "",
-      `🖥️ Abra e responda pelo NexaAtende: ${getPublicBaseUrl()}/conversas?c=${attempt.conversation_id}`,
-      "",
       "⚠️ Não responda por aqui: o atendimento acontece somente no painel, e a resposta ao lead sai pelo número da empresa.",
     ]
       .filter((line) => line !== "")
       .join("\n");
 
-    const ok = await sendToConsultant(trunk, notificationPhone, text);
+    const ok = await sendToConsultant(trunk, notificationPhone, text, {
+      url: `${getPublicBaseUrl()}/conversas?c=${attempt.conversation_id}`,
+      buttonText: "💬 Abrir atendimento",
+      footer: "NexaAtende — Toque no botão para responder pelo painel",
+    });
     if (!ok) {
       await releaseNotificationClaim(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
     }
@@ -374,13 +383,24 @@ export async function handleConsultantInbound(input: {
     ? `${getPublicBaseUrl()}/conversas?c=${conversationId}`
     : `${getPublicBaseUrl()}/conversas`;
 
-  await sendToConsultant(
-    trunk,
-    input.phone,
-    conversationId
-      ? `🖥️ O atendimento é feito no painel do NexaAtende — mensagens enviadas por aqui não chegam ao lead.\n\n👉 ${link}`
-      : "ℹ️ Você não tem nenhum atendimento ativo no momento. Quando receber uma oferta, atenda pelo painel do NexaAtende.",
-  );
+  if (conversationId) {
+    await sendToConsultant(
+      trunk,
+      input.phone,
+      "🖥️ O atendimento é feito no painel do NexaAtende — mensagens enviadas por aqui não chegam ao lead.",
+      {
+        url: link,
+        buttonText: "💬 Abrir painel",
+        footer: "NexaAtende — Toque no botão para responder pelo painel",
+      },
+    );
+  } else {
+    await sendToConsultant(
+      trunk,
+      input.phone,
+      "ℹ️ Você não tem nenhum atendimento ativo no momento. Quando receber uma oferta, atenda pelo painel do NexaAtende.",
+    );
+  }
   return true;
 }
 

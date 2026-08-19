@@ -77,23 +77,23 @@ export async function notifyManualAssignment(input: {
         })
       : null;
     if (targetPhone) {
-      const sent = await sendToConsultant(
-        trunk,
-        targetPhone,
-        [
-          `🔔 Um lead foi atribuído a você, ${firstName(target?.full_name)}!`,
-          "",
-          `👤 Lead: ${leadLabel}`,
-          lead?.city ? `📍 ${lead.city}${lead.state ? `/${lead.state}` : ""}` : "",
-          `👤 Atribuído por: ${actorName}`,
-          "",
-          `🖥️ Entre no link para conversar com o lead: ${link}`,
-          "",
-          "⚠️ Não responda por aqui: o atendimento acontece somente no painel.",
-        ]
-          .filter((line) => line !== "")
-          .join("\n"),
-      );
+      const text = [
+        `🔔 Um lead foi atribuído a você, ${firstName(target?.full_name)}!`,
+        "",
+        `👤 Lead: ${leadLabel}`,
+        lead?.city ? `📍 ${lead.city}${lead.state ? `/${lead.state}` : ""}` : "",
+        `👤 Atribuído por: ${actorName}`,
+        "",
+        "⚠️ Não responda por aqui: o atendimento acontece somente no painel.",
+      ]
+        .filter((line) => line !== "")
+        .join("\n");
+
+      const sent = await sendToConsultant(trunk, targetPhone, text, {
+        url: link,
+        buttonText: "💬 Conversar com o lead",
+        footer: "NexaAtende — Toque no botão para abrir o atendimento no painel",
+      });
       if (!sent) {
         console.error("[atribuição] aviso ao novo responsável não foi entregue", {
           conversationId,
