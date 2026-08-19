@@ -155,117 +155,80 @@ export const MegaApiService = {
     const isAudio = input.mediaType === "audio";
     const audioMimeType = input.mimeType || "audio/ogg; codecs=opus";
     const isOggOpus = /audio\/(ogg|opus)/i.test(audioMimeType);
-    const primaryAudioType = isOggOpus ? "ptt" : "audio";
-    const fallbackAudioType = isOggOpus ? "audio" : "ptt";
-    const attempts: Array<{ path: string; body: Record<string, unknown> }> = [
-      // Contrato oficial da MEGA: áudio gravado é enviado pelo mediaUrl com
-      // type "ptt". Não existe endpoint /audioUrl nem campo booleano `ptt`.
-      ...(isAudio
-        ? [
-            {
-              path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
-              body: {
-                messageData: {
-                  to: input.to,
-                  url: input.url,
-                  type: primaryAudioType,
-                  mimeType: audioMimeType,
-                  fileName,
-                  caption,
-                },
+    // Áudio gravado: "ptt" só quando o arquivo é OGG/Opus (formato nativo do
+    // WhatsApp). MP3/M4A vão como "audio" — enviados como ptt eles chegam
+    // "quebrados" e não abrem no aparelho do cliente.
+    const audioType = isOggOpus ? "ptt" : "audio";
+    const attempts: Array<{ path: string; body: Record<string, unknown> }> = isAudio
+      ? [
+          {
+            path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
+            body: {
+              messageData: {
+                to: input.to,
+                url: input.url,
+                type: audioType,
+                mimeType: audioMimeType,
+                fileName,
+                caption,
               },
             },
-            // Compatibilidade: se a versão da instância não aceitar PTT,
-            // tenta entregar como arquivo de áudio compartilhado.
-            {
-              path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
-              body: {
-                messageData: {
-                  to: input.to,
-                  url: input.url,
-                  type: fallbackAudioType,
-                  mimeType: audioMimeType,
-                  fileName,
-                  caption,
-                },
+          },
+        ]
+      : [
+          {
+            path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
+            body: {
+              messageData: {
+                to: input.to,
+                url: input.url,
+                type: input.mediaType,
+                mimeType: input.mimeType ?? undefined,
+                fileName,
+                caption,
               },
             },
-          ]
-        : []),
-      {
-        path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
-        body: {
-          messageData: {
-            to: input.to,
-            url: input.url,
-            type: input.mediaType,
-            mimeType: input.mimeType ?? undefined,
-            fileName,
-            caption,
           },
-        },
-      },
-      {
-        path: `/rest/sendMessage/${creds.instanceKey}/${input.mediaType}`,
-        body: {
-          messageData: {
-            to: input.to,
-            url: input.url,
-            mimeType: input.mimeType ?? undefined,
-            fileName,
-            caption,
+          {
+            path: `/rest/sendMessage/${creds.instanceKey}/${input.mediaType}`,
+            body: {
+              messageData: {
+                to: input.to,
+                url: input.url,
+                mimeType: input.mimeType ?? undefined,
+                fileName,
+                caption,
+              },
+            },
           },
-        },
-      },
-      {
-        path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
-        body: {
-          messageData: { to: input.to, url: input.url, type: input.mediaType, caption },
-        },
-      },
-    ];
+        ];
 
     let last: MegaResult<{ key?: { id?: string }; messageId?: string }> = {
       ok: false,
       error: "Não foi possível enviar a mídia pela MEGA API.",
     };
-    // Algumas versões da MEGA aceitam a mídia e respondem 200 sem devolver o
-    // id da mensagem. Guardamos essa resposta como sucesso de reserva em vez
-    // de derrubar o envio inteiro.
-    let acceptedWithoutId: { path: string; data: { key?: { id?: string }; messageId?: string } } | null = null;
     for (const attempt of attempts) {
       const result = await request<{ key?: { id?: string }; messageId?: string }>(creds, attempt.path, {
         method: "POST",
         body: attempt.body,
       });
       if (result.ok) {
+        // Resposta 200 = a MEGA aceitou e vai entregar. Nunca tentamos outro
+        // endpoint depois disso, senão o cliente recebe o mesmo áudio várias vezes.
         const messageId = externalMessageId(result.data);
-        if (messageId) {
-          console.info("[mega] mídia aceita", { path: attempt.path, tipo: input.mediaType, messageId });
-          return { ok: true as const, data: { ...result.data, messageId } };
-        }
-        if (!acceptedWithoutId) {
-          acceptedWithoutId = { path: attempt.path, data: (result.data ?? {}) as { key?: { id?: string } } };
-        }
-        console.warn("[mega] mídia sem id na resposta", {
+        console.info("[mega] mídia aceita", {
           path: attempt.path,
           tipo: input.mediaType,
-          resposta: JSON.stringify(result.data ?? null).slice(0, 500),
+          messageId: messageId ?? "sem-id",
         });
-        continue;
+        return { ok: true as const, data: { ...(result.data ?? {}), ...(messageId ? { messageId } : {}) } };
       }
       last = result;
 
       if (result.status === 401 || result.status === 403) return result;
     }
-    if (acceptedWithoutId) {
-      console.info("[mega] mídia enviada sem id confirmado", {
-        path: acceptedWithoutId.path,
-        tipo: input.mediaType,
-      });
-      return { ok: true as const, data: acceptedWithoutId.data };
-    }
     return last;
+
   },
 
 
