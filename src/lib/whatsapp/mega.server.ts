@@ -178,11 +178,18 @@ export const MegaApiService = {
    * mensagem, outras apenas a chave), então tentamos as variações conhecidas.
    */
   async downloadMedia(creds: MegaCredentials, messageKey: unknown, messagePayload: unknown) {
+    type SerializedBuffer = { type?: string; data?: number[] };
     type DownloadResponse = {
       data?: string;
       base64?: string;
+      buffer?: string | SerializedBuffer | number[];
+      mediaUrl?: string;
+      fileURL?: string;
+      url?: string;
       mimetype?: string;
       mimeType?: string;
+      response?: unknown;
+      result?: unknown;
     };
 
     const stack: unknown[] = [messagePayload];
@@ -225,35 +232,61 @@ export const MegaApiService = {
       return { ok: false as const, error: `campos de mídia ausentes no webhook: ${missing.join(", ")}` };
     }
 
-    // A MEGA API aceita "sticker" em algumas versões e apenas "image" em outras.
-    const typeCandidates =
-      messageType === "sticker" ? (["sticker", "image"] as const) : ([messageType] as const);
+    const key = (messageKey ?? {}) as Record<string, unknown>;
+    const fullMessage = { key, message: messagePayload };
+    const mediaDescriptor = {
+      mediaKey: mediaNode["mediaKey"],
+      directPath: mediaNode["directPath"],
+      url: mediaNode["url"],
+      mimetype,
+      messageType: messageType === "sticker" ? "image" : messageType,
+    };
 
-    let result!: Awaited<ReturnType<typeof request<DownloadResponse>>>;
-    for (const candidate of typeCandidates) {
-      result = await request<DownloadResponse>(
-        creds,
-        `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
-        {
-          method: "POST",
-          body: {
-            messageKeys: {
-              mediaKey: mediaNode["mediaKey"],
-              directPath: mediaNode["directPath"],
-              url: mediaNode["url"],
-              mimetype,
-              messageType: candidate,
-            },
-          },
-        },
-      );
-      if (result.ok && typeof result.data?.data === "string" && result.data.data.trim()) break;
+    // O endpoint varia entre versões da MEGA. As versões atuais esperam a
+    // chave original do WhatsApp; instalações antigas aceitam a mensagem
+    // completa ou o descritor criptográfico da mídia.
+    const bodies: unknown[] = [
+      { messageKeys: mediaDescriptor, type: "base64" },
+      { messageKeys: key, type: "base64" },
+      { messageKeys: fullMessage, type: "base64" },
+      { messageKeys: key, type: "buffer" },
+      { messageKeys: fullMessage, type: "buffer" },
+    ];
+    const paths = [
+      `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
+      `/rest/instance/downloadMedia/${creds.instanceKey}`,
+      `/rest/message/downloadMedia/${creds.instanceKey}`,
+    ];
+
+    let last: MegaResult<DownloadResponse> = { ok: false, error: "MEGA API respondeu sem a mídia" };
+    for (const path of paths) {
+      for (const body of bodies) {
+        const result = await request<DownloadResponse>(creds, path, { method: "POST", body });
+        if (!result.ok) {
+          last = result;
+          if (result.status === 401 || result.status === 403) return result;
+          if (result.status === 404) break;
+          continue;
+        }
+
+        const raw = result.data ?? {};
+        const nested =
+          raw.response && typeof raw.response === "object"
+            ? (raw.response as DownloadResponse)
+            : raw.result && typeof raw.result === "object"
+              ? (raw.result as DownloadResponse)
+              : null;
+        const data = nested ? { ...raw, ...nested } : raw;
+        const hasMedia =
+          Boolean(data.data ?? data.base64 ?? data.buffer) ||
+          [data.url, data.mediaUrl, data.fileURL].some(
+            (value) => typeof value === "string" && value.startsWith("http"),
+          );
+        if (hasMedia) return { ok: true as const, data };
+        last = { ok: false, error: "MEGA API respondeu sem a mídia" };
+      }
     }
-    if (!result.ok) return result;
-    if (typeof result.data?.data !== "string" || !result.data.data.trim()) {
-      return { ok: false as const, error: "MEGA API respondeu sem a mídia em base64" };
-    }
-    return result;
+    return last;
   },
 
 
