@@ -246,11 +246,11 @@ export const MegaApiService = {
     // chave original do WhatsApp; instalações antigas aceitam a mensagem
     // completa ou o descritor criptográfico da mídia.
     const bodies: unknown[] = [
+      { messageKeys: mediaDescriptor, type: "base64" },
       { messageKeys: key, type: "base64" },
       { messageKeys: fullMessage, type: "base64" },
       { messageKeys: key, type: "buffer" },
       { messageKeys: fullMessage, type: "buffer" },
-      { messageKeys: mediaDescriptor, type: "base64" },
     ];
     const paths = [
       `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
