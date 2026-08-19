@@ -169,6 +169,15 @@ export function AppShell({
           </div>
           <div className="flex items-center gap-2">
             {actions}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
+              title={theme === "dark" ? "Modo claro" : "Modo escuro"}
+            >
+              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </Button>
             <Badge variant="secondary" className="hidden sm:inline-flex">
               Tempo real ativo
             </Badge>
