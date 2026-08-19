@@ -148,11 +148,17 @@ export function bytesToBase64(bytes: Uint8Array): string {
  * devolvendo o novo caminho (ou o mesmo, quando nada precisa mudar).
  */
 export async function repairMediaContentType(path: string): Promise<string> {
-  if (!/\.(bin|dat)$/i.test(path)) return path;
+  // .jpg entra na lista porque figurinhas/GIFs (webp) eram salvos com essa
+  // extensão padrão quando a MEGA não informava o mimetype.
+  if (!/\.(bin|dat|jpg|jpeg)$/i.test(path)) return path;
   const file = await downloadStoredMedia(path);
   if (!file) return path;
   const detected = sniffMimeType(file.bytes);
   if (!detected) return path;
+  const currentExtension = (path.split(".").pop() ?? "").toLowerCase();
+  const jpegOk = detected === "image/jpeg" && (currentExtension === "jpg" || currentExtension === "jpeg");
+  if (jpegOk && !isGeneric(file.mimeType)) return path;
+
 
   const kind: MediaKind = detected.startsWith("image/")
     ? "image"
