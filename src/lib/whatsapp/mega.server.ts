@@ -70,6 +70,7 @@ async function request<T>(
         Authorization: `Bearer ${creds.apiKey}`,
       },
       ...(init?.body ? { body: JSON.stringify(init.body) } : {}),
+      signal: AbortSignal.timeout(15_000),
     });
 
     const text = await response.text();
@@ -371,11 +372,22 @@ export const MegaApiService = {
     // chave original do WhatsApp; instalações antigas aceitam a mensagem
     // completa ou o descritor criptográfico da mídia.
     const bodies: unknown[] = [
-      // Formato oficial: descritor plano com os cinco campos obrigatórios.
-      ...(mediaDescriptor ? [{ messageKeys: mediaDescriptor }] : []),
+      // A MEGA possui versões que esperam o descritor diretamente e outras
+      // que o esperam dentro de messageKeys/messageData.
+      ...(mediaDescriptor
+        ? [
+            mediaDescriptor,
+            { messageKeys: mediaDescriptor },
+            { messageData: mediaDescriptor },
+            { messageKeys: mediaDescriptor, type: "base64" },
+          ]
+        : []),
       // Compatibilidade com instalações antigas da MEGA.
       { messageKeys: key, type: "base64" },
+      { messageKey: key, type: "base64" },
+      { key, type: "base64" },
       { messageKeys: fullMessage, type: "base64" },
+      { message: fullMessage, type: "base64" },
       { messageKeys: key, type: "buffer" },
       { messageKeys: fullMessage, type: "buffer" },
     ];
