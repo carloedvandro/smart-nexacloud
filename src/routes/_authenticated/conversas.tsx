@@ -47,7 +47,9 @@ import {
 import {
   assignConversation,
   listConsultants,
+  getConversationRating,
   listAbandonedConversations,
+
   listConversations,
 
   listMessages,
