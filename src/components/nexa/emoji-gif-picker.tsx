@@ -27,12 +27,7 @@ export type FavoriteMedia = {
 };
 
 
-export const EMOJIS = [
-  "😀","😃","😄","😁","😆","😅","😂","🤣","🙂","😉","😊","😍","😘","😗","🤩","🤔",
-  "🤗","🤝","👍","👎","👏","🙌","🙏","💪","👌","✌️","🫡","👋","🎉","✅","❌","⚠️",
-  "🔥","⭐","💡","📌","📎","📄","📞","📲","💬","🕐","⏳","💰","💳","🏦","📈","🚀",
-  "❤️","🧡","💛","💚","💙","💜","😢","😭","😅","😴","🤒","🤝","🙋","👨‍💼","👩‍💼","🎯",
-];
+export { EMOJIS, EMOJI_CATEGORIES } from "./emoji-data";
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
