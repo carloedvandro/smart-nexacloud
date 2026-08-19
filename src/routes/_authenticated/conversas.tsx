@@ -437,7 +437,7 @@ function ConversationThread({
   const busy = send.isPending || sendMedia.isPending;
 
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-chat-line bg-card shadow-panel">
+    <section className="flex min-h-0 flex-col overflow-hidden border-chat-line bg-card lg:rounded-xl lg:border lg:shadow-panel">
       {/* Cabeçalho */}
       <header className="flex items-center gap-2 border-b border-chat-line bg-card px-3 py-2.5">
         <Button
