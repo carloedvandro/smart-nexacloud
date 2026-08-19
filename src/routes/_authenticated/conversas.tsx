@@ -7,6 +7,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  Copy,
   Download,
   FileText,
   Info,
