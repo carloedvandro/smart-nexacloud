@@ -11,7 +11,7 @@ import { MegaApiService, extractConnectedPhone } from "@/lib/whatsapp/mega.serve
 import type { MediaKind } from "@/lib/whatsapp/media.server";
 
 type Json = Record<string, unknown>;
-type MessageType = "text" | "audio" | "image" | "document" | "video" | "system" | "other";
+type MessageType = "text" | "audio" | "image" | "sticker" | "document" | "video" | "system" | "other";
 
 /** Inclui a chave apenas quando há valor (exactOptionalPropertyTypes). */
 function opt<K extends string, T>(key: K, value: T | null | undefined) {
@@ -124,7 +124,8 @@ export function extractRealPhone(payload: unknown): string | null {
 export function detectMessageType(payload: unknown): MessageType {
   // 1) pela presença do nó da mídia, em qualquer nível
   if (deepFind(payload, /audioMessage|pttMessage/i) !== undefined) return "audio";
-  if (deepFind(payload, /imageMessage|stickerMessage/i) !== undefined) return "image";
+  if (deepFind(payload, /stickerMessage/i) !== undefined) return "sticker";
+  if (deepFind(payload, /imageMessage/i) !== undefined) return "image";
   if (deepFind(payload, /videoMessage|gifMessage/i) !== undefined) return "video";
   if (deepFind(payload, /documentMessage/i) !== undefined) return "document";
 
@@ -142,7 +143,8 @@ export function detectMessageType(payload: unknown): MessageType {
     deepString(payload, /^(messageType|message_type|mediaType|media_type)$/i) ?? ""
   ).toLowerCase();
   if (/audio|ptt|voice/.test(declared)) return "audio";
-  if (/image|sticker|photo/.test(declared)) return "image";
+  if (/sticker/.test(declared)) return "sticker";
+  if (/image|photo/.test(declared)) return "image";
   if (/video/.test(declared)) return "video";
   if (/document|file/.test(declared)) return "document";
 
@@ -393,6 +395,19 @@ export async function processWebhookEvent(input: {
       .is("phone", null);
   }
 
+  // Figurinha: guardamos (somente no servidor) a chave e o conteúdo original
+  // da mensagem. Só com eles é possível reencaminhar a figurinha nativamente,
+  // preservando animação e transparência no WhatsApp de quem recebe.
+  if (!result.duplicate && result.message_id && messageType === "sticker") {
+    await persistStickerProviderPayload({
+      messageId: result.message_id,
+      companyId,
+      body,
+    });
+  }
+
+
+
 
   console.info("[whatsapp] mensagem processada", {
     evento: eventType,
@@ -620,9 +635,11 @@ async function downloadAndStoreMedia(input: {
   mimeType = sniffMimeType(bytes) ?? mimeType;
 
   const kind = (
-    ["audio", "image", "video", "document"].includes(input.messageType)
-      ? input.messageType
-      : "other"
+    input.messageType === "sticker"
+      ? "image"
+      : ["audio", "image", "video", "document"].includes(input.messageType)
+        ? input.messageType
+        : "other"
   ) as MediaKind;
 
   const path = await storeMedia({
@@ -633,4 +650,37 @@ async function downloadAndStoreMedia(input: {
     kind,
   });
   return path ? { path, mimeType } : null;
+}
+
+/**
+ * Guarda os dados originais da figurinha (chave + objeto `message` do webhook).
+ * Ficam em tabela sem políticas de acesso: só o servidor lê, para reencaminhar
+ * a figurinha nativamente pela MEGA API.
+ */
+async function persistStickerProviderPayload(input: {
+  messageId: string;
+  companyId: string;
+  body: Json;
+}) {
+  const key = findMessageKey(input.body);
+  const messageNode = findMessageNode(input.body);
+  if (!key || !messageNode || typeof messageNode !== "object") {
+    console.warn("[whatsapp] figurinha sem dados originais para reenvio");
+    return;
+  }
+  const sticker = (messageNode as Json)["stickerMessage"];
+  const isAnimated = Boolean(
+    sticker && typeof sticker === "object" && (sticker as Json)["isAnimated"],
+  );
+  const { error } = await supabaseAdmin.from("message_provider_payloads").upsert(
+    {
+      message_id: input.messageId,
+      company_id: input.companyId,
+      provider_key: key as never,
+      provider_message: messageNode as never,
+      is_animated: isAnimated,
+    },
+    { onConflict: "message_id" },
+  );
+  if (error) console.error("[whatsapp] falha ao guardar dados da figurinha", error.message);
 }

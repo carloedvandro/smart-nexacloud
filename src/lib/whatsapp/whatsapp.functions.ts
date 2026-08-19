@@ -315,6 +315,45 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
   });
 
 /** Envia áudio/imagem/vídeo/documento para o lead pelo WhatsApp. */
+/** Reenvia uma figurinha recebida (favorita) encaminhando a mensagem original. */
+export const forwardStickerFavorite = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { conversationId: string; sourceMessageId: string }) => {
+    if (!data.conversationId) throw new Error("Conversa inválida.");
+    if (!data.sourceMessageId) {
+      throw new Error(
+        "Esta figurinha não possui os dados originais necessários para envio nativo. Salve-a novamente ao recebê-la pelo WhatsApp.",
+      );
+    }
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const { data: profile } = await context.supabase
+      .from("profiles")
+      .select("company_id, full_name, email")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!profile?.company_id) throw new Error("Usuário sem empresa.");
+
+    const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
+
+    const { checkConversationAccess } = await import("@/lib/queue/access.server");
+    const access = await checkConversationAccess(context.supabase, context.userId, data.conversationId);
+    if (!access.allowed) throw new Error(access.message ?? "Atendimento indisponível.");
+
+    const { forwardStickerMessage } = await import("@/lib/whatsapp/actions.server");
+    const result = await forwardStickerMessage({
+      companyId: profile.company_id,
+      conversationId: data.conversationId,
+      userId: context.userId,
+      senderName: profile.full_name ?? profile.email ?? null,
+      senderType: isAdmin ? "admin" : "consultant",
+      sourceMessageId: data.sourceMessageId,
+    });
+    if (!result.ok) throw new Error(result.error);
+    return { messageId: result.messageId };
+  });
+
 export const sendWhatsAppMediaMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(

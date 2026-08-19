@@ -859,6 +859,48 @@ export type Database = {
           },
         ]
       }
+      message_provider_payloads: {
+        Row: {
+          company_id: string
+          created_at: string
+          is_animated: boolean
+          message_id: string
+          provider_key: Json
+          provider_message: Json
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          is_animated?: boolean
+          message_id: string
+          provider_key: Json
+          provider_message: Json
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          is_animated?: boolean
+          message_id?: string
+          provider_key?: Json
+          provider_message?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_provider_payloads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_provider_payloads_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: true
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           company_id: string
@@ -1836,6 +1878,7 @@ export type Database = {
         | "video"
         | "system"
         | "other"
+        | "sticker"
       sender_type: "customer" | "ai" | "consultant" | "admin" | "system"
       transcription_status:
         | "NONE"
@@ -2045,6 +2088,7 @@ export const Constants = {
         "video",
         "system",
         "other",
+        "sticker",
       ],
       sender_type: ["customer", "ai", "consultant", "admin", "system"],
       transcription_status: [

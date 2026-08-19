@@ -95,6 +95,25 @@ export const MegaApiService = {
     );
   },
 
+  /**
+   * Encaminha uma mensagem recebida preservando o formato nativo.
+   * É o único caminho correto para reenviar figurinhas (stickerMessage):
+   * mantém WebP animado, transparência e o comportamento de figurinha.
+   */
+  forwardMessage(
+    creds: MegaCredentials,
+    input: { to: string; key: unknown; message: unknown },
+  ) {
+    return request<{ key?: { id?: string }; messageId?: string }>(
+      creds,
+      `/rest/sendMessage/${creds.instanceKey}/forwardMessage`,
+      {
+        method: "POST",
+        body: { messageData: { to: input.to, key: input.key, message: input.message } },
+      },
+    );
+  },
+
   /** Envio de imagem com legenda — endpoint confirmado na integração de referência. */
   sendImage(creds: MegaCredentials, to: string, url: string, caption?: string) {
     return request<{ key?: { id?: string } }>(

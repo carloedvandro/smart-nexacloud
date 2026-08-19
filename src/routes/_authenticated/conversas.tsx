@@ -58,6 +58,7 @@ import {
 import {
   getConversationMediaUrls,
   sendWhatsAppMediaMessage,
+  forwardStickerFavorite,
 } from "@/lib/whatsapp/whatsapp.functions";
 import { getConversationAccess } from "@/lib/queue/access.functions";
 import {
@@ -390,9 +391,29 @@ function ConversationThread({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const forwardSticker = useServerFn(forwardStickerFavorite);
+  const forward = useMutation({
+    mutationFn: (sourceMessageId: string) =>
+      forwardSticker({ data: { conversationId: conversation.id, sourceMessageId } }),
+    onSuccess: () => refresh(),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   /** Reenvia uma figurinha/GIF/imagem guardada nos favoritos. */
   const sendFavorite = useCallback(
     async (favorite: FavoriteMedia) => {
+      // Figurinha só chega como figurinha (animada e com transparência) se a
+      // mensagem original for encaminhada pelo WhatsApp — nunca como imagem.
+      if (favorite.type === "sticker") {
+        if (!favorite.messageId) {
+          toast.error(
+            "Esta figurinha não possui os dados originais necessários para envio nativo. Salve-a novamente ao recebê-la pelo WhatsApp.",
+          );
+          return;
+        }
+        forward.mutate(favorite.messageId);
+        return;
+      }
       const url = mediaUrls?.[favorite.path];
       if (!url) {
         toast.error("Não consegui carregar este favorito.");
@@ -406,7 +427,7 @@ function ConversationThread({
         toast.error("Não consegui enviar este favorito.");
       }
     },
-    [mediaUrls, sendMedia],
+    [mediaUrls, sendMedia, forward],
   );
 
   // Rola para a última mensagem apenas quem já estava no fim da conversa.
@@ -593,7 +614,7 @@ function ConversationThread({
               isFavorite={m.media_url ? isFavorite(m.media_url) : false}
               onToggleFavorite={() =>
                 m.media_url &&
-                toggleFavorite({ path: m.media_url, type: m.message_type, label: m.content })
+                toggleFavorite({ path: m.media_url, type: m.message_type, label: m.content, messageId: m.id })
               }
             />
           ))
@@ -901,6 +922,8 @@ function MessageBubble({
                 ? "🖼️ Imagem (não foi possível baixar a mídia)"
                 : message.message_type === "video"
                   ? "🎬 Vídeo (não foi possível baixar a mídia)"
+                  : message.message_type === "sticker"
+                    ? "🧩 Figurinha (não foi possível baixar a mídia)"
                   : message.message_type === "document"
                     ? "📄 Documento (não foi possível baixar a mídia)"
                     : "(sem conteúdo)"}
@@ -927,6 +950,16 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
   }
   if (type === "audio") {
     return <audio controls src={url} className="mb-1 w-60 max-w-full sm:w-64" />;
+  }
+  if (type === "sticker") {
+    return (
+      <img
+        src={url}
+        alt="Figurinha enviada na conversa"
+        loading="lazy"
+        className="mb-1 max-h-40 w-40 object-contain"
+      />
+    );
   }
   if (type === "image") {
     return (
