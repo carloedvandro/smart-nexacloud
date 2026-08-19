@@ -158,6 +158,7 @@ export function EmojiGifPicker({
   const [open, setOpen] = useState(false);
   const [recent, saveRecent] = useStoredList<string>(EMOJI_KEY);
   const { favorites, remove } = useMediaFavorites();
+  const [confirmFavorite, setConfirmFavorite] = useState<FavoriteMedia | null>(null);
 
   function pickEmoji(emoji: string) {
     onEmoji(emoji);
