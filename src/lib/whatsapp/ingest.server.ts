@@ -11,7 +11,7 @@ import { MegaApiService, extractConnectedPhone } from "@/lib/whatsapp/mega.serve
 import type { MediaKind } from "@/lib/whatsapp/media.server";
 
 type Json = Record<string, unknown>;
-type MessageType = "text" | "audio" | "image" | "document" | "video" | "system" | "other";
+type MessageType = "text" | "audio" | "image" | "sticker" | "document" | "video" | "system" | "other";
 
 /** Inclui a chave apenas quando há valor (exactOptionalPropertyTypes). */
 function opt<K extends string, T>(key: K, value: T | null | undefined) {
@@ -124,7 +124,8 @@ export function extractRealPhone(payload: unknown): string | null {
 export function detectMessageType(payload: unknown): MessageType {
   // 1) pela presença do nó da mídia, em qualquer nível
   if (deepFind(payload, /audioMessage|pttMessage/i) !== undefined) return "audio";
-  if (deepFind(payload, /imageMessage|stickerMessage/i) !== undefined) return "image";
+  if (deepFind(payload, /stickerMessage/i) !== undefined) return "sticker";
+  if (deepFind(payload, /imageMessage/i) !== undefined) return "image";
   if (deepFind(payload, /videoMessage|gifMessage/i) !== undefined) return "video";
   if (deepFind(payload, /documentMessage/i) !== undefined) return "document";
 
@@ -142,7 +143,8 @@ export function detectMessageType(payload: unknown): MessageType {
     deepString(payload, /^(messageType|message_type|mediaType|media_type)$/i) ?? ""
   ).toLowerCase();
   if (/audio|ptt|voice/.test(declared)) return "audio";
-  if (/image|sticker|photo/.test(declared)) return "image";
+  if (/sticker/.test(declared)) return "sticker";
+  if (/image|photo/.test(declared)) return "image";
   if (/video/.test(declared)) return "video";
   if (/document|file/.test(declared)) return "document";
 
@@ -620,9 +622,11 @@ async function downloadAndStoreMedia(input: {
   mimeType = sniffMimeType(bytes) ?? mimeType;
 
   const kind = (
-    ["audio", "image", "video", "document"].includes(input.messageType)
-      ? input.messageType
-      : "other"
+    input.messageType === "sticker"
+      ? "image"
+      : ["audio", "image", "video", "document"].includes(input.messageType)
+        ? input.messageType
+        : "other"
   ) as MediaKind;
 
   const path = await storeMedia({
