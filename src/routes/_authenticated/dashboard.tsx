@@ -139,11 +139,6 @@ function DashboardPage() {
   const cards = [
     { label: "Leads hoje", value: data?.leadsToday, icon: Users },
     { label: "Conversas abertas", value: data?.openConversations, icon: MessagesSquare },
-    { label: "IA atendendo", value: data?.aiActive, icon: Bot },
-    { label: "Aguardando consultor", value: data?.waitingHuman, icon: Clock3 },
-    { label: "Consultores online", value: data?.onlineConsultants, icon: UserCheck },
-    { label: "Transferências hoje", value: data?.transfers, icon: Repeat2 },
-    { label: "Timeouts hoje", value: data?.timeouts, icon: TimerReset },
   ];
 
   if (isPlatformAdmin) {
