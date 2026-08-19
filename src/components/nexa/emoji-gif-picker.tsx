@@ -166,6 +166,7 @@ export function EmojiGifPicker({
   }
 
   return (
+    <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
