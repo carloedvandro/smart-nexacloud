@@ -12,20 +12,6 @@ export type CompanyLicense = {
   pendingInvites: number;
 };
 
-function parse(raw: unknown): CompanyLicense | null {
-  const value = raw as Record<string, unknown> | null;
-  if (!value?.["company_id"]) return null;
-  return {
-    companyId: String(value["company_id"]),
-    maxInternalUsers: Number(value["max_internal_users"] ?? 8),
-    maxConsultants: Number(value["max_consultants"] ?? 7),
-    users: Number(value["users"] ?? 0),
-    consultants: Number(value["consultants"] ?? 0),
-    admins: Number(value["admins"] ?? 0),
-    pendingInvites: Number(value["pending_invites"] ?? 0),
-  };
-}
-
 /** Uso da licença da empresa — leitura para administradores da empresa e da plataforma. */
 export const getCompanyLicense = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -35,7 +21,17 @@ export const getCompanyLicense = createServerFn({ method: "GET" })
       ...(data.companyId ? { _company: data.companyId } : {}),
     });
     if (error) throw new Error(error.message);
-    return parse(raw);
+    const value = raw as Record<string, unknown> | null;
+    if (!value?.["company_id"]) return null;
+    return {
+      companyId: String(value["company_id"]),
+      maxInternalUsers: Number(value["max_internal_users"] ?? 8),
+      maxConsultants: Number(value["max_consultants"] ?? 7),
+      users: Number(value["users"] ?? 0),
+      consultants: Number(value["consultants"] ?? 0),
+      admins: Number(value["admins"] ?? 0),
+      pendingInvites: Number(value["pending_invites"] ?? 0),
+    };
   });
 
 /** Ajusta os limites contratados de uma empresa — somente administrador da plataforma. */
