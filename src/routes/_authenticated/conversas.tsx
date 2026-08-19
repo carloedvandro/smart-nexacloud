@@ -548,13 +548,17 @@ function ConversationThread({
 
       const { data, error } = await supabase
         .from("assignment_attempts")
-        .select("id")
-        .eq("conversation_id", conversation.id)
-        .eq("consultant_id", currentUserId)
-        .eq("status", "WAITING")
-        .limit(1);
+        .select("consultant_id, status")
+        .eq("conversation_id", conversation.id);
       if (error) throw new Error(error.message);
-      const allowed = Boolean(data?.length);
+      const rows = data ?? [];
+      const mineWaiting = rows.some(
+        (a) => a.status === "WAITING" && a.consultant_id === currentUserId,
+      );
+      // Lead abandonado: rodízio encerrado sem ninguém aceitar — livre para todos.
+      const abandoned = rows.length > 0 && !rows.some((a) => a.status === "WAITING");
+      const allowed = mineWaiting || abandoned;
+
       return {
         allowed,
         reason: allowed ? ("OK" as const) : ("EXPIRED" as const),
