@@ -248,6 +248,26 @@ export async function processWebhookEvent(input: {
       if (updated) return { status: "processed", reason: "status da própria mensagem" };
     }
 
+    // A confirmação pode chegar antes de gravarmos o id externo da mensagem
+    // que o próprio painel/IA acabou de enviar. Nesse caso, casamos pelo
+    // conteúdo recente e apenas anexamos o id — nunca criamos um segundo balão.
+    const pending = await matchRecentOutbound({
+      companyId,
+      identifier: parsed.identifier,
+      messageType,
+      content,
+    });
+    if (pending) {
+      await supabaseAdmin
+        .from("messages")
+        .update({
+          delivery_status: "SENT",
+          ...(externalId ? { external_message_id: externalId } : {}),
+        })
+        .eq("id", pending);
+      return { status: "duplicate", reason: "eco da mensagem enviada pelo sistema" };
+    }
+
     let echoMedia: { path: string; mimeType: string | null } | null = null;
     if (messageType !== "text") {
       echoMedia = await downloadAndStoreMedia({ connectionId, companyId, body, messageType });
