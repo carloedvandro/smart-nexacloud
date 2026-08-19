@@ -229,48 +229,24 @@ export function EmojiGifPicker({
                 {favorites.map((item) => {
                   const url = resolveUrl(item.path);
                   return (
-                    <div key={item.path} className="group relative">
-                      <button
-                        type="button"
-                        className={cn(
-                          "aspect-square w-full overflow-hidden rounded-lg border bg-muted",
-                          "transition hover:ring-2 hover:ring-chat-brand",
-                        )}
-                        aria-label="Enviar favorito"
-                        onClick={() => {
-                          onSendFavorite(item);
-                          setOpen(false);
-                        }}
-                      >
-                        {url ? (
-                          <img src={url} alt="" className="size-full object-cover" loading="lazy" />
-                        ) : (
-                          <span className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
-                            prévia indisponível
-                          </span>
-                        )}
-                      </button>
-                      <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition group-hover:opacity-100">
-                        {url ? (
-                          <button
-                            type="button"
-                            aria-label="Copiar favorito"
-                            className="rounded-md bg-background/90 p-1 shadow"
-                            onClick={() => void copyMedia(url)}
-                          >
-                            <Copy className="size-3.5" />
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          aria-label="Remover dos favoritos"
-                          className="rounded-md bg-background/90 p-1 shadow"
-                          onClick={() => remove(item.path)}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      key={item.path}
+                      type="button"
+                      className={cn(
+                        "aspect-square w-full overflow-hidden rounded-lg border bg-muted",
+                        "transition hover:ring-2 hover:ring-chat-brand",
+                      )}
+                      aria-label="Abrir figurinha favorita"
+                      onClick={() => setConfirmFavorite(item)}
+                    >
+                      {url ? (
+                        <img src={url} alt="" className="size-full object-cover" loading="lazy" />
+                      ) : (
+                        <span className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
+                          prévia indisponível
+                        </span>
+                      )}
+                    </button>
                   );
                 })}
               </div>
@@ -279,6 +255,70 @@ export function EmojiGifPicker({
         </Tabs>
       </PopoverContent>
     </Popover>
+
+    <Dialog
+      open={!!confirmFavorite}
+      onOpenChange={(next) => {
+        if (!next) setConfirmFavorite(null);
+      }}
+    >
+      <DialogContent className="max-w-xs">
+        <DialogHeader>
+          <DialogTitle>Favorito</DialogTitle>
+          <DialogDescription>
+            Confirme o que deseja fazer com este favorito.
+          </DialogDescription>
+        </DialogHeader>
+        {confirmFavorite ? (
+          <div className="flex justify-center">
+            {(() => {
+              const url = resolveUrl(confirmFavorite.path);
+              return url ? (
+                <img
+                  src={url}
+                  alt="Prévia do favorito"
+                  className="max-h-48 w-auto rounded-lg border object-contain"
+                />
+              ) : (
+                <span className="flex h-32 items-center text-xs text-muted-foreground">
+                  prévia indisponível
+                </span>
+              );
+            })()}
+          </div>
+        ) : null}
+        <DialogFooter className="flex-row gap-2 sm:justify-center">
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => {
+              if (confirmFavorite) {
+                remove(confirmFavorite.path);
+                toast.success("Favorito removido.");
+                setConfirmFavorite(null);
+              }
+            }}
+          >
+            <Trash2 className="mr-1.5 size-4" />
+            Deletar
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              if (confirmFavorite) {
+                onSendFavorite(confirmFavorite);
+                setConfirmFavorite(null);
+                setOpen(false);
+              }
+            }}
+          >
+            <Send className="mr-1.5 size-4" />
+            Enviar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
