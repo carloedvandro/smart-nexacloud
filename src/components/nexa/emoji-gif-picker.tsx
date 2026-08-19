@@ -27,7 +27,9 @@ export type FavoriteMedia = {
 };
 
 
-export { EMOJIS, EMOJI_CATEGORIES } from "./emoji-data";
+import { EMOJIS, EMOJI_CATEGORIES } from "./emoji-data";
+
+export { EMOJIS, EMOJI_CATEGORIES };
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
