@@ -90,8 +90,8 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Configurações",
     to: "/configuracoes",
     icon: Settings,
-    roles: ["ADMIN"],
-    description: "Empresa, horários e LGPD",
+    roles: ["ADMIN", "CONSULTANT"],
+    description: "Perfil, segurança e preferências",
   },
   {
     label: "Plataforma",

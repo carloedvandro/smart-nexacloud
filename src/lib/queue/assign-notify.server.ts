@@ -4,7 +4,11 @@
  * sai das mãos do consultor.
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { loadTrunk, sendToConsultant } from "@/lib/queue/bridge.server";
+import {
+  loadTrunk,
+  resolveConsultantNotificationPhone,
+  sendToConsultant,
+} from "@/lib/queue/bridge.server";
 import { getPublicBaseUrl } from "@/lib/nexa/public-url";
 
 type Profile = { id: string; full_name: string | null; phone: string | null };
@@ -65,12 +69,19 @@ export async function notifyManualAssignment(input: {
   // ignorado por `newUserId !== actorId`, deixando o consultor sem mensagem.
   if (newUserId) {
     const target = await loadProfile(newUserId);
-    if (target?.phone) {
+    const targetPhone = target
+      ? await resolveConsultantNotificationPhone({
+          companyId,
+          consultantId: newUserId,
+          profilePhone: target.phone,
+        })
+      : null;
+    if (targetPhone) {
       const sent = await sendToConsultant(
         trunk,
-        target.phone,
+        targetPhone,
         [
-          `🔔 Um lead foi atribuído a você, ${firstName(target.full_name)}!`,
+          `🔔 Um lead foi atribuído a você, ${firstName(target?.full_name)}!`,
           "",
           `👤 Lead: ${leadLabel}`,
           lead?.city ? `📍 ${lead.city}${lead.state ? `/${lead.state}` : ""}` : "",
@@ -94,21 +105,29 @@ export async function notifyManualAssignment(input: {
       }
     } else {
       console.error("[atribuição] consultor sem WhatsApp pessoal", newUserId);
-      reason = "O responsável não possui WhatsApp pessoal cadastrado em Configurações › Perfil.";
+      reason =
+        "O responsável não possui WhatsApp no perfil nem uma instância pessoal vinculada.";
     }
   }
 
   // 2) Consultor que perdeu o atendimento.
   if (previousUserId && previousUserId !== newUserId && previousUserId !== actorId) {
     const previous = await loadProfile(previousUserId);
-    if (previous?.phone) {
+    const previousPhone = previous
+      ? await resolveConsultantNotificationPhone({
+          companyId,
+          consultantId: previousUserId,
+          profilePhone: previous.phone,
+        })
+      : null;
+    if (previousPhone) {
       const message =
         newUserId === actorId
           ? `ℹ️ ${actorName} assumiu o atendimento do lead ${leadLabel}. Essa conversa não está mais sob sua responsabilidade.`
           : newUserId
             ? `ℹ️ O atendimento do lead ${leadLabel} foi transferido para outro consultor por ${actorName}.`
             : `ℹ️ O atendimento do lead ${leadLabel} foi retirado da sua fila por ${actorName}.`;
-      await sendToConsultant(trunk, previous.phone, message);
+      await sendToConsultant(trunk, previousPhone, message);
     }
   }
 

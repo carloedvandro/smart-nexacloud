@@ -118,11 +118,34 @@ function firstName(name: string | null | undefined) {
 }
 
 /**
- * O aviso vai sempre para o WhatsApp pessoal cadastrado no perfil do
- * consultor. Instância própria não é requisito para participar do rodízio.
+ * Resolve o WhatsApp pessoal do consultor. O perfil é a fonte principal;
+ * contas antigas podem ainda ter o número apenas na instância vinculada.
  */
-function consultantNotificationPhone(profilePhone: string | null): string | null {
-  return PhoneNormalizationService.normalize(profilePhone);
+export async function resolveConsultantNotificationPhone(input: {
+  companyId: string;
+  consultantId: string;
+  profilePhone: string | null;
+}): Promise<string | null> {
+  const profilePhone = PhoneNormalizationService.normalize(input.profilePhone);
+  if (profilePhone) return profilePhone;
+
+  const { data: connections, error } = await supabaseAdmin
+    .from("whatsapp_connections")
+    .select("phone_number, status")
+    .eq("company_id", input.companyId)
+    .eq("user_id", input.consultantId)
+    .eq("is_trunk", false)
+    .not("phone_number", "is", null)
+    .order("last_connected_at", { ascending: false, nullsFirst: false })
+    .limit(5);
+  if (error) {
+    console.error("[aviso] erro ao localizar instância do consultor", error.message);
+    return null;
+  }
+
+  const preferred = connections?.find((connection) => connection.status === "CONNECTED")
+    ?? connections?.[0];
+  return PhoneNormalizationService.normalize(preferred?.phone_number ?? null);
 }
 
 /**
@@ -159,7 +182,11 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       .maybeSingle();
     if (!profile) continue;
 
-    const notificationPhone = consultantNotificationPhone(profile.phone);
+    const notificationPhone = await resolveConsultantNotificationPhone({
+      companyId,
+      consultantId: attempt.consultant_id,
+      profilePhone: profile.phone,
+    });
     if (!notificationPhone) {
       console.error("[aviso] consultor sem WhatsApp pessoal cadastrado", attempt.consultant_id);
       continue;
