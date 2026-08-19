@@ -676,8 +676,8 @@ async function persistStickerProviderPayload(input: {
     {
       message_id: input.messageId,
       company_id: input.companyId,
-      provider_key: key as unknown as Json,
-      provider_message: messageNode as unknown as Json,
+      provider_key: key as never,
+      provider_message: messageNode as never,
       is_animated: isAnimated,
     },
     { onConflict: "message_id" },
