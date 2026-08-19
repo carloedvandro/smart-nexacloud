@@ -316,6 +316,12 @@ export async function respondWithAI(input: {
 
     log("enviando resposta", { destino: recipient, temCredenciais: Boolean(creds) });
     if (recipient && creds) {
+      // Voz feminina humanizada: tentamos o áudio primeiro; se a síntese
+      // falhar ou o link não sair, a mesma resposta segue em texto.
+      const voice = await synthesizeReplyAudio({ companyId, connectionId, text });
+      const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
+      const asAudio = Boolean(voice && voiceUrl);
+
       const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc("create_outbound_message", {
         _conversation_id: conversationId,
         _company_id: companyId,
@@ -323,7 +329,8 @@ export async function respondWithAI(input: {
         _sender_type: "ai",
         _sender_name: "IA",
         _content: text,
-        _message_type: "text",
+        _message_type: asAudio ? "audio" : "text",
+        ...(asAudio ? { _media_url: voice!.path } : {}),
         _connection_id: connectionId,
       });
 
@@ -331,9 +338,21 @@ export async function respondWithAI(input: {
         log("falha ao registrar resposta; enviando texto de contingência", createMessageError.message);
       }
 
-      // O texto sai imediatamente. Síntese de voz nunca pode ocupar o caminho
-      // crítico do webhook e impedir uma resposta ao cliente.
-      const sent = await MegaApiService.sendText(creds, recipient, text);
+      let sent = asAudio
+        ? await MegaApiService.sendMedia(creds, {
+            to: recipient,
+            url: voiceUrl!,
+            mediaType: "audio",
+            mimeType: voice!.mimeType,
+            fileName: `resposta-${Date.now()}.mp3`,
+          })
+        : await MegaApiService.sendText(creds, recipient, text);
+
+      // O lead nunca pode ficar sem resposta por causa do áudio.
+      if (asAudio && !sent.ok) {
+        log("áudio recusado pelo WhatsApp; enviando texto", sent.error);
+        sent = await MegaApiService.sendText(creds, recipient, text);
+      }
 
       if (messageId) {
         await supabaseAdmin.rpc("finalize_outbound_message", {
