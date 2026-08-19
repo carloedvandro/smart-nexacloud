@@ -59,11 +59,13 @@ export async function notifyManualAssignment(input: {
   const actor = await loadProfile(actorId);
   const actorName = actor?.full_name?.trim() || "A administração";
 
-  // 1) Novo responsável (quando não é o próprio autor da ação).
-  if (newUserId && newUserId !== actorId) {
+  // 1) O novo responsável sempre recebe o aviso, inclusive quando o
+  // administrador atribui a conversa para si próprio. Antes esse caso era
+  // ignorado por `newUserId !== actorId`, deixando o consultor sem mensagem.
+  if (newUserId) {
     const target = await loadProfile(newUserId);
     if (target?.phone) {
-      await sendToConsultant(
+      const sent = await sendToConsultant(
         trunk,
         target.phone,
         [
@@ -80,6 +82,12 @@ export async function notifyManualAssignment(input: {
           .filter((line) => line !== "")
           .join("\n"),
       );
+      if (!sent) {
+        console.error("[atribuição] aviso ao novo responsável não foi entregue", {
+          conversationId,
+          newUserId,
+        });
+      }
     } else {
       console.error("[atribuição] consultor sem WhatsApp pessoal", newUserId);
     }
