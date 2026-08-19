@@ -923,7 +923,7 @@ function MessageBubble({
                 : message.message_type === "video"
                   ? "🎬 Vídeo (não foi possível baixar a mídia)"
                   : message.message_type === "sticker"
-                    ? "🩹 Figurinha (não foi possível baixar a mídia)"
+                    ? "🧩 Figurinha (não foi possível baixar a mídia)"
                   : message.message_type === "document"
                     ? "📄 Documento (não foi possível baixar a mídia)"
                     : "(sem conteúdo)"}
