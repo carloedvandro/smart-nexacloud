@@ -1171,6 +1171,67 @@ export type Database = {
           },
         ]
       }
+      service_ratings: {
+        Row: {
+          asked_at: string
+          comment: string | null
+          company_id: string
+          conversation_id: string
+          created_at: string
+          id: string
+          lead_id: string | null
+          rated_at: string | null
+          rating: number | null
+          reason: string
+        }
+        Insert: {
+          asked_at?: string
+          comment?: string | null
+          company_id: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          rated_at?: string | null
+          rating?: number | null
+          reason?: string
+        }
+        Update: {
+          asked_at?: string
+          comment?: string | null
+          company_id?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          rated_at?: string | null
+          rating?: number | null
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_ratings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ratings_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: true
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ratings_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           company_id: string
@@ -1664,6 +1725,10 @@ export type Database = {
         Returns: Json
       }
       invite_link_info: { Args: { _token: string }; Returns: Json }
+      is_abandoned_conversation: {
+        Args: { _conversation_id: string }
+        Returns: boolean
+      }
       is_company_admin: { Args: never; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       log_impersonation: {

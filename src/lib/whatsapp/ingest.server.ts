@@ -426,7 +426,19 @@ export async function processWebhookEvent(input: {
     });
   }
 
+  // Resposta do lead à pergunta de avaliação (1 a 5 estrelas): registra a nota
+  // e não aciona a IA para essa mensagem.
+  let ratedNow = false;
   if (!result.duplicate && result.conversation_id) {
+    const { captureRatingReply } = await import("@/lib/rating/rating.server");
+    ratedNow = await captureRatingReply({
+      companyId,
+      conversationId: result.conversation_id,
+      text: content,
+    });
+  }
+
+  if (!ratedNow && !result.duplicate && result.conversation_id) {
     const { respondWithAI } = await import("@/lib/ai/agent.server");
     const ai = await respondWithAI({
       companyId,
@@ -462,6 +474,13 @@ export async function processWebhookEvent(input: {
   // Avisa no WhatsApp os consultores com oferta pendente / repassada.
   const { notifyQueueOffers } = await import("@/lib/queue/bridge.server");
   await notifyQueueOffers(companyId);
+
+  // Lead abandonado (rodízio encerrado sem ninguém assumir): pede a avaliação.
+  const { requestAbandonedRatings } = await import("@/lib/rating/rating.server");
+  await requestAbandonedRatings(companyId).catch((error) =>
+    console.error("[avaliação] falha ao solicitar", error),
+  );
+
 
 
 
