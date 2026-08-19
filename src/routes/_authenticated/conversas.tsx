@@ -58,6 +58,12 @@ import {
   sendWhatsAppMediaMessage,
 } from "@/lib/whatsapp/whatsapp.functions";
 import { getConversationAccess } from "@/lib/queue/access.functions";
+import {
+  copyMedia,
+  EmojiGifPicker,
+  useMediaFavorites,
+  type FavoriteMedia,
+} from "@/components/nexa/emoji-gif-picker";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { cn } from "@/lib/utils";
 
