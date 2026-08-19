@@ -18,6 +18,7 @@ import {
   Search,
   Send,
   Square,
+  Star,
   Timer,
   UserCheck,
   X,
