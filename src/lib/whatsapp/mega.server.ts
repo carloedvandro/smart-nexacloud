@@ -187,16 +187,16 @@ export const MegaApiService = {
 
     const stack: unknown[] = [messagePayload];
     let mediaNode: Record<string, unknown> | null = null;
-    let messageType: "audio" | "video" | "document" | "image" | null = null;
+    let messageType: "audio" | "video" | "document" | "image" | "sticker" | null = null;
     while (stack.length > 0 && !mediaNode) {
       const current = stack.pop();
       if (!current || typeof current !== "object") continue;
       for (const [name, value] of Object.entries(current as Record<string, unknown>)) {
         if (!value || typeof value !== "object") continue;
         const normalized = name.replace(/Message$/i, "").toLowerCase();
-        if (["audio", "video", "document", "image"].includes(normalized)) {
+        if (["audio", "video", "document", "image", "sticker"].includes(normalized)) {
           mediaNode = value as Record<string, unknown>;
-          messageType = normalized as "audio" | "video" | "document" | "image";
+          messageType = normalized as typeof messageType;
           break;
         }
         stack.push(value);
@@ -212,28 +212,43 @@ export const MegaApiService = {
       const value = mediaNode?.[field];
       return typeof value !== "string" || !value.trim();
     });
-    const mimetype = mediaNode["mimetype"] ?? mediaNode["mimeType"];
-    if (typeof mimetype !== "string" || !mimetype.trim()) missing.push("mimetype");
+    const rawMime = mediaNode["mimetype"] ?? mediaNode["mimeType"];
+    // Figurinhas nem sempre trazem mimetype no webhook; o padrão do WhatsApp é webp.
+    const mimetype =
+      typeof rawMime === "string" && rawMime.trim()
+        ? rawMime
+        : messageType === "sticker"
+          ? "image/webp"
+          : null;
+    if (!mimetype) missing.push("mimetype");
     if (missing.length > 0) {
       return { ok: false as const, error: `campos de mídia ausentes no webhook: ${missing.join(", ")}` };
     }
 
-    const result = await request<DownloadResponse>(
-      creds,
-      `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
-      {
-        method: "POST",
-        body: {
-          messageKeys: {
-            mediaKey: mediaNode["mediaKey"],
-            directPath: mediaNode["directPath"],
-            url: mediaNode["url"],
-            mimetype,
-            messageType,
+    // A MEGA API aceita "sticker" em algumas versões e apenas "image" em outras.
+    const typeCandidates =
+      messageType === "sticker" ? (["sticker", "image"] as const) : ([messageType] as const);
+
+    let result!: Awaited<ReturnType<typeof request<DownloadResponse>>>;
+    for (const candidate of typeCandidates) {
+      result = await request<DownloadResponse>(
+        creds,
+        `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
+        {
+          method: "POST",
+          body: {
+            messageKeys: {
+              mediaKey: mediaNode["mediaKey"],
+              directPath: mediaNode["directPath"],
+              url: mediaNode["url"],
+              mimetype,
+              messageType: candidate,
+            },
           },
         },
-      },
-    );
+      );
+      if (result.ok && typeof result.data?.data === "string" && result.data.data.trim()) break;
+    }
     if (!result.ok) return result;
     if (typeof result.data?.data !== "string" || !result.data.data.trim()) {
       return { ok: false as const, error: "MEGA API respondeu sem a mídia em base64" };
