@@ -60,7 +60,6 @@ import {
   sendWhatsAppMediaMessage,
   forwardStickerFavorite,
 } from "@/lib/whatsapp/whatsapp.functions";
-import { getConversationAccess } from "@/lib/queue/access.functions";
 import {
   copyMedia,
   EmojiGifPicker,
@@ -356,7 +355,6 @@ function ConversationThread({
     return Array.from(new Set([...fromMessages, ...favorites.map((f) => f.path)]));
   }, [messages, favorites]);
   const fetchMediaUrls = useServerFn(getConversationMediaUrls);
-  const checkAccess = useServerFn(getConversationAccess);
   const { data: freshMediaUrls } = useQuery({
     queryKey: ["media-urls", conversation.id, mediaPaths.join("|")],
     queryFn: () => fetchMediaUrls({ data: { paths: mediaPaths } }),
@@ -491,17 +489,48 @@ function ConversationThread({
   const { data: access } = useQuery({
     queryKey: ["conversation-access", conversation.id],
     queryFn: async () => {
-      try {
-        return await checkAccess({ data: { conversationId: conversation.id } });
-      } catch (error) {
-        // Falha temporária (sessão hidratando, deploy novo do servidor):
-        // não derruba a tela — mantém o estado anterior de permissão.
-        console.error("[acesso] falha ao verificar permissão da conversa", error);
-        return null;
+      if (isAdmin) return { allowed: true, reason: "OK" as const, message: null };
+      if (conversation.status === "CLOSED" || conversation.status === "PAUSED") {
+        return {
+          allowed: false,
+          reason: "CLOSED" as const,
+          message: "Este atendimento está encerrado.",
+        };
       }
+      if (conversation.assigned_user_id) {
+        const allowed = conversation.assigned_user_id === currentUserId;
+        return {
+          allowed,
+          reason: allowed ? ("OK" as const) : ("EXPIRED" as const),
+          message: allowed
+            ? null
+            : "Este link expirou: a oportunidade foi repassada a outro consultor.",
+        };
+      }
+      if (!currentUserId) {
+        return { allowed: false, reason: "NOT_FOUND" as const, message: "Usuário não identificado." };
+      }
+
+      const { data, error } = await supabase
+        .from("assignment_attempts")
+        .select("id")
+        .eq("conversation_id", conversation.id)
+        .eq("consultant_id", currentUserId)
+        .eq("status", "WAITING")
+        .limit(1);
+      if (error) throw new Error(error.message);
+      const allowed = Boolean(data?.length);
+      return {
+        allowed,
+        reason: allowed ? ("OK" as const) : ("EXPIRED" as const),
+        message: allowed
+          ? null
+          : "Este link expirou: a oportunidade foi repassada a outro consultor.",
+      };
     },
+    enabled: Boolean(currentUserId) || isAdmin,
     refetchInterval: 20000,
-    retry: false,
+    retry: 1,
     placeholderData: (previous) => previous,
   });
 
