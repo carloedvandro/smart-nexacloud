@@ -787,16 +787,22 @@ function MediaComposer({
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      // O WhatsApp entende melhor OGG/Opus: usamos quando o navegador permite.
+      const preferred = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/mp4"].find(
+        (type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type),
+      );
+      const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const mime = recorder.mimeType || preferred || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: mime });
+        const extension = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "m4a" : "webm";
         setRecording(false);
-        if (blob.size > 0) onFile({ blob, name: `audio-${Date.now()}.webm`, kind: "audio" });
+        if (blob.size > 0) onFile({ blob, name: `audio-${Date.now()}.${extension}`, kind: "audio" });
       };
       recorder.start();
       recorderRef.current = recorder;
@@ -805,6 +811,7 @@ function MediaComposer({
       toast.error("Não consegui acessar o microfone.");
     }
   }
+
 
   return (
     <div className="flex items-center gap-1">

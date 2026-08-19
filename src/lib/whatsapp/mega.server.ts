@@ -141,7 +141,39 @@ export const MegaApiService = {
   ) {
     const fileName = input.fileName ?? `arquivo-${Date.now()}`;
     const caption = input.caption ?? "";
+    const isAudio = input.mediaType === "audio";
     const attempts: Array<{ path: string; body: Record<string, unknown> }> = [
+      // Áudio: a MEGA tem endpoint próprio de voz (ptt). Sem ele, muitas versões
+      // aceitam a chamada mas o WhatsApp do destinatário não recebe o áudio.
+      ...(isAudio
+        ? [
+            {
+              path: `/rest/sendMessage/${creds.instanceKey}/audioUrl`,
+              body: {
+                messageData: {
+                  to: input.to,
+                  url: input.url,
+                  ptt: true,
+                  mimeType: input.mimeType ?? undefined,
+                  fileName,
+                },
+              },
+            },
+            {
+              path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
+              body: {
+                messageData: {
+                  to: input.to,
+                  url: input.url,
+                  type: "audio",
+                  ptt: true,
+                  mimeType: input.mimeType ?? undefined,
+                  fileName,
+                },
+              },
+            },
+          ]
+        : []),
       {
         path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
         body: {
@@ -184,12 +216,16 @@ export const MegaApiService = {
         method: "POST",
         body: attempt.body,
       });
-      if (result.ok) return result;
+      if (result.ok) {
+        console.info("[mega] mídia enviada", { path: attempt.path, tipo: input.mediaType });
+        return result;
+      }
       last = result;
       if (result.status === 401 || result.status === 403) return result;
     }
     return last;
   },
+
 
   /**
    * Download de mídia recebida. A MEGA aceita formatos de corpo diferentes
