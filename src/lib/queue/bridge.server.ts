@@ -18,7 +18,7 @@ const EVENT_TIMEOUT_NOTIFIED = "CONSULTANT_TIMEOUT_NOTIFIED";
 type TrunkContext = { connectionId: string; creds: MegaCredentials; phone: string | null };
 
 /** Instância tronco da empresa (ponto único de entrada e saída). */
-async function loadTrunk(companyId: string): Promise<TrunkContext | null> {
+export async function loadTrunk(companyId: string): Promise<TrunkContext | null> {
   const { data } = await supabaseAdmin
     .from("whatsapp_connections")
     .select("id, phone_number")
@@ -36,7 +36,7 @@ async function loadTrunk(companyId: string): Promise<TrunkContext | null> {
     : null;
 }
 
-async function sendToConsultant(trunk: TrunkContext, phone: string, text: string) {
+export async function sendToConsultant(trunk: TrunkContext, phone: string, text: string) {
   const to = PhoneNormalizationService.normalize(phone);
   if (!to) return false;
   // Nunca enviar para o próprio tronco: geraria eco/loop do número consigo mesmo.

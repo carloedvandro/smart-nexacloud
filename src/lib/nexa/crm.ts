@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import type { ConversationStatus, LeadStatus } from "@/lib/nexa/domain";
+import { assignConversationWithNotice } from "@/lib/queue/assign.functions";
 import { sendWhatsAppMessage } from "@/lib/whatsapp/whatsapp.functions";
 
 type Tables = Database["public"]["Tables"];
@@ -225,11 +226,7 @@ export async function sendMessage(input: {
 }
 
 export async function assignConversation(conversationId: string, consultantId: string | null) {
-  const { error } = await supabase.rpc("assign_conversation", {
-    _conversation_id: conversationId,
-    _consultant_id: consultantId as string,
-  });
-  if (error) throw new Error(error.message);
+  await assignConversationWithNotice({ data: { conversationId, consultantId } });
 }
 
 export async function setConversationStatus(conversationId: string, status: ConversationStatus) {
