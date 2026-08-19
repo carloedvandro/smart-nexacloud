@@ -7,6 +7,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
 import { MegaApiService } from "@/lib/whatsapp/mega.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
+import { signedMediaUrl } from "@/lib/whatsapp/media.server";
+import { synthesizeReplyAudio } from "@/lib/ai/tts.server";
 
 const MODEL = "google/gemini-2.5-flash";
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
