@@ -549,23 +549,35 @@ async function downloadAndStoreMedia(input: {
   const findDownloadValue = (
     source: unknown,
     keys: string[],
+    accepts: (value: unknown) => boolean,
     depth = 0,
   ): unknown => {
     if (!source || typeof source !== "object" || depth > 6) return undefined;
     const object = source as Json;
     for (const keyName of keys) {
       const value = object[keyName];
-      if (value !== undefined && value !== null) return value;
+      if (accepts(value)) return value;
     }
     for (const value of Object.values(object)) {
-      const found = findDownloadValue(value, keys, depth + 1);
+      const found = findDownloadValue(value, keys, accepts, depth + 1);
       if (found !== undefined) return found;
     }
     return undefined;
   };
-  const encoded = findDownloadValue(result.data, ["data", "base64", "buffer"]);
+  const encoded = findDownloadValue(
+    result.data,
+    ["data", "base64", "buffer"],
+    (value) =>
+      (typeof value === "string" && Boolean(value.trim())) ||
+      Array.isArray(value) ||
+      Boolean(value && typeof value === "object" && "data" in (value as Json)),
+  );
   let bytes: Uint8Array | null = null;
-  const returnedMime = findDownloadValue(result.data, ["mimetype", "mimeType"]);
+  const returnedMime = findDownloadValue(
+    result.data,
+    ["mimetype", "mimeType"],
+    (value) => typeof value === "string" && value.includes("/"),
+  );
   let mimeType: string | null = typeof returnedMime === "string" ? returnedMime : null;
 
   if (typeof encoded === "string" && encoded.trim()) {
@@ -581,7 +593,11 @@ async function downloadAndStoreMedia(input: {
     const values = (encoded as { data: unknown[] }).data;
     if (values.every((value) => typeof value === "number")) bytes = new Uint8Array(values as number[]);
   } else {
-    const url = findDownloadValue(result.data, ["url", "mediaUrl", "fileURL"]);
+    const url = findDownloadValue(
+      result.data,
+      ["url", "mediaUrl", "fileURL"],
+      (value) => typeof value === "string" && /^https?:\/\//i.test(value),
+    );
     if (typeof url === "string" && url.startsWith("http")) {
       const response = await fetch(url);
       if (response.ok) {
