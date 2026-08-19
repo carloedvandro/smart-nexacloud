@@ -225,11 +225,7 @@ export async function sendMessage(input: {
 }
 
 export async function assignConversation(conversationId: string, consultantId: string | null) {
-  const { error } = await supabase.rpc("assign_conversation", {
-    _conversation_id: conversationId,
-    _consultant_id: consultantId as string,
-  });
-  if (error) throw new Error(error.message);
+  await assignConversationWithNotice({ data: { conversationId, consultantId } });
 }
 
 export async function setConversationStatus(conversationId: string, status: ConversationStatus) {
