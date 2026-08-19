@@ -61,9 +61,11 @@ export async function transcribeAudioMessage(input: {
     });
     const response = await fetch(GATEWAY_URL, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: {
+        "Lovable-API-Key": apiKey,
+        "X-Lovable-AIG-SDK": "fetch",
+      },
       body: form,
-      signal: AbortSignal.timeout(60_000),
     });
 
     if (!response.ok) {
