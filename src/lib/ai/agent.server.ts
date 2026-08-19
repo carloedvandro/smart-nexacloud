@@ -105,32 +105,104 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
-async function callGateway(messages: ChatMessage[]): Promise<string | null> {
+type GatewayResult =
+  | { kind: "ok"; text: string }
+  | { kind: "retryable" | "terminal"; message: string };
+
+function retryDelay(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) return Math.max(0, date - Date.now());
+  }
+  return 1_000 * 2 ** attempt + Math.floor(Math.random() * 500);
+}
+
+async function readStreamText(response: Response): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+    for (const event of events) {
+      for (const line of event.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+        try {
+          const payload = JSON.parse(data) as {
+            choices?: { delta?: { content?: string }; message?: { content?: string } }[];
+          };
+          text += payload.choices?.[0]?.delta?.content ?? payload.choices?.[0]?.message?.content ?? "";
+        } catch {
+          // Eventos auxiliares do stream não contêm texto e podem ser ignorados.
+        }
+      }
+    }
+    if (done) break;
+  }
+  return text.trim();
+}
+
+async function callGateway(messages: ChatMessage[]): Promise<GatewayResult> {
   const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) {
     console.error("[ia] LOVABLE_API_KEY ausente");
-    return null;
+    return { kind: "terminal", message: "LOVABLE_API_KEY ausente" };
   }
 
-  try {
-    const response = await fetch(GATEWAY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: MODEL, messages, temperature: 0.3, max_tokens: 400 }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) {
-      console.error("[ia] gateway respondeu", response.status, await response.text());
-      return null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(GATEWAY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Lovable-API-Key": apiKey,
+          "X-Lovable-AIG-SDK": "fetch",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          messages,
+          temperature: 0.3,
+          max_tokens: 400,
+          stream: true,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        const message = detail || `Gateway respondeu ${response.status}`;
+        console.error("[ia] gateway respondeu", response.status, message.slice(0, 500));
+        const retryable = response.status === 429 || response.status >= 500;
+        if (retryable && attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay(response, attempt)));
+          continue;
+        }
+        return { kind: retryable ? "retryable" : "terminal", message };
+      }
+
+      const text = await readStreamText(response);
+      if (text) return { kind: "ok", text };
+      return { kind: "retryable", message: "Gateway concluiu sem texto de resposta" };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[ia] falha ao chamar o gateway", message);
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelay(new Response(), attempt)));
+        continue;
+      }
+      return { kind: "retryable", message };
     }
-    const payload = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    return payload.choices?.[0]?.message?.content?.trim() ?? null;
-  } catch (error) {
-    console.error("[ia] falha ao chamar o gateway", error);
-    return null;
   }
+
+  return { kind: "retryable", message: "Falha temporária na geração" };
 }
 
 async function handoff(companyId: string, conversationId: string, reason: string): Promise<boolean> {
@@ -299,13 +371,20 @@ export async function respondWithAI(input: {
 
   log("chamando o modelo", { mensagens: messages.length, conhecimento: knowledge.length });
   // Pedido inequívoco de humano não fica sujeito à interpretação do modelo.
-  const raw = explicitHumanRequest
-    ? `Claro! Vou transferir você agora para um consultor humano. ${HANDOFF_TOKEN}`
+  const generation: GatewayResult = explicitHumanRequest
+    ? { kind: "ok", text: `Claro! Vou transferir você agora para um consultor humano. ${HANDOFF_TOKEN}` }
     : await callGateway(messages);
-  if (!raw) {
-    await handoff(companyId, conversationId, "falha na geração da resposta");
-    return { status: "handoff", reason: "gateway" };
+  if (generation.kind !== "ok") {
+    log("geração não concluída", { tipo: generation.kind, erro: generation.message.slice(0, 300) });
+    if (generation.kind === "terminal") {
+      await handoff(companyId, conversationId, `falha permanente da IA: ${generation.message.slice(0, 300)}`);
+      return { status: "handoff", reason: "gateway" };
+    }
+    // Uma indisponibilidade transitória jamais encerra a sessão: a próxima
+    // mensagem do cliente deve poder acionar a IA normalmente.
+    return { status: "skipped", reason: "falha temporária da IA" };
   }
+  const raw = generation.text;
 
   const needsHuman = explicitHumanRequest || raw.includes(HANDOFF_TOKEN);
   const text = raw.replaceAll(HANDOFF_TOKEN, "").trim();
