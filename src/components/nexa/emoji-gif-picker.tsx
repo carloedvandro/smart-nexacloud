@@ -21,7 +21,10 @@ export type FavoriteMedia = {
   path: string;
   type: string;
   label?: string | null;
+  /** Mensagem original (figurinhas): necessária para reenvio nativo no WhatsApp. */
+  messageId?: string | null;
 };
+
 
 export const EMOJIS = [
   "😀","😃","😄","😁","😆","😅","😂","🤣","🙂","😉","😊","😍","😘","😗","🤩","🤔",
