@@ -172,7 +172,9 @@ async function callGateway(messages: ChatMessage[]): Promise<GatewayResult> {
           model: MODEL,
           messages,
           temperature: 0.3,
-          max_tokens: 400,
+          // O modelo usa parte desse limite internamente para raciocínio. Com
+          // 400 tokens ele podia encerrar em MAX_TOKENS antes de emitir texto.
+          max_tokens: 1_200,
           stream: true,
         }),
       });
