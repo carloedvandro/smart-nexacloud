@@ -357,12 +357,24 @@ function ConversationThread({
   }, [messages, favorites]);
   const fetchMediaUrls = useServerFn(getConversationMediaUrls);
   const checkAccess = useServerFn(getConversationAccess);
-  const { data: mediaUrls } = useQuery({
+  const { data: freshMediaUrls } = useQuery({
     queryKey: ["media-urls", conversation.id, mediaPaths.join("|")],
     queryFn: () => fetchMediaUrls({ data: { paths: mediaPaths } }),
     enabled: mediaPaths.length > 0,
     staleTime: 30 * 60_000,
+    placeholderData: (previous) => previous,
   });
+
+  // Mantém os links já resolvidos em cache local: assim, quando chega uma nova
+  // mídia, as anteriores continuam visíveis (sem "piscar" a conversa inteira).
+  const mediaCache = useRef<Record<string, string>>({});
+  const mediaUrls = useMemo(() => {
+    if (freshMediaUrls) {
+      mediaCache.current = { ...mediaCache.current, ...freshMediaUrls };
+    }
+    return mediaCache.current;
+  }, [freshMediaUrls]);
+
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["messages", conversation.id] });
