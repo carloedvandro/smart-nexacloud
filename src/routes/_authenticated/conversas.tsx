@@ -788,7 +788,17 @@ function MediaComposer({
   );
 }
 
-function MessageBubble({ message, mediaUrl }: { message: MessageRow; mediaUrl?: string | null }) {
+function MessageBubble({
+  message,
+  mediaUrl,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  message: MessageRow;
+  mediaUrl?: string | null;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+}) {
   const isCustomer = message.sender_type === "customer";
   const isSystem = message.sender_type === "system";
   const isAi = message.sender_type === "ai";
