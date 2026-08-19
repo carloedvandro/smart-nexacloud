@@ -33,6 +33,29 @@ function baseUrl(host: string) {
   return `https://${clean}`;
 }
 
+function providerError(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const body = payload as Record<string, unknown>;
+  const error = body["error"];
+  if (error && error !== false) {
+    const message = body["message"];
+    return typeof message === "string" && message.trim()
+      ? message
+      : typeof error === "string"
+        ? error
+        : "A MEGA API recusou a operação.";
+  }
+
+  for (const key of ["data", "response", "result"] as const) {
+    const nested = body[key];
+    if (nested && nested !== payload) {
+      const nestedError = providerError(nested);
+      if (nestedError) return nestedError;
+    }
+  }
+  return null;
+}
+
 async function request<T>(
   creds: MegaCredentials,
   path: string,
@@ -58,18 +81,13 @@ async function request<T>(
     }
 
     // A MEGA API responde 200 mesmo em erro: validar o corpo.
-    const bodyError =
-      payload && typeof payload === "object" && "error" in payload
-        ? (payload as { error?: unknown }).error
-        : null;
+    const bodyError = providerError(payload);
 
-    if (!response.ok || (bodyError && bodyError !== false)) {
+    if (!response.ok || bodyError) {
       const rawMessage =
         payload && typeof payload === "object" && "message" in payload
           ? String((payload as { message?: unknown }).message ?? "")
-          : typeof bodyError === "string"
-            ? bodyError
-            : "";
+            : bodyError ?? "";
       const name =
         payload && typeof payload === "object" && "name" in payload
           ? String((payload as { name?: unknown }).name ?? "")

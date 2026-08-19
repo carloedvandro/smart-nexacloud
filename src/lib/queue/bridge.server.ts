@@ -39,11 +39,10 @@ export async function loadTrunk(companyId: string): Promise<TrunkContext | null>
 export async function sendToConsultant(trunk: TrunkContext, phone: string, text: string) {
   const to = PhoneNormalizationService.normalize(phone);
   if (!to) return false;
-  // Nunca enviar para o próprio tronco: geraria eco/loop do número consigo mesmo.
-  if (trunk.phone && to === trunk.phone) {
-    console.warn("[aviso] destino é o próprio número tronco — envio ignorado");
-    return false;
-  }
+  // Avisos de atribuição são mensagens ativas do sistema. Mesmo quando o
+  // responsável utiliza o número atualmente conectado ao tronco, a tentativa
+  // precisa chegar à MEGA: descartá-la aqui produzia um falso erro local e
+  // impedia qualquer entrega. O webhook já trata ecos pelo ID da mensagem.
   const sent = await MegaApiService.sendText(trunk.creds, to, text);
   if (!sent.ok) console.error("[aviso] falha ao avisar consultor", sent.error);
   return sent.ok;
