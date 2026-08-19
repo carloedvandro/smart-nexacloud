@@ -274,12 +274,40 @@ export async function respondWithAI(input: {
   // Um humano só "assume" a conversa quando de fato responde. Enquanto isso
   // (inclusive em conversas antigas atribuídas mas sem resposta) a IA continua
   // atendendo, mantendo o contexto do histórico.
-  const { count: humanReplies } = await supabaseAdmin
+  const { data: possibleHumanReplies } = await supabaseAdmin
     .from("messages")
-    .select("id", { count: "exact", head: true })
+    .select("id, sender_id, sender_type, content, message_type, created_at, metadata")
     .eq("conversation_id", conversationId)
     .in("sender_type", ["consultant", "admin"]);
-  if ((humanReplies ?? 0) > 0) {
+  const deviceReplies = (possibleHumanReplies ?? []).filter(
+    (message) =>
+      !message.sender_id &&
+      message.sender_type === "consultant" &&
+      (message.metadata as { origin?: string } | null)?.origin === "device",
+  );
+  const { data: aiReplies } = deviceReplies.length
+    ? await supabaseAdmin
+        .from("messages")
+        .select("content, message_type, created_at")
+        .eq("conversation_id", conversationId)
+        .eq("sender_type", "ai")
+    : { data: [] };
+  const hasHumanReply = (possibleHumanReplies ?? []).some((message) => {
+    if (message.sender_id || message.sender_type === "admin") return true;
+    const fromDevice = (message.metadata as { origin?: string } | null)?.origin === "device";
+    if (!fromDevice) return true;
+    // Compatibilidade com respostas antigas: antes de corrigirmos a corrida,
+    // o eco da IA podia chegar primeiro e ser gravado como consultor do aparelho.
+    // Se existe a resposta da IA do mesmo formato no mesmo instante, é eco.
+    return !(aiReplies ?? []).some((ai) => {
+      const closeInTime = Math.abs(new Date(ai.created_at).getTime() - new Date(message.created_at).getTime()) <= 120_000;
+      const samePayload =
+        ai.message_type === message.message_type &&
+        (message.message_type !== "text" || (ai.content ?? "").trim() === (message.content ?? "").trim());
+      return closeInTime && samePayload;
+    });
+  });
+  if (hasHumanReply) {
     log("skip: consultor já respondeu nesta conversa");
     return { status: "skipped", reason: "conversa com consultor" };
   }
@@ -409,10 +437,25 @@ export async function respondWithAI(input: {
       const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
       const asAudio = Boolean(voice && voiceUrl);
 
-      // A entrega ao lead é a operação prioritária. Antes, a resposta era
-      // registrada no banco primeiro e a janela do webhook podia terminar
-      // exatamente entre esse registro (balão visível no painel) e a chamada
-      // à MEGA. Enviamos primeiro e persistimos o resultado logo em seguida.
+      // Reservamos a mensagem ANTES do envio. A MEGA pode disparar o eco do
+      // WhatsApp ainda durante a chamada de envio; sem esta reserva, esse eco
+      // era gravado como resposta de consultor e bloqueava a IA para sempre.
+      const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc("create_outbound_message", {
+        _conversation_id: conversationId,
+        _company_id: companyId,
+        _sender_id: null as unknown as string,
+        _sender_type: "ai",
+        _sender_name: "IA",
+        _content: text,
+        _message_type: asAudio ? "audio" : "text",
+        ...(voice ? { _media_url: voice.path } : {}),
+        _connection_id: connectionId,
+      });
+
+      if (createMessageError) {
+        log("falha ao reservar resposta antes do envio", createMessageError.message);
+      }
+
       log("voz pronta; iniciando entrega no WhatsApp", { formato: asAudio ? "audio" : "text" });
       let sent = asAudio
         ? await MegaApiService.sendMedia(creds, {
@@ -428,25 +471,15 @@ export async function respondWithAI(input: {
       if (asAudio && !sent.ok) {
         log("áudio recusado pelo WhatsApp; enviando texto", sent.error);
         sent = await MegaApiService.sendText(creds, recipient, text);
+        if (messageId) {
+          await supabaseAdmin
+            .from("messages")
+            .update({ message_type: "text", media_url: null })
+            .eq("id", messageId);
+        }
       }
 
       log("entrega concluída", { ok: sent.ok, formato: asAudio ? "audio" : "text" });
-
-      const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc("create_outbound_message", {
-        _conversation_id: conversationId,
-        _company_id: companyId,
-        _sender_id: null as unknown as string,
-        _sender_type: "ai",
-        _sender_name: "IA",
-        _content: text,
-        _message_type: asAudio && sent.ok ? "audio" : "text",
-        ...(voice && sent.ok ? { _media_url: voice.path } : {}),
-        _connection_id: connectionId,
-      });
-
-      if (createMessageError) {
-        log("falha ao registrar resposta já enviada", createMessageError.message);
-      }
 
       if (messageId) {
         await supabaseAdmin.rpc("finalize_outbound_message", {
