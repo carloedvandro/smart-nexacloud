@@ -831,7 +831,33 @@ function MessageBubble({
             {isAi ? "IA" : (message.sender_name ?? "Consultor")}
           </p>
         ) : null}
-        {message.media_url ? <MessageMedia type={message.message_type} url={mediaUrl ?? null} /> : null}
+        {message.media_url ? (
+          <>
+            <MessageMedia type={message.message_type} url={mediaUrl ?? null} />
+            {mediaUrl && message.message_type !== "audio" ? (
+              <div className="mb-1 flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Copiar mídia"
+                  title="Copiar"
+                  className="rounded-md p-1 text-chat-ink-muted hover:bg-chat-shell"
+                  onClick={() => void copyMedia(mediaUrl)}
+                >
+                  <Copy className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={isFavorite ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                  title={isFavorite ? "Remover dos favoritos" : "Favoritar"}
+                  className="rounded-md p-1 text-chat-ink-muted hover:bg-chat-shell"
+                  onClick={onToggleFavorite}
+                >
+                  <Star className={cn("size-3.5", isFavorite && "fill-chat-warning text-chat-warning")} />
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : null}
         {message.content ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : null}
         {message.transcription ? (
           <p className="mt-1 rounded-md bg-chat-shell px-2 py-1 text-xs italic text-chat-ink-muted">
