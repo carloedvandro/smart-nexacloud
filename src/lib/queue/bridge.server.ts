@@ -36,7 +36,7 @@ export async function loadTrunk(companyId: string): Promise<TrunkContext | null>
     : null;
 }
 
-async function sendToConsultant(trunk: TrunkContext, phone: string, text: string) {
+export async function sendToConsultant(trunk: TrunkContext, phone: string, text: string) {
   const to = PhoneNormalizationService.normalize(phone);
   if (!to) return false;
   // Nunca enviar para o próprio tronco: geraria eco/loop do número consigo mesmo.
