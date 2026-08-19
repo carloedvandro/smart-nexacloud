@@ -336,11 +336,16 @@ function ConversationThread({
     queryFn: () => listConsultants(companyId),
   });
 
-  // Links temporários das mídias (áudios, imagens, documentos) da conversa.
-  const mediaPaths = useMemo(
-    () => (messages ?? []).map((m) => m.media_url).filter((p): p is string => Boolean(p)),
-    [messages],
-  );
+  const { favorites, isFavorite, toggle: toggleFavorite } = useMediaFavorites();
+
+  // Links temporários das mídias (áudios, imagens, documentos) da conversa
+  // somados aos favoritos guardados pelo consultor (para prévia e reenvio).
+  const mediaPaths = useMemo(() => {
+    const fromMessages = (messages ?? [])
+      .map((m) => m.media_url)
+      .filter((p): p is string => Boolean(p));
+    return Array.from(new Set([...fromMessages, ...favorites.map((f) => f.path)]));
+  }, [messages, favorites]);
   const fetchMediaUrls = useServerFn(getConversationMediaUrls);
   const checkAccess = useServerFn(getConversationAccess);
   const { data: mediaUrls } = useQuery({
