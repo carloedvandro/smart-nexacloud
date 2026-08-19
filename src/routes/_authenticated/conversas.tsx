@@ -148,13 +148,16 @@ function ConversasPage() {
   const { data: conversations, isLoading } = useQuery({
     queryKey: listKey,
     queryFn: () =>
-      listConversations({
-        companyId: companyId as string,
-        statuses: active.statuses,
-        assignedTo: filter === "MINE" ? (user?.id ?? null) : null,
-        search,
-      }),
+      filter === "ABANDONED"
+        ? listAbandonedConversations({ companyId: companyId as string, search })
+        : listConversations({
+            companyId: companyId as string,
+            statuses: active.statuses,
+            assignedTo: filter === "MINE" ? (user?.id ?? null) : null,
+            search,
+          }),
     enabled: Boolean(companyId),
+
     // Realtime pode não entregar um UPDATE ao consultor que acabou de perder
     // acesso à linha por RLS. O polling curto é a garantia de revogação visual.
     refetchInterval: 3000,
