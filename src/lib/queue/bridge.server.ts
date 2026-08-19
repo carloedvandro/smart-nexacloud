@@ -18,7 +18,7 @@ const EVENT_TIMEOUT_NOTIFIED = "CONSULTANT_TIMEOUT_NOTIFIED";
 type TrunkContext = { connectionId: string; creds: MegaCredentials; phone: string | null };
 
 /** Instância tronco da empresa (ponto único de entrada e saída). */
-async function loadTrunk(companyId: string): Promise<TrunkContext | null> {
+export async function loadTrunk(companyId: string): Promise<TrunkContext | null> {
   const { data } = await supabaseAdmin
     .from("whatsapp_connections")
     .select("id, phone_number")
