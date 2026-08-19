@@ -81,7 +81,7 @@ export async function notifyManualAssignment(input: {
         trunk,
         targetPhone,
         [
-          `🔔 Um lead foi atribuído a você, ${firstName(target.full_name)}!`,
+          `🔔 Um lead foi atribuído a você, ${firstName(target?.full_name)}!`,
           "",
           `👤 Lead: ${leadLabel}`,
           lead?.city ? `📍 ${lead.city}${lead.state ? `/${lead.state}` : ""}` : "",
