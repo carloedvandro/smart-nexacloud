@@ -93,9 +93,11 @@ const FILTERS: { key: string; label: string; statuses: ConversationStatus[] }[] 
   { key: "OPEN", label: "Abertas", statuses: OPEN_CONVERSATION_STATUSES },
   { key: "AI_ACTIVE", label: "IA", statuses: ["AI_ACTIVE"] },
   { key: "QUEUE", label: "Fila", statuses: ["WAITING_HUMAN", "QUEUED"] },
+  { key: "ABANDONED", label: "Lead abandonado", statuses: ["WAITING_HUMAN", "QUEUED"] },
   { key: "MINE", label: "Minhas", statuses: OPEN_CONVERSATION_STATUSES },
   { key: "CLOSED", label: "Encerradas", statuses: ["CLOSED"] },
 ];
+
 
 /** Iniciais do lead para o avatar do cabeçalho e da lista. */
 function initials(name?: string | null, fallback?: string | null) {
