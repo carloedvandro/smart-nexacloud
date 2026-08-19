@@ -182,7 +182,13 @@ export async function sendWhatsAppText(input: OutboundInput) {
     return { ok: false as const, error: "Credenciais da instância não configuradas." };
   }
 
+  console.info("[whatsapp] envio pelo painel", {
+    conversa: input.conversationId,
+    instancia: connectionId,
+    destino: recipient,
+  });
   const sent = await MegaApiService.sendText(creds, recipient, input.content);
+
   if (!sent.ok) {
     await supabaseAdmin.rpc("finalize_outbound_message", {
       _message_id: messageId,
