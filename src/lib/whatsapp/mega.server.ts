@@ -14,8 +14,6 @@ export type MegaCredentials = {
 
 export type MegaResult<T> = { ok: true; data: T } | { ok: false; error: string; status?: number };
 
-const TIMEOUT_MS = 20_000;
-
 function baseUrl(host: string) {
   const clean = host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   return `https://${clean}`;
@@ -35,7 +33,6 @@ async function request<T>(
         Authorization: `Bearer ${creds.apiKey}`,
       },
       ...(init?.body ? { body: JSON.stringify(init.body) } : {}),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
     const text = await response.text();
