@@ -143,6 +143,9 @@ export const MegaApiService = {
     const caption = input.caption ?? "";
     const isAudio = input.mediaType === "audio";
     const audioMimeType = input.mimeType || "audio/ogg; codecs=opus";
+    const isOggOpus = /audio\/(ogg|opus)/i.test(audioMimeType);
+    const primaryAudioType = isOggOpus ? "ptt" : "audio";
+    const fallbackAudioType = isOggOpus ? "audio" : "ptt";
     const attempts: Array<{ path: string; body: Record<string, unknown> }> = [
       // Contrato oficial da MEGA: áudio gravado é enviado pelo mediaUrl com
       // type "ptt". Não existe endpoint /audioUrl nem campo booleano `ptt`.
@@ -154,7 +157,7 @@ export const MegaApiService = {
                 messageData: {
                   to: input.to,
                   url: input.url,
-                  type: "ptt",
+                  type: primaryAudioType,
                   mimeType: audioMimeType,
                   fileName,
                   caption,
@@ -169,7 +172,7 @@ export const MegaApiService = {
                 messageData: {
                   to: input.to,
                   url: input.url,
-                  type: "audio",
+                  type: fallbackAudioType,
                   mimeType: audioMimeType,
                   fileName,
                   caption,
