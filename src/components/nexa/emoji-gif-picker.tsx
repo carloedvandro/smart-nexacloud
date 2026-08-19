@@ -200,17 +200,26 @@ export function EmojiGifPicker({
                 </div>
               </>
             ) : null}
-            <div className="grid max-h-56 grid-cols-8 gap-1 overflow-y-auto">
-              {EMOJIS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  aria-label={`Inserir ${emoji}`}
-                  className="rounded-md p-1 text-xl hover:bg-muted"
-                  onClick={() => pickEmoji(emoji)}
-                >
-                  {emoji}
-                </button>
+            <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+              {EMOJI_CATEGORIES.map((category) => (
+                <div key={category.name}>
+                  <p className="sticky top-0 z-10 bg-popover py-1 text-xs text-muted-foreground">
+                    {category.name}
+                  </p>
+                  <div className="grid grid-cols-8 gap-1">
+                    {category.emojis.map((emoji) => (
+                      <button
+                        key={`${category.name}-${emoji}`}
+                        type="button"
+                        aria-label={`Inserir ${emoji}`}
+                        className="rounded-md p-1 text-xl hover:bg-muted"
+                        onClick={() => pickEmoji(emoji)}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </TabsContent>
