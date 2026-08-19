@@ -229,6 +229,10 @@ export const MegaApiService = {
       ok: false,
       error: "Não foi possível enviar a mídia pela MEGA API.",
     };
+    // Algumas versões da MEGA aceitam a mídia e respondem 200 sem devolver o
+    // id da mensagem. Guardamos essa resposta como sucesso de reserva em vez
+    // de derrubar o envio inteiro.
+    let acceptedWithoutId: { path: string; data: { key?: { id?: string }; messageId?: string } } | null = null;
     for (const attempt of attempts) {
       const result = await request<{ key?: { id?: string }; messageId?: string }>(creds, attempt.path, {
         method: "POST",
@@ -240,15 +244,26 @@ export const MegaApiService = {
           console.info("[mega] mídia aceita", { path: attempt.path, tipo: input.mediaType, messageId });
           return { ok: true as const, data: { ...result.data, messageId } };
         }
-        last = {
-          ok: false,
-          error: "A MEGA API respondeu sem confirmar o envio da mídia.",
-        };
-        console.warn("[mega] mídia sem confirmação", { path: attempt.path, tipo: input.mediaType });
+        if (!acceptedWithoutId) {
+          acceptedWithoutId = { path: attempt.path, data: (result.data ?? {}) as { key?: { id?: string } } };
+        }
+        console.warn("[mega] mídia sem id na resposta", {
+          path: attempt.path,
+          tipo: input.mediaType,
+          resposta: JSON.stringify(result.data ?? null).slice(0, 500),
+        });
         continue;
       }
       last = result;
+
       if (result.status === 401 || result.status === 403) return result;
+    }
+    if (acceptedWithoutId) {
+      console.info("[mega] mídia enviada sem id confirmado", {
+        path: acceptedWithoutId.path,
+        tipo: input.mediaType,
+      });
+      return { ok: true as const, data: acceptedWithoutId.data };
     }
     return last;
   },
