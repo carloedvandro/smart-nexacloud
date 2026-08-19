@@ -589,6 +589,14 @@ function ConversationThread({
 
   const busy = send.isPending || sendMedia.isPending;
 
+  // Avaliação de atendimento (enviada ao lead quando ele fica abandonado).
+  const { data: rating } = useQuery({
+    queryKey: ["conversation-rating", conversation.id],
+    queryFn: () => getConversationRating(conversation.id),
+    refetchInterval: 15000,
+  });
+
+
   return (
     <section className="flex min-h-0 flex-col overflow-hidden border-chat-line bg-card lg:rounded-xl lg:border lg:shadow-panel">
       {/* Cabeçalho */}
