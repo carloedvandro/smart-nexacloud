@@ -64,6 +64,16 @@ export function sniffMimeType(bytes: Uint8Array): string | null {
     return "video/mp4";
   }
   if (starts(0x50, 0x4b, 0x03, 0x04)) return "application/zip";
+  // RIFF....WEBP — figurinhas do WhatsApp (inclusive animadas) chegam assim.
+  if (
+    starts(0x52, 0x49, 0x46, 0x46) &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
   return null;
 }
 
@@ -138,11 +148,17 @@ export function bytesToBase64(bytes: Uint8Array): string {
  * devolvendo o novo caminho (ou o mesmo, quando nada precisa mudar).
  */
 export async function repairMediaContentType(path: string): Promise<string> {
-  if (!/\.(bin|dat)$/i.test(path)) return path;
+  // .jpg entra na lista porque figurinhas/GIFs (webp) eram salvos com essa
+  // extensão padrão quando a MEGA não informava o mimetype.
+  if (!/\.(bin|dat|jpg|jpeg)$/i.test(path)) return path;
   const file = await downloadStoredMedia(path);
   if (!file) return path;
   const detected = sniffMimeType(file.bytes);
   if (!detected) return path;
+  const currentExtension = (path.split(".").pop() ?? "").toLowerCase();
+  const jpegOk = detected === "image/jpeg" && (currentExtension === "jpg" || currentExtension === "jpeg");
+  if (jpegOk && !isGeneric(file.mimeType)) return path;
+
 
   const kind: MediaKind = detected.startsWith("image/")
     ? "image"

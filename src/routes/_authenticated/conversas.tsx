@@ -7,6 +7,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  Copy,
   Download,
   FileText,
   Info,
@@ -17,6 +18,7 @@ import {
   Search,
   Send,
   Square,
+  Star,
   Timer,
   UserCheck,
   X,
@@ -58,6 +60,12 @@ import {
   sendWhatsAppMediaMessage,
 } from "@/lib/whatsapp/whatsapp.functions";
 import { getConversationAccess } from "@/lib/queue/access.functions";
+import {
+  copyMedia,
+  EmojiGifPicker,
+  useMediaFavorites,
+  type FavoriteMedia,
+} from "@/components/nexa/emoji-gif-picker";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import { cn } from "@/lib/utils";
 
@@ -336,11 +344,16 @@ function ConversationThread({
     queryFn: () => listConsultants(companyId),
   });
 
-  // Links temporários das mídias (áudios, imagens, documentos) da conversa.
-  const mediaPaths = useMemo(
-    () => (messages ?? []).map((m) => m.media_url).filter((p): p is string => Boolean(p)),
-    [messages],
-  );
+  const { favorites, isFavorite, toggle: toggleFavorite } = useMediaFavorites();
+
+  // Links temporários das mídias (áudios, imagens, documentos) da conversa
+  // somados aos favoritos guardados pelo consultor (para prévia e reenvio).
+  const mediaPaths = useMemo(() => {
+    const fromMessages = (messages ?? [])
+      .map((m) => m.media_url)
+      .filter((p): p is string => Boolean(p));
+    return Array.from(new Set([...fromMessages, ...favorites.map((f) => f.path)]));
+  }, [messages, favorites]);
   const fetchMediaUrls = useServerFn(getConversationMediaUrls);
   const checkAccess = useServerFn(getConversationAccess);
   const { data: mediaUrls } = useQuery({
@@ -376,6 +389,25 @@ function ConversationThread({
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  /** Reenvia uma figurinha/GIF/imagem guardada nos favoritos. */
+  const sendFavorite = useCallback(
+    async (favorite: FavoriteMedia) => {
+      const url = mediaUrls?.[favorite.path];
+      if (!url) {
+        toast.error("Não consegui carregar este favorito.");
+        return;
+      }
+      try {
+        const blob = await (await fetch(url)).blob();
+        const name = favorite.path.split("/").pop() ?? "favorito";
+        sendMedia.mutate({ blob, name, kind: favorite.type === "video" ? "video" : "image" });
+      } catch {
+        toast.error("Não consegui enviar este favorito.");
+      }
+    },
+    [mediaUrls, sendMedia],
+  );
 
   // Rola para a última mensagem apenas quem já estava no fim da conversa.
   useEffect(() => {
@@ -558,6 +590,11 @@ function ConversationThread({
               key={m.id}
               message={m}
               mediaUrl={m.media_url ? (mediaUrls?.[m.media_url] ?? null) : null}
+              isFavorite={m.media_url ? isFavorite(m.media_url) : false}
+              onToggleFavorite={() =>
+                m.media_url &&
+                toggleFavorite({ path: m.media_url, type: m.message_type, label: m.content })
+              }
             />
           ))
         )}
@@ -608,6 +645,12 @@ function ConversationThread({
         ) : (
           <div className="flex items-end gap-2">
             <MediaComposer disabled={busy} onFile={(file) => sendMedia.mutate(file)} />
+            <EmojiGifPicker
+              disabled={busy}
+              onEmoji={(emoji) => setDraft((current) => `${current}${emoji}`)}
+              resolveUrl={(path) => mediaUrls?.[path] ?? null}
+              onSendFavorite={(favorite) => void sendFavorite(favorite)}
+            />
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -772,7 +815,17 @@ function MediaComposer({
   );
 }
 
-function MessageBubble({ message, mediaUrl }: { message: MessageRow; mediaUrl?: string | null }) {
+function MessageBubble({
+  message,
+  mediaUrl,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  message: MessageRow;
+  mediaUrl?: string | null;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+}) {
   const isCustomer = message.sender_type === "customer";
   const isSystem = message.sender_type === "system";
   const isAi = message.sender_type === "ai";
@@ -805,7 +858,33 @@ function MessageBubble({ message, mediaUrl }: { message: MessageRow; mediaUrl?: 
             {isAi ? "IA" : (message.sender_name ?? "Consultor")}
           </p>
         ) : null}
-        {message.media_url ? <MessageMedia type={message.message_type} url={mediaUrl ?? null} /> : null}
+        {message.media_url ? (
+          <>
+            <MessageMedia type={message.message_type} url={mediaUrl ?? null} />
+            {mediaUrl && message.message_type !== "audio" ? (
+              <div className="mb-1 flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Copiar mídia"
+                  title="Copiar"
+                  className="rounded-md p-1 text-chat-ink-muted hover:bg-chat-shell"
+                  onClick={() => void copyMedia(mediaUrl)}
+                >
+                  <Copy className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={isFavorite ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                  title={isFavorite ? "Remover dos favoritos" : "Favoritar"}
+                  className="rounded-md p-1 text-chat-ink-muted hover:bg-chat-shell"
+                  onClick={onToggleFavorite}
+                >
+                  <Star className={cn("size-3.5", isFavorite && "fill-chat-warning text-chat-warning")} />
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : null}
         {message.content ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : null}
         {message.transcription ? (
           <p className="mt-1 rounded-md bg-chat-shell px-2 py-1 text-xs italic text-chat-ink-muted">
