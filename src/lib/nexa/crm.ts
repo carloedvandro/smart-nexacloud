@@ -184,6 +184,39 @@ export async function listConversations(params: {
   return rows;
 }
 
+/**
+ * Leads abandonados: conversas na fila, sem consultor responsável, que já
+ * passaram pelo rodízio (houve tentativas) e não têm nenhuma oferta em aberto.
+ * Qualquer consultor da empresa pode assumir uma dessas conversas.
+ */
+export async function listAbandonedConversations(params: { companyId: string; search?: string }) {
+  const rows = await listConversations({
+    companyId: params.companyId,
+    statuses: ["WAITING_HUMAN", "QUEUED"],
+    search: params.search ?? "",
+  });
+  const candidates = rows.filter((c) => !c.assigned_user_id);
+  if (candidates.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("assignment_attempts")
+    .select("conversation_id, status")
+    .in(
+      "conversation_id",
+      candidates.map((c) => c.id),
+    );
+  if (error) throw new Error(error.message);
+
+  const total = new Map<string, number>();
+  const waiting = new Set<string>();
+  for (const a of data ?? []) {
+    total.set(a.conversation_id, (total.get(a.conversation_id) ?? 0) + 1);
+    if (a.status === "WAITING") waiting.add(a.conversation_id);
+  }
+  return candidates.filter((c) => (total.get(c.id) ?? 0) > 0 && !waiting.has(c.id));
+}
+
+
 export async function getConversation(conversationId: string) {
   return assertOk(
     await supabase.from("conversations").select(CONVERSATION_SELECT).eq("id", conversationId).maybeSingle(),
