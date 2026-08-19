@@ -47,7 +47,9 @@ export async function transcribeAudioMessage(input: {
   try {
     const form = new FormData();
     const extension = extensionFor("audio", mimeType);
-    form.append("file", new Blob([file.bytes], { type: mimeType }), `audio.${extension}`);
+    const audioBytes = new Uint8Array(file.bytes.byteLength);
+    audioBytes.set(file.bytes);
+    form.append("file", new Blob([audioBytes.buffer], { type: mimeType }), `audio.${extension}`);
     form.append("model", MODEL);
     form.append("language", "pt");
     form.append("prompt", "Conversa de atendimento em português do Brasil sobre salário-maternidade e auxílio-maternidade.");
