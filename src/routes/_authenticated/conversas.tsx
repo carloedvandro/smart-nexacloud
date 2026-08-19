@@ -484,9 +484,21 @@ function ConversationThread({
   // o servidor recusa e a interface fica somente leitura.
   const { data: access } = useQuery({
     queryKey: ["conversation-access", conversation.id],
-    queryFn: () => checkAccess({ data: { conversationId: conversation.id } }),
+    queryFn: async () => {
+      try {
+        return await checkAccess({ data: { conversationId: conversation.id } });
+      } catch (error) {
+        // Falha temporária (sessão hidratando, deploy novo do servidor):
+        // não derruba a tela — mantém o estado anterior de permissão.
+        console.error("[acesso] falha ao verificar permissão da conversa", error);
+        return null;
+      }
+    },
     refetchInterval: 20000,
+    retry: false,
+    placeholderData: (previous) => previous,
   });
+
   const expired = access ? !access.allowed : false;
   const canWrite = (isAdmin || isMine) && !expired;
   const closed = conversation.status === "CLOSED";
