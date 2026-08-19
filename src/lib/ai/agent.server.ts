@@ -246,7 +246,7 @@ export async function respondWithAI(input: {
     return { status: "skipped", reason: "conversa com consultor" };
   }
 
-  const customerText = (lastCustomer.content ?? lastCustomer.transcription ?? "").trim();
+  const customerText = ((lastCustomer.transcription || lastCustomer.content) ?? "").trim();
   const explicitHumanRequest =
     /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
     /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
