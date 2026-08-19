@@ -465,8 +465,14 @@ function ConversationThread({
   const assign = useMutation({
     mutationFn: (consultantId: string) =>
       assignConversation(conversation.id, consultantId === "NONE" ? null : consultantId),
-    onSuccess: () => {
-      toast.success("Atendimento atualizado");
+    onSuccess: (result) => {
+      if (result.notification.notified) {
+        toast.success("Atendimento atualizado e aviso enviado pelo WhatsApp");
+      } else if (result.notification.reason) {
+        toast.warning(result.notification.reason);
+      } else {
+        toast.success("Atendimento atualizado");
+      }
       refresh();
     },
     onError: (e: Error) => toast.error(e.message),

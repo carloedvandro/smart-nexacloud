@@ -226,7 +226,7 @@ export async function sendMessage(input: {
 }
 
 export async function assignConversation(conversationId: string, consultantId: string | null) {
-  await assignConversationWithNotice({ data: { conversationId, consultantId } });
+  return assignConversationWithNotice({ data: { conversationId, consultantId } });
 }
 
 export async function setConversationStatus(conversationId: string, status: ConversationStatus) {
