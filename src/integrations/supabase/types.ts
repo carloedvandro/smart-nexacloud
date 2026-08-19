@@ -1836,6 +1836,7 @@ export type Database = {
         | "video"
         | "system"
         | "other"
+        | "sticker"
       sender_type: "customer" | "ai" | "consultant" | "admin" | "system"
       transcription_status:
         | "NONE"
@@ -2045,6 +2046,7 @@ export const Constants = {
         "video",
         "system",
         "other",
+        "sticker",
       ],
       sender_type: ["customer", "ai", "consultant", "admin", "system"],
       transcription_status: [
