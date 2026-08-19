@@ -142,33 +142,40 @@ export const MegaApiService = {
     const fileName = input.fileName ?? `arquivo-${Date.now()}`;
     const caption = input.caption ?? "";
     const isAudio = input.mediaType === "audio";
+    const audioMimeType = input.mimeType || "audio/ogg; codecs=opus";
+    const isOggOpus = /audio\/(ogg|opus)/i.test(audioMimeType);
+    const primaryAudioType = isOggOpus ? "ptt" : "audio";
+    const fallbackAudioType = isOggOpus ? "audio" : "ptt";
     const attempts: Array<{ path: string; body: Record<string, unknown> }> = [
-      // Áudio: a MEGA tem endpoint próprio de voz (ptt). Sem ele, muitas versões
-      // aceitam a chamada mas o WhatsApp do destinatário não recebe o áudio.
+      // Contrato oficial da MEGA: áudio gravado é enviado pelo mediaUrl com
+      // type "ptt". Não existe endpoint /audioUrl nem campo booleano `ptt`.
       ...(isAudio
         ? [
-            {
-              path: `/rest/sendMessage/${creds.instanceKey}/audioUrl`,
-              body: {
-                messageData: {
-                  to: input.to,
-                  url: input.url,
-                  ptt: true,
-                  mimeType: input.mimeType ?? undefined,
-                  fileName,
-                },
-              },
-            },
             {
               path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
               body: {
                 messageData: {
                   to: input.to,
                   url: input.url,
-                  type: "audio",
-                  ptt: true,
-                  mimeType: input.mimeType ?? undefined,
+                  type: primaryAudioType,
+                  mimeType: audioMimeType,
                   fileName,
+                  caption,
+                },
+              },
+            },
+            // Compatibilidade: se a versão da instância não aceitar PTT,
+            // tenta entregar como arquivo de áudio compartilhado.
+            {
+              path: `/rest/sendMessage/${creds.instanceKey}/mediaUrl`,
+              body: {
+                messageData: {
+                  to: input.to,
+                  url: input.url,
+                  type: fallbackAudioType,
+                  mimeType: audioMimeType,
+                  fileName,
+                  caption,
                 },
               },
             },
