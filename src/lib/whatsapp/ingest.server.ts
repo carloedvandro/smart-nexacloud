@@ -395,6 +395,19 @@ export async function processWebhookEvent(input: {
       .is("phone", null);
   }
 
+  // Figurinha: guardamos (somente no servidor) a chave e o conteúdo original
+  // da mensagem. Só com eles é possível reencaminhar a figurinha nativamente,
+  // preservando animação e transparência no WhatsApp de quem recebe.
+  if (!result.duplicate && result.message_id && messageType === "sticker") {
+    await persistStickerProviderPayload({
+      messageId: result.message_id,
+      companyId,
+      body,
+    });
+  }
+
+
+
 
   console.info("[whatsapp] mensagem processada", {
     evento: eventType,
