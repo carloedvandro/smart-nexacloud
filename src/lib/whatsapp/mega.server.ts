@@ -125,6 +125,84 @@ export const MegaApiService = {
   },
 
   /**
+   * Envia uma mensagem de texto com um botão clicável (URL button).
+   * A MEGA API (Baileys) aceita variações de formato, então tentamos cada
+   * combinação conhecida até uma responder com sucesso. Se nenhuma funcionar,
+   * cai para sendText com a URL em linha própria (clicável no WhatsApp).
+   */
+  async sendButtonMessage(
+    creds: MegaCredentials,
+    input: { to: string; text: string; url: string; buttonText: string; footer?: string },
+  ) {
+    const footer = input.footer ?? "";
+    const button = { type: "url", url: input.url };
+    const variants: Array<{ path: string; body: Record<string, unknown> }> = [
+      {
+        path: `/rest/sendMessage/${creds.instanceKey}/button`,
+        body: {
+          messageData: {
+            to: input.to,
+            text: input.text,
+            footer,
+            buttons: [{ ...button, title: input.buttonText }],
+          },
+        },
+      },
+      {
+        path: `/rest/sendMessage/${creds.instanceKey}/button`,
+        body: {
+          messageData: {
+            to: input.to,
+            text: input.text,
+            footer,
+            buttons: [{ ...button, displayText: input.buttonText }],
+          },
+        },
+      },
+      {
+        path: `/rest/sendMessage/${creds.instanceKey}/button`,
+        body: {
+          messageData: {
+            to: input.to,
+            content: input.text,
+            footerText: footer,
+            buttons: [{ ...button, title: input.buttonText }],
+          },
+        },
+      },
+      {
+        path: `/rest/sendMessage/${creds.instanceKey}/button`,
+        body: {
+          messageData: {
+            to: input.to,
+            content: input.text,
+            buttons: [{ ...button, displayText: input.buttonText }],
+          },
+        },
+      },
+    ];
+
+    let last: MegaResult<{ key?: { id?: string }; messageId?: string }> = {
+      ok: false,
+      error: "Não foi possível enviar o botão pela MEGA API.",
+    };
+    for (const variant of variants) {
+      const result = await request<{ key?: { id?: string }; messageId?: string }>(
+        creds,
+        variant.path,
+        { method: "POST", body: variant.body },
+      );
+      if (result.ok) return result;
+      last = result;
+      if (result.status === 401 || result.status === 403) return result;
+    }
+
+    // Fallback: texto com a URL em linha própria (clicável no WhatsApp).
+    const fallbackText = [input.text, "", input.url].join("\n");
+    return MegaApiService.sendText(creds, input.to, fallbackText);
+  },
+
+  /**
    * Encaminha uma mensagem recebida preservando o formato nativo.
    * É o único caminho correto para reenviar figurinhas (stickerMessage):
    * mantém WebP animado, transparência e o comportamento de figurinha.
