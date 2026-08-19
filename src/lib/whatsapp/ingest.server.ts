@@ -418,12 +418,21 @@ export async function processWebhookEvent(input: {
 
   // Áudio do lead: transcreve antes da IA responder, para que ela entenda.
   if (!result.duplicate && result.message_id && messageType === "audio" && mediaUrl) {
-    const { transcribeAudioMessage } = await import("@/lib/ai/transcribe.server");
-    await transcribeAudioMessage({
-      messageId: result.message_id,
-      mediaPath: mediaUrl,
-      mimeType,
-    });
+    try {
+      const { transcribeAudioMessage } = await import("@/lib/ai/transcribe.server");
+      await transcribeAudioMessage({
+        messageId: result.message_id,
+        mediaPath: mediaUrl,
+        mimeType,
+      });
+    } catch (error) {
+      // Uma indisponibilidade momentânea da transcrição não pode interromper
+      // todo o webhook nem impedir o encaminhamento/resposta subsequente.
+      console.error("[transcrição] falha não bloqueante", {
+        messageId: result.message_id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   // Resposta do lead à pergunta de avaliação (1 a 5 estrelas): registra a nota

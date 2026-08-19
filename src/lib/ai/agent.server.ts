@@ -322,13 +322,19 @@ export async function respondWithAI(input: {
       const wantsVoice = ["audio", "ptt", "voice"].includes(
         String(lastCustomer.message_type ?? "").toLowerCase(),
       );
-      const voice = wantsVoice
-        ? await synthesizeReplyAudio({ companyId, connectionId, text })
-        : null;
-      const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
+      let voice: Awaited<ReturnType<typeof synthesizeReplyAudio>> = null;
+      let voiceUrl: string | null = null;
+      if (wantsVoice) {
+        try {
+          voice = await synthesizeReplyAudio({ companyId, connectionId, text });
+          voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
+        } catch (error) {
+          log("voz indisponível; resposta seguirá em texto", error);
+        }
+      }
       const useVoice = Boolean(voice && voiceUrl);
 
-      const { data: messageId } = await supabaseAdmin.rpc("create_outbound_message", {
+      const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc("create_outbound_message", {
         _conversation_id: conversationId,
         _company_id: companyId,
         _sender_id: null as unknown as string,
@@ -336,19 +342,30 @@ export async function respondWithAI(input: {
         _sender_name: "IA",
         _content: text,
         _message_type: useVoice ? "audio" : "text",
-        ...(useVoice ? { _media_url: voice!.path } : {}),
+        ...(useVoice && voice ? { _media_url: voice.path } : {}),
         _connection_id: connectionId,
       });
 
-      const sent = useVoice
+      if (createMessageError) {
+        log("falha ao registrar resposta; enviando texto de contingência", createMessageError.message);
+      }
+
+      let sent = useVoice && voice && voiceUrl
         ? await MegaApiService.sendMedia(creds, {
             to: recipient,
-            url: voiceUrl!,
+            url: voiceUrl,
             mediaType: "audio",
-            mimeType: voice!.mimeType,
+            mimeType: voice.mimeType,
             fileName: `resposta-${Date.now()}.mp3`,
           })
         : await MegaApiService.sendText(creds, recipient, text);
+
+      // A voz é uma melhoria, nunca um ponto único de falha: se a MEGA não
+      // aceitar o áudio, o cliente ainda recebe a mesma resposta em texto.
+      if (!sent.ok && useVoice) {
+        log("falha no envio da voz; tentando texto", sent.error);
+        sent = await MegaApiService.sendText(creds, recipient, text);
+      }
 
       if (messageId) {
         await supabaseAdmin.rpc("finalize_outbound_message", {
