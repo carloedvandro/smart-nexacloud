@@ -372,3 +372,121 @@ export async function sendWhatsAppMedia(input: {
 
   return { ok: true as const, messageId, mediaPath: path };
 }
+
+/**
+ * Reenvia uma figurinha já recebida pelo WhatsApp, encaminhando a mensagem
+ * original (forwardMessage). É o único formato que chega ao destinatário como
+ * figurinha nativa — com animação e transparência. Sem os dados originais o
+ * envio é recusado: não existe fallback silencioso como imagem estática.
+ */
+export async function forwardStickerMessage(input: {
+  companyId: string;
+  conversationId: string;
+  userId: string;
+  senderName: string | null;
+  senderType: "consultant" | "admin";
+  sourceMessageId: string;
+}) {
+  const { data: conversation } = await supabaseAdmin
+    .from("conversations")
+    .select("id, company_id, channel_id, metadata, lead:leads(whatsapp)")
+    .eq("id", input.conversationId)
+    .eq("company_id", input.companyId)
+    .maybeSingle();
+  if (!conversation) return { ok: false as const, error: "Conversa inexistente." };
+
+  const destination =
+    (conversation.lead as { whatsapp: string | null } | null)?.whatsapp ?? conversation.channel_id;
+  const recipient = WhatsAppIdentifierService.toRecipient(destination);
+  if (!recipient) return { ok: false as const, error: "Lead sem WhatsApp válido." };
+
+  const { data: source } = await supabaseAdmin
+    .from("messages")
+    .select("id, company_id, media_url, message_type")
+    .eq("id", input.sourceMessageId)
+    .eq("company_id", input.companyId)
+    .maybeSingle();
+  const { data: payload } = await supabaseAdmin
+    .from("message_provider_payloads")
+    .select("provider_key, provider_message, is_animated")
+    .eq("message_id", input.sourceMessageId)
+    .eq("company_id", input.companyId)
+    .maybeSingle();
+
+  if (!source || !payload?.provider_key || !payload?.provider_message) {
+    return {
+      ok: false as const,
+      error:
+        "Esta figurinha não possui os dados originais necessários para envio nativo. Salve-a novamente ao recebê-la pelo WhatsApp.",
+    };
+  }
+
+  const connectionId = await resolveConnection({
+    companyId: input.companyId,
+    conversationId: input.conversationId,
+    userId: input.userId,
+    metadata: conversation.metadata as Record<string, unknown> | null,
+  });
+  if (!connectionId) {
+    return { ok: false as const, error: "Nenhuma instância de WhatsApp conectada disponível." };
+  }
+
+  const { data: messageId, error: createError } = await supabaseAdmin.rpc(
+    "create_outbound_message",
+    {
+      _conversation_id: input.conversationId,
+      _company_id: input.companyId,
+      _sender_id: input.userId,
+      _sender_type: input.senderType,
+      _sender_name: input.senderName ?? (null as unknown as string),
+      _content: "",
+      _message_type: "sticker",
+      _media_url: source.media_url ?? (null as unknown as string),
+      _connection_id: connectionId,
+    },
+  );
+  if (createError || !messageId) {
+    return { ok: false as const, error: createError?.message ?? "Falha ao registrar a figurinha." };
+  }
+
+  await supabaseAdmin
+    .from("messages")
+    .update({
+      metadata: { origin: "favorite_forward", is_animated: payload.is_animated },
+      mime_type: "image/webp",
+    })
+    .eq("id", messageId as string);
+
+  const fail = async (reason: string) => {
+    await supabaseAdmin.rpc("finalize_outbound_message", {
+      _message_id: messageId,
+      _external_message_id: null as unknown as string,
+      _status: "FAILED",
+      _reason: reason,
+    });
+    return { ok: false as const, error: reason, messageId };
+  };
+
+  const creds = await loadMegaCredentials(connectionId);
+  if (!creds) return fail("Credenciais da instância não configuradas.");
+
+  const sent = await MegaApiService.forwardMessage(creds, {
+    to: recipient,
+    key: payload.provider_key,
+    message: payload.provider_message,
+  });
+  if (!sent.ok) return fail(sent.error);
+
+  await supabaseAdmin.rpc("finalize_outbound_message", {
+    _message_id: messageId,
+    _external_message_id: (sent.data?.key?.id ?? sent.data?.messageId ?? null) as unknown as string,
+    _status: "SENT",
+  });
+
+  await supabaseAdmin.rpc("queue_register_response", {
+    _conversation_id: input.conversationId,
+    _user_id: input.userId,
+  });
+
+  return { ok: true as const, messageId, mediaPath: source.media_url };
+}
