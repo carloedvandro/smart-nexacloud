@@ -563,6 +563,11 @@ function ConversationThread({
               key={m.id}
               message={m}
               mediaUrl={m.media_url ? (mediaUrls?.[m.media_url] ?? null) : null}
+              isFavorite={m.media_url ? isFavorite(m.media_url) : false}
+              onToggleFavorite={() =>
+                m.media_url &&
+                toggleFavorite({ path: m.media_url, type: m.message_type, label: m.content })
+              }
             />
           ))
         )}
