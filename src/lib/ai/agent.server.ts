@@ -355,7 +355,7 @@ export async function respondWithAI(input: {
         _sender_name: "IA",
         _content: text,
         _message_type: asAudio && sent.ok ? "audio" : "text",
-        ...(asAudio && sent.ok ? { _media_url: voice.path } : {}),
+        ...(voice && sent.ok ? { _media_url: voice.path } : {}),
         _connection_id: connectionId,
       });
 
