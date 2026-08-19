@@ -330,15 +330,20 @@ export async function consultantCanHandle(
   if (["CLOSED", "PAUSED"].includes(conversation.status)) return false;
   if (conversation.assigned_user_id) return conversation.assigned_user_id === profileId;
 
-  const { data: waiting } = await supabaseAdmin
+  const { data: attempts } = await supabaseAdmin
     .from("assignment_attempts")
-    .select("id")
-    .eq("conversation_id", conversationId)
-    .eq("consultant_id", profileId)
-    .eq("status", "WAITING")
-    .limit(1);
-  return Boolean(waiting?.length);
+    .select("consultant_id, status")
+    .eq("conversation_id", conversationId);
+
+  const rows = attempts ?? [];
+  if (rows.some((a) => a.status === "WAITING" && a.consultant_id === profileId)) return true;
+
+  // Lead abandonado: passou pelo rodízio, ninguém aceitou e não há oferta em
+  // aberto. Nesse caso qualquer consultor da empresa pode assumir.
+  const abandoned = rows.length > 0 && !rows.some((a) => a.status === "WAITING");
+  return abandoned;
 }
+
 
 /**
  * Mensagem recebida no tronco vinda do número pessoal de um colaborador.

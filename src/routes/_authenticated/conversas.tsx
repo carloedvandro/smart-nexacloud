@@ -47,7 +47,9 @@ import {
 import {
   assignConversation,
   listConsultants,
+  listAbandonedConversations,
   listConversations,
+
   listMessages,
   markConversationRead,
   sendMessage,
@@ -93,9 +95,11 @@ const FILTERS: { key: string; label: string; statuses: ConversationStatus[] }[] 
   { key: "OPEN", label: "Abertas", statuses: OPEN_CONVERSATION_STATUSES },
   { key: "AI_ACTIVE", label: "IA", statuses: ["AI_ACTIVE"] },
   { key: "QUEUE", label: "Fila", statuses: ["WAITING_HUMAN", "QUEUED"] },
+  { key: "ABANDONED", label: "Lead abandonado", statuses: ["WAITING_HUMAN", "QUEUED"] },
   { key: "MINE", label: "Minhas", statuses: OPEN_CONVERSATION_STATUSES },
   { key: "CLOSED", label: "Encerradas", statuses: ["CLOSED"] },
 ];
+
 
 /** Iniciais do lead para o avatar do cabeçalho e da lista. */
 function initials(name?: string | null, fallback?: string | null) {
@@ -146,13 +150,16 @@ function ConversasPage() {
   const { data: conversations, isLoading } = useQuery({
     queryKey: listKey,
     queryFn: () =>
-      listConversations({
-        companyId: companyId as string,
-        statuses: active.statuses,
-        assignedTo: filter === "MINE" ? (user?.id ?? null) : null,
-        search,
-      }),
+      filter === "ABANDONED"
+        ? listAbandonedConversations({ companyId: companyId as string, search })
+        : listConversations({
+            companyId: companyId as string,
+            statuses: active.statuses,
+            assignedTo: filter === "MINE" ? (user?.id ?? null) : null,
+            search,
+          }),
     enabled: Boolean(companyId),
+
     // Realtime pode não entregar um UPDATE ao consultor que acabou de perder
     // acesso à linha por RLS. O polling curto é a garantia de revogação visual.
     refetchInterval: 3000,
@@ -541,13 +548,17 @@ function ConversationThread({
 
       const { data, error } = await supabase
         .from("assignment_attempts")
-        .select("id")
-        .eq("conversation_id", conversation.id)
-        .eq("consultant_id", currentUserId)
-        .eq("status", "WAITING")
-        .limit(1);
+        .select("consultant_id, status")
+        .eq("conversation_id", conversation.id);
       if (error) throw new Error(error.message);
-      const allowed = Boolean(data?.length);
+      const rows = data ?? [];
+      const mineWaiting = rows.some(
+        (a) => a.status === "WAITING" && a.consultant_id === currentUserId,
+      );
+      // Lead abandonado: rodízio encerrado sem ninguém aceitar — livre para todos.
+      const abandoned = rows.length > 0 && !rows.some((a) => a.status === "WAITING");
+      const allowed = mineWaiting || abandoned;
+
       return {
         allowed,
         reason: allowed ? ("OK" as const) : ("EXPIRED" as const),
