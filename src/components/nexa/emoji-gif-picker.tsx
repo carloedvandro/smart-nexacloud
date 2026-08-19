@@ -4,10 +4,11 @@
  * do usuário, para reenviar com um clique sem depender do histórico.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Smile, Star, Trash2 } from "lucide-react";
+import { Copy, Send, Smile, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
