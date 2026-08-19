@@ -383,13 +383,24 @@ export async function handleConsultantInbound(input: {
     ? `${getPublicBaseUrl()}/conversas?c=${conversationId}`
     : `${getPublicBaseUrl()}/conversas`;
 
-  await sendToConsultant(
-    trunk,
-    input.phone,
-    conversationId
-      ? `🖥️ O atendimento é feito no painel do NexaAtende — mensagens enviadas por aqui não chegam ao lead.\n\n👉 ${link}`
-      : "ℹ️ Você não tem nenhum atendimento ativo no momento. Quando receber uma oferta, atenda pelo painel do NexaAtende.",
-  );
+  if (conversationId) {
+    await sendToConsultant(
+      trunk,
+      input.phone,
+      "🖥️ O atendimento é feito no painel do NexaAtende — mensagens enviadas por aqui não chegam ao lead.",
+      {
+        url: link,
+        buttonText: "💬 Abrir painel",
+        footer: "NexaAtende — Toque no botão para responder pelo painel",
+      },
+    );
+  } else {
+    await sendToConsultant(
+      trunk,
+      input.phone,
+      "ℹ️ Você não tem nenhum atendimento ativo no momento. Quando receber uma oferta, atenda pelo painel do NexaAtende.",
+    );
+  }
   return true;
 }
 
