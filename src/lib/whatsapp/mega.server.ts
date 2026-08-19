@@ -258,6 +258,13 @@ export const MegaApiService = {
 
       if (result.status === 401 || result.status === 403) return result;
     }
+    if (acceptedWithoutId) {
+      console.info("[mega] mídia enviada sem id confirmado", {
+        path: acceptedWithoutId.path,
+        tipo: input.mediaType,
+      });
+      return { ok: true as const, data: acceptedWithoutId.data };
+    }
     return last;
   },
 
