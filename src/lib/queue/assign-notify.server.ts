@@ -31,14 +31,13 @@ export async function notifyManualAssignment(input: {
   previousUserId: string | null;
   newUserId: string | null;
   actorId: string;
-}): Promise<void> {
+}): Promise<{ notified: boolean; reason?: string }> {
   const { companyId, conversationId, previousUserId, newUserId, actorId } = input;
-  if (previousUserId === newUserId) return;
 
   const trunk = await loadTrunk(companyId);
   if (!trunk) {
     console.error("[atribuição] empresa sem instância tronco", companyId);
-    return;
+    return { notified: false, reason: "A instância tronco não está disponível para enviar o aviso." };
   }
 
   const link = `${getPublicBaseUrl()}/conversas?c=${conversationId}`;
@@ -58,12 +57,16 @@ export async function notifyManualAssignment(input: {
 
   const actor = await loadProfile(actorId);
   const actorName = actor?.full_name?.trim() || "A administração";
+  let notified = false;
+  let reason: string | undefined;
 
-  // 1) Novo responsável (quando não é o próprio autor da ação).
-  if (newUserId && newUserId !== actorId) {
+  // 1) O novo responsável sempre recebe o aviso, inclusive quando o
+  // administrador atribui a conversa para si próprio. Antes esse caso era
+  // ignorado por `newUserId !== actorId`, deixando o consultor sem mensagem.
+  if (newUserId) {
     const target = await loadProfile(newUserId);
     if (target?.phone) {
-      await sendToConsultant(
+      const sent = await sendToConsultant(
         trunk,
         target.phone,
         [
@@ -80,13 +83,23 @@ export async function notifyManualAssignment(input: {
           .filter((line) => line !== "")
           .join("\n"),
       );
+      if (!sent) {
+        console.error("[atribuição] aviso ao novo responsável não foi entregue", {
+          conversationId,
+          newUserId,
+        });
+        reason = "Não foi possível entregar o aviso no WhatsApp pessoal do responsável.";
+      } else {
+        notified = true;
+      }
     } else {
       console.error("[atribuição] consultor sem WhatsApp pessoal", newUserId);
+      reason = "O responsável não possui WhatsApp pessoal cadastrado em Configurações › Perfil.";
     }
   }
 
   // 2) Consultor que perdeu o atendimento.
-  if (previousUserId && previousUserId !== actorId) {
+  if (previousUserId && previousUserId !== newUserId && previousUserId !== actorId) {
     const previous = await loadProfile(previousUserId);
     if (previous?.phone) {
       const message =
@@ -98,4 +111,6 @@ export async function notifyManualAssignment(input: {
       await sendToConsultant(trunk, previous.phone, message);
     }
   }
+
+  return { notified, ...(reason ? { reason } : {}) };
 }

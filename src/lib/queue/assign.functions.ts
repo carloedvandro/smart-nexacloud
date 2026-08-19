@@ -27,9 +27,10 @@ export const assignConversationWithNotice = createServerFn({ method: "POST" })
     });
     if (error) throw new Error(error.message);
 
+    let notification: { notified: boolean; reason?: string } = { notified: false };
     try {
       const { notifyManualAssignment } = await import("@/lib/queue/assign-notify.server");
-      await notifyManualAssignment({
+      notification = await notifyManualAssignment({
         companyId: conversation.company_id as string,
         conversationId: data.conversationId,
         previousUserId,
@@ -38,7 +39,11 @@ export const assignConversationWithNotice = createServerFn({ method: "POST" })
       });
     } catch (notifyError) {
       console.error("[atribuição] falha ao avisar no WhatsApp", notifyError);
+      notification = {
+        notified: false,
+        reason: "A atribuição foi salva, mas ocorreu uma falha ao enviar o aviso pelo WhatsApp.",
+      };
     }
 
-    return { ok: true };
+    return { ok: true, notification };
   });
