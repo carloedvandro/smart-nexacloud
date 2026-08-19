@@ -651,3 +651,36 @@ async function downloadAndStoreMedia(input: {
   });
   return path ? { path, mimeType } : null;
 }
+
+/**
+ * Guarda os dados originais da figurinha (chave + objeto `message` do webhook).
+ * Ficam em tabela sem políticas de acesso: só o servidor lê, para reencaminhar
+ * a figurinha nativamente pela MEGA API.
+ */
+async function persistStickerProviderPayload(input: {
+  messageId: string;
+  companyId: string;
+  body: Json;
+}) {
+  const key = findMessageKey(input.body);
+  const messageNode = findMessageNode(input.body);
+  if (!key || !messageNode || typeof messageNode !== "object") {
+    console.warn("[whatsapp] figurinha sem dados originais para reenvio");
+    return;
+  }
+  const sticker = (messageNode as Json)["stickerMessage"];
+  const isAnimated = Boolean(
+    sticker && typeof sticker === "object" && (sticker as Json)["isAnimated"],
+  );
+  const { error } = await supabaseAdmin.from("message_provider_payloads").upsert(
+    {
+      message_id: input.messageId,
+      company_id: input.companyId,
+      provider_key: key as unknown as Json,
+      provider_message: messageNode as unknown as Json,
+      is_animated: isAnimated,
+    },
+    { onConflict: "message_id" },
+  );
+  if (error) console.error("[whatsapp] falha ao guardar dados da figurinha", error.message);
+}
