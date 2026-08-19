@@ -273,14 +273,16 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       "",
       `⏱️ Você tem ${seconds || 60}s para assumir no painel, senão passa para o próximo.`,
       "",
-      `🖥️ Abra e responda pelo NexaAtende: ${getPublicBaseUrl()}/conversas?c=${attempt.conversation_id}`,
-      "",
       "⚠️ Não responda por aqui: o atendimento acontece somente no painel, e a resposta ao lead sai pelo número da empresa.",
     ]
       .filter((line) => line !== "")
       .join("\n");
 
-    const ok = await sendToConsultant(trunk, notificationPhone, text);
+    const ok = await sendToConsultant(trunk, notificationPhone, text, {
+      url: `${getPublicBaseUrl()}/conversas?c=${attempt.conversation_id}`,
+      buttonText: "💬 Abrir atendimento",
+      footer: "NexaAtende — Toque no botão para responder pelo painel",
+    });
     if (!ok) {
       await releaseNotificationClaim(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
     }
