@@ -265,11 +265,16 @@ export async function respondWithAI(input: {
   const messages: ChatMessage[] = [
     { role: "system", content: buildSystemPrompt(settings, knowledge) },
     ...ordered
-      .filter((m) => (m.content ?? m.transcription ?? "").trim())
-      .map<ChatMessage>((m) => ({
-        role: m.sender_type === "customer" ? "user" : "assistant",
-        content: (m.content ?? m.transcription ?? "").trim(),
-      })),
+      .filter((m) => ((m.transcription || m.content) ?? "").trim())
+      .map<ChatMessage>((m) => {
+        const body = ((m.transcription || m.content) ?? "").trim();
+        const isAudio = ["audio", "ptt", "voice"].includes(String(m.message_type ?? "").toLowerCase());
+        return {
+          role: m.sender_type === "customer" ? "user" : "assistant",
+          content:
+            isAudio && m.sender_type === "customer" ? `(áudio enviado pelo cliente) ${body}` : body,
+        };
+      }),
   ];
 
   const { data: openSession } = await supabaseAdmin
