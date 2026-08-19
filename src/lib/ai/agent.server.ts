@@ -7,6 +7,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { loadMegaCredentials } from "@/lib/whatsapp/credentials.server";
 import { MegaApiService } from "@/lib/whatsapp/mega.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
+import { signedMediaUrl } from "@/lib/whatsapp/media.server";
+import { synthesizeReplyAudio } from "@/lib/ai/tts.server";
 
 const MODEL = "google/gemini-2.5-flash";
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
@@ -309,6 +311,16 @@ export async function respondWithAI(input: {
 
     log("enviando resposta", { destino: recipient, temCredenciais: Boolean(creds) });
     if (recipient && creds) {
+      // Cliente mandou áudio? A IA responde por voz (feminina, sotaque paulista).
+      const wantsVoice = ["audio", "ptt", "voice"].includes(
+        String(lastCustomer.message_type ?? "").toLowerCase(),
+      );
+      const voice = wantsVoice
+        ? await synthesizeReplyAudio({ companyId, connectionId, text })
+        : null;
+      const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
+      const useVoice = Boolean(voice && voiceUrl);
+
       const { data: messageId } = await supabaseAdmin.rpc("create_outbound_message", {
         _conversation_id: conversationId,
         _company_id: companyId,
@@ -316,11 +328,21 @@ export async function respondWithAI(input: {
         _sender_type: "ai",
         _sender_name: "IA",
         _content: text,
-        _message_type: "text",
+        _message_type: useVoice ? "audio" : "text",
+        ...(useVoice ? { _media_url: voice!.path } : {}),
         _connection_id: connectionId,
       });
 
-      const sent = await MegaApiService.sendText(creds, recipient, text);
+      const sent = useVoice
+        ? await MegaApiService.sendMedia(creds, {
+            to: recipient,
+            url: voiceUrl!,
+            mediaType: "audio",
+            mimeType: voice!.mimeType,
+            fileName: `resposta-${Date.now()}.mp3`,
+          })
+        : await MegaApiService.sendText(creds, recipient, text);
+
       if (messageId) {
         await supabaseAdmin.rpc("finalize_outbound_message", {
           _message_id: messageId,
