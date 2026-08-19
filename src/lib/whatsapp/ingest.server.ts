@@ -179,6 +179,39 @@ export type IngestOutcome = {
   messageId?: string;
 };
 
+/**
+ * Procura uma mensagem de saída registrada pelo sistema nos últimos minutos
+ * que ainda não recebeu o id externo. Evita duplicar o balão quando o eco do
+ * WhatsApp chega antes (ou depois) de finalizarmos o envio.
+ */
+async function matchRecentOutbound(input: {
+  companyId: string;
+  identifier: string;
+  messageType: string;
+  content: string | null;
+}): Promise<string | null> {
+  const since = new Date(Date.now() - 5 * 60_000).toISOString();
+  const { data } = await supabaseAdmin
+    .from("messages")
+    .select("id, content, message_type, conversation:conversations!inner(channel_id)")
+    .eq("company_id", input.companyId)
+    .is("external_message_id", null)
+    .neq("sender_type", "customer")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const normalized = (input.content ?? "").trim();
+  const match = (data ?? []).find((row) => {
+    const channel = (row.conversation as { channel_id: string | null } | null)?.channel_id ?? null;
+    if (channel && channel !== input.identifier) return false;
+    if (row.message_type !== input.messageType) return false;
+    if (input.messageType === "text") return (row.content ?? "").trim() === normalized;
+    return true;
+  });
+  return match?.id ?? null;
+}
+
 export async function processWebhookEvent(input: {
   connectionId: string;
   companyId: string;
@@ -246,6 +279,26 @@ export async function processWebhookEvent(input: {
         _status: "SENT",
       });
       if (updated) return { status: "processed", reason: "status da própria mensagem" };
+    }
+
+    // A confirmação pode chegar antes de gravarmos o id externo da mensagem
+    // que o próprio painel/IA acabou de enviar. Nesse caso, casamos pelo
+    // conteúdo recente e apenas anexamos o id — nunca criamos um segundo balão.
+    const pending = await matchRecentOutbound({
+      companyId,
+      identifier: parsed.identifier,
+      messageType,
+      content,
+    });
+    if (pending) {
+      await supabaseAdmin
+        .from("messages")
+        .update({
+          delivery_status: "SENT",
+          ...(externalId ? { external_message_id: externalId } : {}),
+        })
+        .eq("id", pending);
+      return { status: "duplicate", reason: "eco da mensagem enviada pelo sistema" };
     }
 
     let echoMedia: { path: string; mimeType: string | null } | null = null;
