@@ -324,22 +324,11 @@ export async function respondWithAI(input: {
       const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
       const asAudio = Boolean(voice && voiceUrl);
 
-      const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc("create_outbound_message", {
-        _conversation_id: conversationId,
-        _company_id: companyId,
-        _sender_id: null as unknown as string,
-        _sender_type: "ai",
-        _sender_name: "IA",
-        _content: text,
-        _message_type: asAudio ? "audio" : "text",
-        ...(asAudio ? { _media_url: voice!.path } : {}),
-        _connection_id: connectionId,
-      });
-
-      if (createMessageError) {
-        log("falha ao registrar resposta; enviando texto de contingência", createMessageError.message);
-      }
-
+      // A entrega ao lead é a operação prioritária. Antes, a resposta era
+      // registrada no banco primeiro e a janela do webhook podia terminar
+      // exatamente entre esse registro (balão visível no painel) e a chamada
+      // à MEGA. Enviamos primeiro e persistimos o resultado logo em seguida.
+      log("voz pronta; iniciando entrega no WhatsApp", { formato: asAudio ? "audio" : "text" });
       let sent = asAudio
         ? await MegaApiService.sendMedia(creds, {
             to: recipient,
@@ -354,6 +343,24 @@ export async function respondWithAI(input: {
       if (asAudio && !sent.ok) {
         log("áudio recusado pelo WhatsApp; enviando texto", sent.error);
         sent = await MegaApiService.sendText(creds, recipient, text);
+      }
+
+      log("entrega concluída", { ok: sent.ok, formato: asAudio ? "audio" : "text" });
+
+      const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc("create_outbound_message", {
+        _conversation_id: conversationId,
+        _company_id: companyId,
+        _sender_id: null as unknown as string,
+        _sender_type: "ai",
+        _sender_name: "IA",
+        _content: text,
+        _message_type: asAudio && sent.ok ? "audio" : "text",
+        ...(voice && sent.ok ? { _media_url: voice.path } : {}),
+        _connection_id: connectionId,
+      });
+
+      if (createMessageError) {
+        log("falha ao registrar resposta já enviada", createMessageError.message);
       }
 
       if (messageId) {

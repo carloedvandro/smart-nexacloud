@@ -9,9 +9,6 @@ const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/audio/speech";
 const MODEL = "openai/gpt-4o-mini-tts";
 /** Voz feminina. */
 const VOICE = "shimmer";
-// O webhook do provedor tem uma janela curta. A voz precisa terminar antes
-// dela; caso contrário cancelamos e o agente envia o mesmo conteúdo em texto.
-const TTS_TIMEOUT_MS = 45_000;
 
 const INSTRUCTIONS = [
   "Fale em português do Brasil com voz feminina, jovem e simpática.",
@@ -37,8 +34,6 @@ export async function synthesizeReplyAudio(input: {
 
   try {
     console.info("[voz] iniciando geração", { caracteres: text.length });
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort("tts-timeout"), TTS_TIMEOUT_MS);
     const response = await fetch(GATEWAY_URL, {
       method: "POST",
       headers: {
@@ -53,11 +48,7 @@ export async function synthesizeReplyAudio(input: {
         response_format: "mp3",
         stream_format: "audio",
       }),
-      // A resposta de voz não pode deixar o webhook preso indefinidamente.
-      // Quando o limite estoura, devolvemos null e o agente envia o mesmo
-      // conteúdo em texto, sem deixar o lead sem resposta.
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+    });
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
@@ -82,8 +73,7 @@ export async function synthesizeReplyAudio(input: {
     console.info("[voz] geração concluída", { bytes: bytes.byteLength });
     return { path, mimeType: "audio/mpeg" };
   } catch (error) {
-    const timedOut = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
-    console.error(timedOut ? "[voz] tempo limite; resposta seguirá em texto" : "[voz] erro inesperado", error);
+    console.error("[voz] erro inesperado", error);
     return null;
   }
 }
