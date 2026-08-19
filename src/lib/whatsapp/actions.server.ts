@@ -210,11 +210,22 @@ export async function sendWhatsAppText(input: OutboundInput) {
 }
 
 /**
- * Regra de canal: a conversa responde SEMPRE pela instância em que o cliente entrou.
- * Ordem: canal registrado na conversa → instância da última mensagem recebida →
- * número tronco conectado → qualquer instância conectada da empresa.
- * A instância pessoal do consultor nunca troca o canal de uma conversa existente.
+ * Regra de canal: a conversa responde SEMPRE pela instância em que o cliente entrou,
+ * desde que ela continue conectada e pertença à empresa. Uma instância registrada
+ * na conversa mas desconectada faz a MEGA aceitar o envio sem entregar ao lead —
+ * por isso validamos antes e caímos para a instância viva (última entrada → tronco →
+ * qualquer conectada).
  */
+async function isUsableConnection(companyId: string, connectionId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from("whatsapp_connections")
+    .select("id, status")
+    .eq("id", connectionId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  return data?.status === "CONNECTED";
+}
+
 async function resolveConnection(input: {
   companyId: string;
   conversationId: string;
@@ -222,7 +233,18 @@ async function resolveConnection(input: {
   metadata: Record<string, unknown> | null;
 }): Promise<string | null> {
   const fromConversation = input.metadata?.["connection_id"];
-  if (typeof fromConversation === "string") return fromConversation;
+  if (
+    typeof fromConversation === "string" &&
+    (await isUsableConnection(input.companyId, fromConversation))
+  ) {
+    return fromConversation;
+  }
+  if (typeof fromConversation === "string") {
+    console.warn("[whatsapp] instância da conversa indisponível — buscando outra", {
+      conversa: input.conversationId,
+      instancia: fromConversation,
+    });
+  }
 
   const { data: inbound } = await supabaseAdmin
     .from("messages")
@@ -233,7 +255,10 @@ async function resolveConnection(input: {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (inbound?.connection_id) {
+  if (
+    inbound?.connection_id &&
+    (await isUsableConnection(input.companyId, inbound.connection_id))
+  ) {
     await supabaseAdmin
       .from("conversations")
       .update({ metadata: { ...(input.metadata ?? {}), connection_id: inbound.connection_id } })
@@ -248,7 +273,13 @@ async function resolveConnection(input: {
     .eq("is_trunk", true)
     .eq("status", "CONNECTED")
     .maybeSingle();
-  if (trunk?.id) return trunk.id;
+  if (trunk?.id) {
+    await supabaseAdmin
+      .from("conversations")
+      .update({ metadata: { ...(input.metadata ?? {}), connection_id: trunk.id } })
+      .eq("id", input.conversationId);
+    return trunk.id;
+  }
 
   const { data: fallback } = await supabaseAdmin
     .from("whatsapp_connections")
@@ -260,6 +291,7 @@ async function resolveConnection(input: {
     .maybeSingle();
   return fallback?.id ?? null;
 }
+
 
 /**
  * Envia mídia (áudio gravado, imagem, vídeo ou documento) pelo WhatsApp.
