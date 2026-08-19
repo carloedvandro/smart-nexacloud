@@ -153,6 +153,10 @@ function ConversasPage() {
         search,
       }),
     enabled: Boolean(companyId),
+    // Realtime pode não entregar um UPDATE ao consultor que acabou de perder
+    // acesso à linha por RLS. O polling curto é a garantia de revogação visual.
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
   });
 
   const selected = useMemo(
@@ -164,9 +168,26 @@ function ConversasPage() {
     if (!companyId) return;
     const channel = supabase
       .channel("conversations-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, (payload) => {
         void queryClient.invalidateQueries({ queryKey: ["conversations", companyId] });
+        const changed = (payload.new ?? payload.old) as { id?: string };
+        if (changed.id) {
+          void queryClient.invalidateQueries({ queryKey: ["conversation-access", changed.id] });
+        }
       })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assignment_attempts" },
+        (payload) => {
+          void queryClient.invalidateQueries({ queryKey: ["conversations", companyId] });
+          const changed = (payload.new ?? payload.old) as { conversation_id?: string };
+          if (changed.conversation_id) {
+            void queryClient.invalidateQueries({
+              queryKey: ["conversation-access", changed.conversation_id],
+            });
+          }
+        },
+      )
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
         void queryClient.invalidateQueries({ queryKey: ["conversations", companyId] });
         const convId = (payload.new as { conversation_id?: string }).conversation_id;
@@ -487,7 +508,14 @@ function ConversationThread({
   // O link do rodízio expira: se a oferta já passou para outro consultor,
   // o servidor recusa e a interface fica somente leitura.
   const { data: access } = useQuery({
-    queryKey: ["conversation-access", conversation.id],
+    queryKey: [
+      "conversation-access",
+      conversation.id,
+      conversation.assigned_user_id,
+      conversation.status,
+      currentUserId,
+      isAdmin,
+    ],
     queryFn: async () => {
       if (isAdmin) return { allowed: true, reason: "OK" as const, message: null };
       if (conversation.status === "CLOSED" || conversation.status === "PAUSED") {
@@ -529,9 +557,9 @@ function ConversationThread({
       };
     },
     enabled: Boolean(currentUserId) || isAdmin,
-    refetchInterval: 20000,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
     retry: 1,
-    placeholderData: (previous) => previous,
   });
 
   const expired = access ? !access.allowed : false;
