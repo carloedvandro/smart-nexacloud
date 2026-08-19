@@ -64,6 +64,16 @@ export function sniffMimeType(bytes: Uint8Array): string | null {
     return "video/mp4";
   }
   if (starts(0x50, 0x4b, 0x03, 0x04)) return "application/zip";
+  // RIFF....WEBP — figurinhas do WhatsApp (inclusive animadas) chegam assim.
+  if (
+    starts(0x52, 0x49, 0x46, 0x46) &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
   return null;
 }
 
