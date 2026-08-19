@@ -627,7 +627,19 @@ function ConversationThread({
         </button>
 
         <div className="hidden items-center gap-2 sm:flex">
+          {rating ? (
+            <Badge
+              variant="outline"
+              className="gap-1 border-amber-400/50 text-amber-600 dark:text-amber-400"
+              title={rating.rating ? "Avaliação do lead" : "Avaliação solicitada, sem resposta"}
+            >
+              {rating.rating
+                ? `${"★".repeat(rating.rating)}${"☆".repeat(5 - rating.rating)} ${rating.rating}/5`
+                : "Avaliação enviada"}
+            </Badge>
+          ) : null}
           <ConversationStatusBadge status={conversation.status as ConversationStatus} />
+
           {expired ? (
             <Badge variant="outline" className="gap-1 border-chat-danger/40 text-chat-danger">
               <Lock className="size-3" aria-hidden="true" /> Link expirado
