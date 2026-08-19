@@ -198,7 +198,31 @@ export const MegaApiService = {
     while (stack.length > 0 && !mediaNode) {
       const current = stack.pop();
       if (!current || typeof current !== "object") continue;
-      for (const [name, value] of Object.entries(current as Record<string, unknown>)) {
+      const currentObject = current as Record<string, unknown>;
+      // Há versões da MEGA que removem a chave `stickerMessage` e entregam
+      // diretamente o objeto com os campos criptográficos da mídia.
+      if (
+        typeof currentObject["mediaKey"] === "string" &&
+        typeof currentObject["directPath"] === "string" &&
+        typeof currentObject["url"] === "string"
+      ) {
+        mediaNode = currentObject;
+        const declared = String(
+          currentObject["messageType"] ?? currentObject["mediaType"] ?? "",
+        ).toLowerCase();
+        const mime = String(currentObject["mimetype"] ?? currentObject["mimeType"] ?? "");
+        messageType = /audio/.test(declared) || mime.startsWith("audio/")
+          ? "audio"
+          : /video/.test(declared) || mime.startsWith("video/")
+            ? "video"
+            : /document/.test(declared) || (!mime.startsWith("image/") && Boolean(mime))
+              ? "document"
+              : /sticker/.test(declared)
+                ? "sticker"
+                : "image";
+        break;
+      }
+      for (const [name, value] of Object.entries(currentObject)) {
         if (!value || typeof value !== "object") continue;
         const normalized = name.replace(/Message$/i, "").toLowerCase();
         if (["audio", "video", "document", "image", "sticker"].includes(normalized)) {
@@ -244,7 +268,8 @@ export const MegaApiService = {
           directPath: mediaNode?.["directPath"],
           url: mediaNode?.["url"],
           ...(mimetype ? { mimetype } : {}),
-          messageType: messageType === "sticker" ? "sticker" : messageType,
+          // Contrato oficial da MEGA: sticker deve ser enviado como image.
+          messageType: messageType === "sticker" ? "image" : messageType,
         }
       : null;
 
@@ -252,16 +277,13 @@ export const MegaApiService = {
     // chave original do WhatsApp; instalações antigas aceitam a mensagem
     // completa ou o descritor criptográfico da mídia.
     const bodies: unknown[] = [
+      // Formato oficial: descritor plano com os cinco campos obrigatórios.
+      ...(mediaDescriptor ? [{ messageKeys: mediaDescriptor }] : []),
+      // Compatibilidade com instalações antigas da MEGA.
       { messageKeys: key, type: "base64" },
       { messageKeys: fullMessage, type: "base64" },
       { messageKeys: key, type: "buffer" },
       { messageKeys: fullMessage, type: "buffer" },
-      ...(mediaDescriptor
-        ? [
-            { messageKeys: mediaDescriptor, type: "base64" },
-            { messageKeys: mediaDescriptor, type: "buffer" },
-          ]
-        : []),
     ];
     const paths = [
       `/rest/instance/downloadMediaMessage/${creds.instanceKey}`,
