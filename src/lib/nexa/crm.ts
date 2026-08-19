@@ -295,6 +295,18 @@ export async function listLeadConversations(leadId: string) {
   ) ?? []) as ConversationRow[];
 }
 
+/** Avaliação de atendimento (1 a 5 estrelas) registrada para a conversa. */
+export async function getConversationRating(conversationId: string) {
+  const { data, error } = await supabase
+    .from("service_ratings")
+    .select("rating, rated_at, asked_at")
+    .eq("conversation_id", conversationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as { rating: number | null; rated_at: string | null; asked_at: string } | null;
+}
+
+
 /* ------------------------------- Consultores ------------------------------- */
 
 export async function listConsultants(companyId: string) {
