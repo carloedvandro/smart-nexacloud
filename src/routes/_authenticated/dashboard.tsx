@@ -157,7 +157,7 @@ function DashboardPage() {
       title="Dashboard"
       description={`Bem-vindo, ${profile?.full_name ?? profile?.email ?? ""}`}
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         {cards.map((card) => (
           <Card key={card.label} className="bg-surface-gradient shadow-panel">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
@@ -175,33 +175,7 @@ function DashboardPage() {
             </CardContent>
           </Card>
         ))}
-
-        <Card className="bg-surface-gradient shadow-panel">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tempo médio de 1ª resposta
-            </CardTitle>
-            <Wifi className="size-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold tracking-tight text-muted-foreground">—</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Disponível quando o motor de fila entrar em operação.
-            </p>
-          </CardContent>
-        </Card>
       </div>
-
-      <Card className="mt-6 shadow-panel">
-        <CardHeader>
-          <CardTitle className="text-base">Fundação concluída</CardTitle>
-          <CardDescription>
-            Banco multi-tenant, autenticação, papéis, políticas de acesso, armazenamento privado e
-            tempo real já operando. Os indicadores acima leem dados reais da sua empresa e se
-            atualizam automaticamente quando conversas e atribuições mudam.
-          </CardDescription>
-        </CardHeader>
-      </Card>
     </AppShell>
   );
 }
