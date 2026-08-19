@@ -390,6 +390,25 @@ function ConversationThread({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  /** Reenvia uma figurinha/GIF/imagem guardada nos favoritos. */
+  const sendFavorite = useCallback(
+    async (favorite: FavoriteMedia) => {
+      const url = mediaUrls?.[favorite.path];
+      if (!url) {
+        toast.error("Não consegui carregar este favorito.");
+        return;
+      }
+      try {
+        const blob = await (await fetch(url)).blob();
+        const name = favorite.path.split("/").pop() ?? "favorito";
+        sendMedia.mutate({ blob, name, kind: favorite.type === "video" ? "video" : "image" });
+      } catch {
+        toast.error("Não consegui enviar este favorito.");
+      }
+    },
+    [mediaUrls, sendMedia],
+  );
+
   // Rola para a última mensagem apenas quem já estava no fim da conversa.
   useEffect(() => {
     if (atBottom) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
