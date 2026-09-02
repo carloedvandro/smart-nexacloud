@@ -20,6 +20,7 @@ export type Database = {
           created_at: string
           display_name: string
           password_hash: string
+          password_plain: string | null
           updated_at: string
           user_id: string
         }
@@ -28,6 +29,7 @@ export type Database = {
           created_at?: string
           display_name: string
           password_hash: string
+          password_plain?: string | null
           updated_at?: string
           user_id: string
         }
@@ -36,6 +38,7 @@ export type Database = {
           created_at?: string
           display_name?: string
           password_hash?: string
+          password_plain?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -335,6 +338,7 @@ export type Database = {
           id: string
           legal_name: string | null
           max_consultants: number
+          max_delete_admins: number
           max_internal_users: number
           name: string
           phone: string | null
@@ -352,6 +356,7 @@ export type Database = {
           id?: string
           legal_name?: string | null
           max_consultants?: number
+          max_delete_admins?: number
           max_internal_users?: number
           name: string
           phone?: string | null
@@ -369,6 +374,7 @@ export type Database = {
           id?: string
           legal_name?: string | null
           max_consultants?: number
+          max_delete_admins?: number
           max_internal_users?: number
           name?: string
           phone?: string | null
@@ -1861,8 +1867,35 @@ export type Database = {
         }
         Returns: Json
       }
+      platform_list_company_admins: {
+        Args: { _company_id: string }
+        Returns: {
+          email: string
+          full_name: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }[]
+      }
+      platform_list_delete_credentials: {
+        Args: never
+        Returns: {
+          company_id: string
+          company_name: string
+          display_name: string
+          email: string
+          full_name: string
+          max_delete_admins: number
+          password_plain: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
       platform_remove_company_member: {
         Args: { _company_id: string; _user_id: string }
+        Returns: undefined
+      }
+      platform_remove_delete_credential: {
+        Args: { _user_id: string }
         Returns: undefined
       }
       platform_set_company_limits: {
@@ -1871,6 +1904,14 @@ export type Database = {
           _max_consultants: number
           _max_internal_users: number
         }
+        Returns: undefined
+      }
+      platform_set_delete_admin_limit: {
+        Args: { _company_id: string; _limit: number }
+        Returns: undefined
+      }
+      platform_set_delete_credential: {
+        Args: { _display_name: string; _password: string; _user_id: string }
         Returns: undefined
       }
       platform_set_member_role: {
