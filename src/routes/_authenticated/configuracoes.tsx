@@ -704,3 +704,150 @@ function TeamCard({
     </div>
   );
 }
+
+function AdminDeletePasswordCard() {
+  const queryClient = useQueryClient();
+  const { profile, companyId } = useAuth();
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+
+  const credential = useQuery({
+    queryKey: ["admin-delete-credential", profile?.id],
+    enabled: Boolean(profile?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("admin_delete_credentials")
+        .select("display_name, updated_at")
+        .eq("user_id", profile?.id as string)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    if (credential.data?.display_name) setName(credential.data.display_name);
+  }, [credential.data?.display_name]);
+
+  const logs = useQuery({
+    queryKey: ["conversation-deletion-logs", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("conversation_deletion_logs")
+        .select("id, created_at, lead_name, lead_phone, deleted_by_name, confirmed_name, reason, messages_deleted")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!name.trim()) throw new Error("Informe o seu nome");
+      if (password.length < 6) throw new Error("A senha deve ter ao menos 6 caracteres");
+      if (password !== confirm) throw new Error("As senhas não conferem");
+      const { error } = await supabase.rpc("set_admin_delete_credential", {
+        _display_name: name.trim(),
+        _password: password,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setPassword("");
+      setConfirm("");
+      void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential", profile?.id] });
+      toast.success("Senha de administrador salva");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="space-y-6">
+      <Card className="shadow-panel">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="size-4 text-primary" /> Criar senha de administrador
+          </CardTitle>
+          <CardDescription>
+            Esta senha é pessoal e intransferível: é com o seu nome e esta senha que você confirma a
+            exclusão de conversas. Nunca compartilhe com outra pessoa — toda exclusão fica registrada
+            no log abaixo com data, hora e autor.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="admin_name">Seu nome de administrador</Label>
+            <Input id="admin_name" value={name} onChange={(e) => setName(e.target.value)} />
+            {credential.data ? (
+              <p className="text-xs text-muted-foreground">
+                Senha cadastrada em{" "}
+                {new Date(credential.data.updated_at).toLocaleString("pt-BR", {
+                  timeZone: "America/Sao_Paulo",
+                })}
+                .
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Você ainda não cadastrou uma senha de exclusão.</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="admin_pass">Senha pessoal</Label>
+            <PasswordInput
+              id="admin_pass"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="admin_pass_confirm">Confirmar senha</Label>
+            <PasswordInput
+              id="admin_pass_confirm"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Button onClick={() => save.mutate()} disabled={save.isPending}>
+              {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Salvar senha de administrador
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-panel">
+        <CardHeader>
+          <CardTitle className="text-base">Log de conversas excluídas</CardTitle>
+          <CardDescription>Quando foi excluída, por quem e qual lead foi afetado.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {logs.isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : (logs.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma conversa foi excluída até agora.</p>
+          ) : (
+            (logs.data ?? []).map((log) => (
+              <div key={log.id} className="rounded-lg border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{log.lead_name ?? log.lead_phone ?? "Lead sem nome"}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(log.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Excluída por {log.deleted_by_name ?? log.confirmed_name ?? "—"} · {log.messages_deleted}{" "}
+                  mensagem(ns) apagada(s)
+                  {log.reason ? ` · Motivo: ${log.reason}` : ""}
+                </p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
