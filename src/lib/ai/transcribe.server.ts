@@ -52,7 +52,7 @@ export async function transcribeAudioMessage(input: {
     form.append("file", new Blob([audioBytes.buffer], { type: mimeType }), `audio.${extension}`);
     form.append("model", MODEL);
     form.append("language", "pt");
-    form.append("prompt", "Conversa de atendimento em português do Brasil sobre salário-maternidade e auxílio-maternidade.");
+    form.append("prompt", "Conversa de atendimento em português do Brasil sobre venda de planos de saúde e odontológicos (operadoras, carências, coberturas e cotações).");
 
     console.info("[transcrição] enviando áudio", {
       messageId: input.messageId,
