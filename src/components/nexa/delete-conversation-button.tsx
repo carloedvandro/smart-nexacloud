@@ -36,18 +36,28 @@ export function DeleteConversationButton({
   const [reason, setReason] = useState("");
   const deleteFn = useServerFn(deleteConversationAsAdmin);
 
+  const queryClient = useQueryClient();
+
   const remove = useMutation({
     mutationFn: async () => deleteFn({ data: { conversationId, name, password, reason } }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setOpen(false);
       setName("");
       setPassword("");
       setReason("");
-      toast.success("Conversa excluída e registrada no log do sistema");
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["kanban"] });
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success(
+        result?.leadDeleted
+          ? "Conversa e lead excluídos e registrados no log do sistema"
+          : "Conversa excluída e registrada no log do sistema",
+      );
       onDeleted?.();
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   return (
     <>
