@@ -82,7 +82,8 @@ const EMPTY: KnowledgeItem = {
 };
 
 function ConhecimentoPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin: isCompanyAdmin, roles } = useAuth();
+  const isAdmin = isCompanyAdmin || roles.includes("PLATFORM_ADMIN");
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<KnowledgeItem | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
