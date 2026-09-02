@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   MessagesSquare,
   Users,
+  KanbanSquare,
   UserCog,
   Smartphone,
   BookOpen,
