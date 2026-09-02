@@ -84,7 +84,7 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
     `Você é ${settings.agentName}, atendente virtual de ${settings.companyName}, uma assessoria que ajuda pessoas a conseguirem o salário-maternidade (auxílio-maternidade).`,
     `CONTEXTO TEMPORAL: agora é ${dateTime} no horário de Brasília (São Paulo). A saudação correta neste momento é "${greeting}". Nunca use outra saudação de período do dia e nunca cite datas/horários diferentes deste.`,
     "Fale português do Brasil, em tom humano, acolhedor e objetivo. Responda com no máximo 240 caracteres e até 3 frases curtas, estilo WhatsApp, sem markdown pesado.",
-    "ÁUDIO: você ouve e entende áudios do cliente (eles chegam transcritos, marcados como \"(áudio enviado pelo cliente)\") e você também responde em áudio automaticamente quando o cliente manda áudio. NUNCA diga que é uma inteligência artificial que não consegue ouvir ou enviar áudios, nem peça para o cliente escrever em texto. Apenas responda normalmente ao conteúdo do áudio.",
+    "ÁUDIO: você ouve e entende áudios do cliente (eles chegam transcritos, marcados como \"(áudio enviado pelo cliente)\"). Você responde em áudio APENAS quando o cliente falou por áudio; se ele escreveu, responda por escrito. Se ele disser que não consegue ouvir/abrir áudios, que prefere texto, ou se for outro robô/IA que só lê texto, responda sempre por escrito e de forma completa e clara, sem depender de voz. NUNCA diga que é uma inteligência artificial que não consegue ouvir ou enviar áudios.",
     "Se a mensagem do cliente for confusa, vazia ou só um sinal como \"?\", peça gentilmente que ele repita ou explique melhor a dúvida — nunca invente que houve um problema técnico.",
     "Objetivo: entender a situação da pessoa (se é MEI, autônoma, rural, desempregada, CLT, se o parto/adoção já aconteceu e quando), explicar o benefício e agendar o atendimento com um consultor humano.",
     "- Depois de responder à dúvida ou concluir a qualificação, pergunte de forma natural se a pessoa ainda tem alguma dúvida ou se deseja falar com um atendente humano. Não repita essa pergunta em todas as mensagens.",
@@ -355,11 +355,28 @@ export async function respondWithAI(input: {
   }
 
   const customerText = ((lastCustomer.transcription || lastCustomer.content) ?? "").trim();
+
+  // A modalidade da resposta espelha a do cliente: só respondemos em voz quando
+  // ele mandou áudio e nada indica que do outro lado não é possível ouvir
+  // (pessoa sem fone, ambiente, ou outro robô/IA que só lê texto).
+  const AUDIO_TYPES = ["audio", "ptt", "voice"];
+  const lastCustomerIsAudio = AUDIO_TYPES.includes(String(lastCustomer.message_type ?? "").toLowerCase());
+  const customerTexts = ordered
+    .filter((m) => m.sender_type === "customer")
+    .map((m) => ((m.transcription || m.content) ?? "").toLowerCase());
+  const textOnlyRequest = customerTexts.some((t) =>
+    /(n(ã|a)o\s+(consigo|posso|d(á|a)|dá pra|posso)?\s*(ouvir|escutar|abrir|ouvir\s+áudio))|(n(ã|a)o\s+entendo\s+(á|a)udio)|(n(ã|a)o\s+(recebo|leio|processo)\s+(á|a)udio)|((manda|envie|escreva|prefiro|pode ser|responda|fale)\s+(por\s+)?(escrito|texto|mensagem escrita))|(sem\s+(á|a)udio)|(odeio\s+(á|a)udio)|(sou\s+(uma\s+)?(ia|intelig(ê|e)ncia artificial|assistente virtual|rob(ô|o)))|(n(ã|a)o\s+consigo\s+(processar|interpretar)\s+(á|a)udio)/i.test(
+      t,
+    ),
+  );
+  const preferAudio = lastCustomerIsAudio && !textOnlyRequest;
+
   const explicitHumanRequest =
     /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
     /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
       customerText,
     );
+
 
   // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
   const unreadableMedia =
@@ -431,11 +448,12 @@ export async function respondWithAI(input: {
 
     log("enviando resposta", { destino: recipient, temCredenciais: Boolean(creds) });
     if (recipient && creds) {
-      // Voz feminina humanizada: tentamos o áudio primeiro; se a síntese
-      // falhar ou o link não sair, a mesma resposta segue em texto.
-      const voice = await synthesizeReplyAudio({ companyId, connectionId, text });
+      // Espelhamos a modalidade do cliente: voz só quando ele falou por áudio e
+      // não sinalizou que não consegue ouvir. Caso contrário, resposta escrita.
+      const voice = preferAudio ? await synthesizeReplyAudio({ companyId, connectionId, text }) : null;
       const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
       const asAudio = Boolean(voice && voiceUrl);
+
 
       // Reservamos a mensagem ANTES do envio. A MEGA pode disparar o eco do
       // WhatsApp ainda durante a chamada de envio; sem esta reserva, esse eco
