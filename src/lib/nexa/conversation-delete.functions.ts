@@ -165,8 +165,8 @@ export const deleteConversationAsAdmin = createServerFn({ method: "POST" })
       action: "DELETE_CONVERSATION",
       entity_type: "conversations",
       entity_id: conversation.id,
-      metadata: { messages_deleted: messagesCount ?? 0, lead_id: lead?.id ?? null },
+      metadata: { messages_deleted: messagesCount ?? 0, lead_id: lead?.id ?? null, lead_deleted: leadDeleted },
     });
 
-    return { deleted: true, messagesDeleted: messagesCount ?? 0 };
+    return { deleted: true, messagesDeleted: messagesCount ?? 0, leadDeleted };
   });
