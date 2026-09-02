@@ -675,7 +675,7 @@ export async function respondWithAI(input: {
       }
 
       log("voz pronta; iniciando entrega no WhatsApp", { formato: asAudio ? "audio" : "text" });
-      let sent = asAudio
+      let sent = voice && voiceUrl
         ? await MegaApiService.sendMedia(creds, {
             to: recipient,
             url: voiceUrl,
