@@ -314,8 +314,10 @@ function KanbanPage() {
 
       <LeadDetailSheet
         leadId={selectedLead}
-        open={Boolean(selectedLead)}
-        onOpenChange={(open) => !open && setSelectedLead(null)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedLead(null);
+        }}
+        onOpenConversation={(leadId) => openConversation.mutate(leadId)}
       />
     </AppShell>
   );
