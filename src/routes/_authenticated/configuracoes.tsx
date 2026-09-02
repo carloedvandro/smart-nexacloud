@@ -797,8 +797,8 @@ function AdminDeletePasswordCard() {
             exclusão de conversas. Nunca compartilhe com outra pessoa — toda exclusão fica registrada
             no log abaixo com data, hora e autor. O número de responsáveis com senha de exclusão é
             definido pelo super administrador para cada empresa (padrão <strong>2</strong>), e o nome
+            usado na confirmação é sempre o cadastrado nesta conta.
 
-            nesta conta.
           </CardDescription>
 
         </CardHeader>
