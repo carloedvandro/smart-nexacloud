@@ -30,6 +30,7 @@ import { ConversationStatusBadge } from "@/components/nexa/status-badge";
 import { LeadDetailSheet } from "@/components/nexa/lead-detail-sheet";
 import { PurgeConversationsButton } from "@/components/nexa/purge-conversations-button";
 import { InvitePersonalWhatsAppButton } from "@/components/nexa/invite-personal-whatsapp-button";
+import { DeleteConversationButton } from "@/components/nexa/delete-conversation-button";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
