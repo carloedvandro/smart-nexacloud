@@ -1567,6 +1567,7 @@ export type Database = {
       }
       whatsapp_events: {
         Row: {
+          attempts: number
           company_id: string | null
           connection_id: string | null
           created_at: string
@@ -1576,9 +1577,11 @@ export type Database = {
           id: string
           payload: Json
           processed_at: string | null
+          processing_started_at: string | null
           provider: string
         }
         Insert: {
+          attempts?: number
           company_id?: string | null
           connection_id?: string | null
           created_at?: string
@@ -1588,9 +1591,11 @@ export type Database = {
           id?: string
           payload?: Json
           processed_at?: string | null
+          processing_started_at?: string | null
           provider?: string
         }
         Update: {
+          attempts?: number
           company_id?: string | null
           connection_id?: string | null
           created_at?: string
@@ -1600,6 +1605,7 @@ export type Database = {
           id?: string
           payload?: Json
           processed_at?: string | null
+          processing_started_at?: string | null
           provider?: string
         }
         Relationships: [
@@ -1747,6 +1753,16 @@ export type Database = {
       }
       can_view_lead: { Args: { _lead_id: string }; Returns: boolean }
       claim_company_invite: { Args: never; Returns: string }
+      claim_whatsapp_events: {
+        Args: { _limit?: number }
+        Returns: {
+          attempts: number
+          company_id: string
+          connection_id: string
+          id: string
+          payload: Json
+        }[]
+      }
       company_cancel_invite: {
         Args: { _invite_id: string }
         Returns: undefined
