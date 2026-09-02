@@ -317,17 +317,22 @@ function KanbanPage() {
                   moveLead.mutate({ leadId, status: col.status });
                 }}
                 className={cn(
-                  "flex w-72 shrink-0 flex-col rounded-xl border border-border bg-muted/40 transition-colors",
-                  dropTarget === col.status && "border-primary bg-primary/5",
+                  "flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border transition-colors",
+                  col.border,
+                  col.body,
+                  dropTarget === col.status && "border-primary ring-2 ring-primary/30",
                 )}
               >
-                <header className="flex items-center gap-2 border-b border-border px-3 py-2">
+                <header
+                  className={cn("flex items-center gap-2 border-b px-3 py-2", col.border, col.header)}
+                >
                   <span className={cn("size-2.5 rounded-full", col.accent)} />
-                  <h2 className="flex-1 truncate text-sm font-semibold">
+                  <h2 className={cn("flex-1 truncate text-sm font-semibold", col.title)}>
                     {LEAD_STATUS_LABEL[col.status]}
                   </h2>
                   <Badge variant="secondary">{items.length}</Badge>
                 </header>
+
 
                 <div className="flex-1 space-y-2 overflow-y-auto p-2" style={{ maxHeight: "calc(100vh - 260px)" }}>
                   {items.length === 0 ? (
