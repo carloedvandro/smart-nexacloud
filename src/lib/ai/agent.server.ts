@@ -572,7 +572,11 @@ export async function respondWithAI(input: {
     {
       role: "system",
       content: isConsultantChat
-        ? buildConsultantPrompt(settings, knowledge, leadRegisteredName)
+        ? buildConsultantPrompt(settings, knowledge, {
+            registeredName: leadRegisteredName,
+            firstName: consultantName,
+            phone: consultantPhone,
+          })
         : buildSystemPrompt(settings, knowledge),
     },
     ...(isConsultantChat ? [] : [{ role: "system" as const, content: nameContext }]),
