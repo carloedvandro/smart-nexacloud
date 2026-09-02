@@ -570,7 +570,8 @@ export async function respondWithAI(input: {
   if (unreadableMedia) {
     if (isConsultantChat) {
       log("skip: consultor enviou mídia sem texto");
-      return { status: "skipped", reason: "mídia sem texto" };
+      // Reason padronizada: impede que a ingestão coloque a conversa no rodízio.
+      return { status: "skipped", reason: "conversa com consultor" };
     }
     await handoff(companyId, conversationId, "mídia recebida sem texto");
     return { status: "handoff", reason: "mídia" };
@@ -597,7 +598,7 @@ export async function respondWithAI(input: {
       role: "system",
       content: isConsultantChat
         ? buildConsultantPrompt(settings, knowledge, {
-            registeredName: leadRegisteredName,
+            registeredName: leadRegisteredName || matchedProfile?.full_name || consultantName,
             firstName: consultantName,
             phone: consultantPhone,
           })
