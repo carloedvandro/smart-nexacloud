@@ -864,6 +864,51 @@ function AdminDeletePasswordCard() {
 
       <Card className="shadow-panel">
         <CardHeader>
+          <CardTitle className="text-base">Responsáveis já cadastrados</CardTitle>
+          <CardDescription>
+            Usuários desta empresa que já possuem senha de exclusão. Salvar novamente com o mesmo
+            usuário apenas atualiza a senha — não cria um novo responsável.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {registered.isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : registered.error ? (
+            <p className="text-sm text-muted-foreground">
+              Somente administradores da empresa podem ver esta lista.
+            </p>
+          ) : (registered.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum responsável cadastrado ainda.</p>
+          ) : (
+            (registered.data ?? []).map((item) => (
+              <div
+                key={item.user_id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"
+              >
+                <div>
+                  <p className="font-medium">{item.display_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.full_name ?? "—"}
+                    {item.email ? ` · ${item.email}` : ""}
+                    {item.user_id === profile?.id ? " · você" : ""}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Atualizada em{" "}
+                  {new Date(item.updated_at).toLocaleString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                  })}
+                </span>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+
+
+      <Card className="shadow-panel">
+        <CardHeader>
           <CardTitle className="text-base">Log de conversas excluídas</CardTitle>
           <CardDescription>Quando foi excluída, por quem e qual lead foi afetado.</CardDescription>
         </CardHeader>
