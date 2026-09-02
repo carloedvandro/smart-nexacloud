@@ -166,17 +166,29 @@ function isConsultantLead(leadName: string | null | undefined, markers: string[]
   return markers.some((marker) => tokens.includes(marker));
 }
 
+/** Nome de tratamento do consultor: remove o marcador da empresa ("Cacá APSP" -> "Cacá"). */
+function consultantFirstName(registeredName: string, markers: string[]): string {
+  const parts = registeredName.trim().split(/\s+/).filter((p) => !markers.includes(normalizeText(p)));
+  return (parts[0] ?? registeredName.trim().split(/\s+/)[0] ?? "colega").trim();
+}
+
 function buildConsultantPrompt(
   settings: AiSettings,
   knowledge: { title: string; category: string; content: string }[],
-  consultantName: string,
+  consultant: { registeredName: string; firstName: string; phone: string | null },
 ) {
   const base = knowledge.length
     ? knowledge.map((k) => `### ${k.title} (${k.category})\n${k.content}`).join("\n\n")
     : "(base de conhecimento vazia)";
   return [
-    `Você é ${settings.agentName}, assistente INTERNA de ${settings.companyName}. Você está falando com ${consultantName}, um CONSULTOR da própria empresa — não é um cliente/lead.`,
-    "Trate-o como colega de equipe: cumprimente de forma direta e profissional (ex.: \"Olá, [nome]! Em que posso ajudar?\") e responda objetivamente às dúvidas dele.",
+    `Você é ${settings.agentName}, assistente INTERNA de ${settings.companyName}.`,
+    "FICHA DO INTERLOCUTOR (consultada agora no banco de dados do CRM — é a verdade oficial):",
+    `- Nome cadastrado: ${consultant.registeredName}`,
+    `- Tratar por: ${consultant.firstName}`,
+    `- Papel: CONSULTOR interno de ${settings.companyName} (não é cliente nem lead)`,
+    consultant.phone ? `- Contato: ${consultant.phone}` : "",
+    `IDENTIDADE: você SABE com quem está falando. Se ${consultant.firstName} perguntar "sabe quem eu sou?", responda com convicção usando a ficha acima (ex.: "Claro, ${consultant.firstName}! Você é consultor da ${settings.companyName}."). É PROIBIDO dizer que não consegue reconhecer usuários, que não tem acesso a dados ou que é apenas uma IA sem memória.`,
+    `Trate-o como colega de equipe: cumprimente de forma direta e profissional (ex.: "Olá, ${consultant.firstName}! Em que posso ajudar?") e responda objetivamente às dúvidas dele.`,
     "Ele pode perguntar sobre produtos, operadoras, regras, processos internos, argumentos de venda, objeções e procedimentos. Use toda a base de conhecimento para ajudar, especialmente consultores novos.",
     "Nunca qualifique-o como lead, nunca pergunte quantas vidas ele quer contratar e nunca ofereça transferir para um consultor humano — ele já é um consultor.",
     "NUNCA use o marcador de transferência. Você mesma resolve a dúvida; se a informação não estiver na base, diga com clareza que não consta na base e oriente-o a confirmar com a coordenação.",
@@ -364,6 +376,9 @@ export async function respondWithAI(input: {
   const markers = companyMarkers(company?.name, settings.companyName);
   const leadRegisteredName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
   const isConsultantChat = isConsultantLead(leadRegisteredName, markers);
+  const consultantName = consultantFirstName(leadRegisteredName, markers);
+  const leadWhatsapp = ((conversation.lead as { whatsapp?: string | null } | null)?.whatsapp ?? "").trim();
+  const consultantPhone = leadWhatsapp && !leadWhatsapp.includes("@lid") ? leadWhatsapp : null;
   if (isConsultantChat) log("modo consultor interno", leadRegisteredName);
 
   // Conversa encerrada volta a atender o consultor interno (suporte contínuo);
@@ -560,7 +575,11 @@ export async function respondWithAI(input: {
     {
       role: "system",
       content: isConsultantChat
-        ? buildConsultantPrompt(settings, knowledge, leadRegisteredName)
+        ? buildConsultantPrompt(settings, knowledge, {
+            registeredName: leadRegisteredName,
+            firstName: consultantName,
+            phone: consultantPhone,
+          })
         : buildSystemPrompt(settings, knowledge),
     },
     ...(isConsultantChat ? [] : [{ role: "system" as const, content: nameContext }]),
