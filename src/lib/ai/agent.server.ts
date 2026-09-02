@@ -106,9 +106,94 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+/** Normaliza para comparação: sem acentos, minúsculo. */
+function normalizeText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+const GENERIC_COMPANY_WORDS = new Set([
+  "ltda",
+  "me",
+  "eireli",
+  "sa",
+  "s",
+  "a",
+  "de",
+  "da",
+  "do",
+  "dos",
+  "das",
+  "e",
+  "corretora",
+  "seguros",
+  "seguro",
+  "assessoria",
+  "consultoria",
+  "planos",
+  "plano",
+  "saude",
+  "empresa",
+  "grupo",
+]);
+
+/**
+ * Marcadores que identificam um consultor interno no nome do lead.
+ * Ex.: empresa "APSP Corretora" -> "apsp"; empresa "Nexa Atende" -> "nexa", "atende", "na".
+ */
+function companyMarkers(...names: (string | null | undefined)[]): string[] {
+  const markers = new Set<string>();
+  for (const raw of names) {
+    const name = (raw ?? "").trim();
+    if (!name) continue;
+    const words = normalizeText(name)
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 2 && !GENERIC_COMPANY_WORDS.has(w));
+    for (const word of words) markers.add(word);
+    if (words.length >= 2) markers.add(words.map((w) => w[0]).join(""));
+  }
+  return [...markers].filter((m) => m.length >= 2);
+}
+
+/** O administrador marca o consultor escrevendo o nome da empresa junto ao nome. */
+function isConsultantLead(leadName: string | null | undefined, markers: string[]): boolean {
+  const name = normalizeText((leadName ?? "").trim());
+  if (!name) return false;
+  const tokens = name.split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.length < 2) return false;
+  return markers.some((marker) => tokens.includes(marker));
+}
+
+function buildConsultantPrompt(
+  settings: AiSettings,
+  knowledge: { title: string; category: string; content: string }[],
+  consultantName: string,
+) {
+  const base = knowledge.length
+    ? knowledge.map((k) => `### ${k.title} (${k.category})\n${k.content}`).join("\n\n")
+    : "(base de conhecimento vazia)";
+  return [
+    `Você é ${settings.agentName}, assistente INTERNA de ${settings.companyName}. Você está falando com ${consultantName}, um CONSULTOR da própria empresa — não é um cliente/lead.`,
+    "Trate-o como colega de equipe: cumprimente de forma direta e profissional (ex.: \"Olá, [nome]! Em que posso ajudar?\") e responda objetivamente às dúvidas dele.",
+    "Ele pode perguntar sobre produtos, operadoras, regras, processos internos, argumentos de venda, objeções e procedimentos. Use toda a base de conhecimento para ajudar, especialmente consultores novos.",
+    "Nunca qualifique-o como lead, nunca pergunte quantas vidas ele quer contratar e nunca ofereça transferir para um consultor humano — ele já é um consultor.",
+    "NUNCA use o marcador de transferência. Você mesma resolve a dúvida; se a informação não estiver na base, diga com clareza que não consta na base e oriente-o a confirmar com a coordenação.",
+    "Responda em português do Brasil, direto ao ponto, estilo WhatsApp, podendo usar até 600 caracteres quando a dúvida exigir detalhe.",
+    settings.extraInstructions ? `Instruções da empresa: ${settings.extraInstructions}` : "",
+    "",
+    "BASE DE CONHECIMENTO:",
+    base,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 type GatewayResult =
   | { kind: "ok"; text: string }
   | { kind: "retryable" | "terminal"; message: string };
+
 
 function retryDelay(response: Response, attempt: number): number {
   const retryAfter = response.headers.get("retry-after");
@@ -272,6 +357,20 @@ export async function respondWithAI(input: {
     return { status: "skipped", reason: `status ${conversation.status}` };
   }
 
+  // Consultor interno: o administrador marca no cadastro o nome do consultor
+  // junto com o nome da empresa (ex.: "Cacá APSP"). Nesse caso a IA vira
+  // assistente interna: não qualifica, não transfere e não entra na fila.
+  const { data: company } = await supabaseAdmin
+    .from("companies")
+    .select("name")
+    .eq("id", companyId)
+    .maybeSingle();
+  const markers = companyMarkers(company?.name, settings.companyName);
+  const leadRegisteredName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
+  const isConsultantChat = isConsultantLead(leadRegisteredName, markers);
+  if (isConsultantChat) log("modo consultor interno", leadRegisteredName);
+
+
   // Um humano só "assume" a conversa quando de fato responde. Enquanto isso
   // (inclusive em conversas antigas atribuídas mas sem resposta) a IA continua
   // atendendo, mantendo o contexto do histórico.
@@ -316,7 +415,7 @@ export async function respondWithAI(input: {
     (latest, message) => Math.max(latest, new Date(message.created_at).getTime()),
     0,
   );
-  if (lastHumanReplyAt && Date.now() - lastHumanReplyAt < HUMAN_TAKEOVER_TTL_MS) {
+  if (!isConsultantChat && lastHumanReplyAt && Date.now() - lastHumanReplyAt < HUMAN_TAKEOVER_TTL_MS) {
     log("skip: consultor já respondeu nesta conversa");
     return { status: "skipped", reason: "conversa com consultor" };
   }
@@ -327,7 +426,7 @@ export async function respondWithAI(input: {
     .select("id", { count: "exact", head: true })
     .eq("conversation_id", conversationId)
     .eq("status", "WAITING");
-  if ((pendingOffers ?? 0) > 0) {
+  if (!isConsultantChat && (pendingOffers ?? 0) > 0) {
     log("skip: oferta de fila aguardando consultor");
     return { status: "skipped", reason: "conversa com consultor" };
   }
@@ -359,7 +458,7 @@ export async function respondWithAI(input: {
     const reason = session.handoff_reason?.toLowerCase() ?? "";
     return !reason.includes("falha na geração") && !reason.includes("falha permanente da ia");
   });
-  if (hasIntentionalHandoff) {
+  if (!isConsultantChat && hasIntentionalHandoff) {
     log("skip: transferência humana já solicitada");
     return { status: "skipped", reason: "conversa com consultor" };
   }
@@ -382,6 +481,7 @@ export async function respondWithAI(input: {
   const preferAudio = lastCustomerIsAudio && !textOnlyRequest;
 
   const explicitHumanRequest =
+    !isConsultantChat &&
     /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
     /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
       customerText,
@@ -448,8 +548,13 @@ export async function respondWithAI(input: {
       : "CONTATO: ainda não sabemos o nome do lead. Pergunte o nome dele logo no início do atendimento, uma única vez.";
 
   const messages: ChatMessage[] = [
-    { role: "system", content: buildSystemPrompt(settings, knowledge) },
-    { role: "system", content: nameContext },
+    {
+      role: "system",
+      content: isConsultantChat
+        ? buildConsultantPrompt(settings, knowledge, leadRegisteredName)
+        : buildSystemPrompt(settings, knowledge),
+    },
+    ...(isConsultantChat ? [] : [{ role: "system" as const, content: nameContext }]),
     ...ordered
       .filter((m) => ((m.transcription || m.content) ?? "").trim())
       .map<ChatMessage>((m) => {
@@ -488,7 +593,7 @@ export async function respondWithAI(input: {
     : await callGateway(messages);
   if (generation.kind !== "ok") {
     log("geração não concluída", { tipo: generation.kind, erro: generation.message.slice(0, 300) });
-    if (generation.kind === "terminal") {
+    if (generation.kind === "terminal" && !isConsultantChat) {
       await handoff(companyId, conversationId, `falha permanente da IA: ${generation.message.slice(0, 300)}`);
       return { status: "handoff", reason: "gateway" };
     }
@@ -498,7 +603,7 @@ export async function respondWithAI(input: {
   }
   const raw = generation.text;
 
-  const needsHuman = explicitHumanRequest || raw.includes(HANDOFF_TOKEN);
+  const needsHuman = !isConsultantChat && (explicitHumanRequest || raw.includes(HANDOFF_TOKEN));
   const text = raw.replaceAll(HANDOFF_TOKEN, "").trim();
 
   if (text) {
