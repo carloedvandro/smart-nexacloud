@@ -52,6 +52,13 @@ export const NAV_ITEMS: NavItem[] = [
     description: "CRM e memória do cliente",
   },
   {
+    label: "Kanban",
+    to: "/kanban",
+    icon: KanbanSquare,
+    roles: ["ADMIN"],
+    description: "Funil visual de leads em tempo real",
+  },
+  {
     label: "Consultores",
     to: "/consultores",
     icon: UserCog,
