@@ -29,6 +29,7 @@ import {
   listLeadConversations,
   listLeadMemory,
   listLeadNotes,
+  setLeadName,
   setLeadStatus,
   upsertLeadMemory,
 } from "@/lib/nexa/crm";
@@ -119,6 +120,14 @@ export function LeadDetailSheet({
             </SheetHeader>
 
             <div className="space-y-5 px-4 pb-8">
+              <LeadNameForm
+                leadId={lead.id}
+                currentName={lead.name}
+                onSaved={() => {
+                  invalidate(["lead"]);
+                  void queryClient.invalidateQueries({ queryKey: ["leads", companyId] });
+                }}
+              />
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label>Situação</Label>
@@ -246,6 +255,56 @@ export function LeadDetailSheet({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function LeadNameForm({
+  leadId,
+  currentName,
+  onSaved,
+}: {
+  leadId: string;
+  currentName: string | null;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(currentName ?? "");
+  const [editingId, setEditingId] = useState(leadId);
+  if (editingId !== leadId) {
+    setEditingId(leadId);
+    setName(currentName ?? "");
+  }
+
+  const mutation = useMutation({
+    mutationFn: () => setLeadName(leadId, name),
+    onSuccess: () => {
+      toast.success("Nome do lead atualizado");
+      onSaved();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border p-3">
+      <Label htmlFor="lead-name">Nome do lead</Label>
+      <div className="flex gap-2">
+        <Input
+          id="lead-name"
+          value={name}
+          placeholder="Ex.: Maria Silva"
+          onChange={(e) => setName(e.target.value)}
+        />
+        <Button
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending || name.trim() === (currentName ?? "").trim()}
+        >
+          Salvar
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        A IA usará este nome ao falar com o lead. Se o WhatsApp trouxer um nome diferente, ela
+        confirma antes de mudar.
+      </p>
+    </div>
   );
 }
 
