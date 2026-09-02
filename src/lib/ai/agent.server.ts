@@ -292,7 +292,11 @@ export async function respondWithAI(input: {
         .eq("conversation_id", conversationId)
         .eq("sender_type", "ai")
     : { data: [] };
-  const hasHumanReply = (possibleHumanReplies ?? []).some((message) => {
+  // A "tomada" humana vale enquanto o atendimento está em andamento. Depois de
+  // muitas horas sem qualquer resposta humana, uma nova mensagem do cliente
+  // inicia um novo atendimento e a IA volta a responder.
+  const HUMAN_TAKEOVER_TTL_MS = 12 * 60 * 60 * 1_000;
+  const humanReplies = (possibleHumanReplies ?? []).filter((message) => {
     if (message.sender_id || message.sender_type === "admin") return true;
     const fromDevice = (message.metadata as { origin?: string } | null)?.origin === "device";
     if (!fromDevice) return true;
@@ -307,10 +311,15 @@ export async function respondWithAI(input: {
       return closeInTime && samePayload;
     });
   });
-  if (hasHumanReply) {
+  const lastHumanReplyAt = humanReplies.reduce(
+    (latest, message) => Math.max(latest, new Date(message.created_at).getTime()),
+    0,
+  );
+  if (lastHumanReplyAt && Date.now() - lastHumanReplyAt < HUMAN_TAKEOVER_TTL_MS) {
     log("skip: consultor já respondeu nesta conversa");
     return { status: "skipped", reason: "conversa com consultor" };
   }
+
 
   const { count: pendingOffers } = await supabaseAdmin
     .from("assignment_attempts")
@@ -376,6 +385,41 @@ export async function respondWithAI(input: {
     /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
       customerText,
     );
+
+  // Anti-loop: outro robô/IA do outro lado responderia para sempre. Paramos
+  // assim que o interlocutor se identifica como automático, ou quando a troca
+  // fica longa demais para um atendimento humano real.
+  const counterpartIsBot = customerTexts.some((t) =>
+    /(sou\s+(uma\s+)?(ia|intelig(ê|e)ncia\s+artificial|assistente\s+virtual|bot|rob(ô|o)|chatbot|assistente\s+automátic))|(atendente\s+virtual)|(mensagem\s+autom(á|a)tica)|(resposta\s+autom(á|a)tica)|(sistema\s+autom(a|á)tico)|(este\s+(número|canal)\s+n(ã|a)o\s+recebe)|(as\s+an\s+ai|i am an ai|as an ai language model)/i.test(
+      t,
+    ),
+  );
+  // Trocas muito rápidas e ininterruptas indicam robô do outro lado: um humano
+  // não mantém dezenas de idas e vindas em segundos.
+  const { count: totalAiReplies } = await supabaseAdmin
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("sender_type", "ai");
+  const LOOP_LIMIT = 25;
+  if (counterpartIsBot || (totalAiReplies ?? 0) >= LOOP_LIMIT) {
+
+    const reason = counterpartIsBot
+      ? "interlocutor automatizado (outra IA/robô)"
+      : "limite de mensagens automáticas atingido";
+    log("skip: parando respostas automáticas —", reason);
+    await supabaseAdmin
+      .from("ai_sessions")
+      .update({ status: "HANDOFF", ended_at: new Date().toISOString(), handoff_reason: reason })
+      .eq("conversation_id", conversationId)
+      .eq("status", "ACTIVE");
+    await supabaseAdmin
+      .from("conversations")
+      .update({ status: "WAITING_HUMAN" })
+      .eq("id", conversationId)
+      .eq("company_id", companyId);
+    return { status: "skipped", reason };
+  }
 
 
   // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
