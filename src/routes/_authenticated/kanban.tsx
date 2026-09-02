@@ -47,17 +47,81 @@ export const Route = createFileRoute("/_authenticated/kanban")({
   component: KanbanRoute,
 });
 
-/** Colunas do funil, na ordem comercial. */
-const COLUMNS: { status: LeadStatus; accent: string }[] = [
-  { status: "NEW", accent: "bg-slate-400" },
-  { status: "AI_QUALIFYING", accent: "bg-violet-500" },
-  { status: "QUALIFIED", accent: "bg-sky-500" },
-  { status: "WAITING_HUMAN", accent: "bg-amber-500" },
-  { status: "IN_SERVICE", accent: "bg-primary" },
-  { status: "WAITING_CUSTOMER", accent: "bg-orange-500" },
-  { status: "WON", accent: "bg-emerald-500" },
-  { status: "LOST", accent: "bg-destructive" },
+/** Colunas do funil, na ordem comercial — cada etapa tem a sua cor. */
+const COLUMNS: {
+  status: LeadStatus;
+  accent: string;
+  border: string;
+  header: string;
+  body: string;
+  title: string;
+}[] = [
+  {
+    status: "NEW",
+    accent: "bg-slate-400",
+    border: "border-slate-400/40",
+    header: "bg-slate-400/15",
+    body: "bg-slate-400/[0.06]",
+    title: "text-slate-600 dark:text-slate-300",
+  },
+  {
+    status: "AI_QUALIFYING",
+    accent: "bg-violet-500",
+    border: "border-violet-500/40",
+    header: "bg-violet-500/15",
+    body: "bg-violet-500/[0.06]",
+    title: "text-violet-700 dark:text-violet-300",
+  },
+  {
+    status: "QUALIFIED",
+    accent: "bg-sky-500",
+    border: "border-sky-500/40",
+    header: "bg-sky-500/15",
+    body: "bg-sky-500/[0.06]",
+    title: "text-sky-700 dark:text-sky-300",
+  },
+  {
+    status: "WAITING_HUMAN",
+    accent: "bg-amber-500",
+    border: "border-amber-500/40",
+    header: "bg-amber-500/15",
+    body: "bg-amber-500/[0.06]",
+    title: "text-amber-700 dark:text-amber-300",
+  },
+  {
+    status: "IN_SERVICE",
+    accent: "bg-primary",
+    border: "border-primary/40",
+    header: "bg-primary/15",
+    body: "bg-primary/[0.06]",
+    title: "text-primary",
+  },
+  {
+    status: "WAITING_CUSTOMER",
+    accent: "bg-orange-500",
+    border: "border-orange-500/40",
+    header: "bg-orange-500/15",
+    body: "bg-orange-500/[0.06]",
+    title: "text-orange-700 dark:text-orange-300",
+  },
+  {
+    status: "WON",
+    accent: "bg-emerald-500",
+    border: "border-emerald-500/40",
+    header: "bg-emerald-500/15",
+    body: "bg-emerald-500/[0.06]",
+    title: "text-emerald-700 dark:text-emerald-300",
+  },
+  {
+    status: "LOST",
+    accent: "bg-destructive",
+    border: "border-destructive/40",
+    header: "bg-destructive/15",
+    body: "bg-destructive/[0.06]",
+    title: "text-destructive",
+  },
 ];
+
 
 function KanbanRoute() {
   return (
