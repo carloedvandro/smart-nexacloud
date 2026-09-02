@@ -410,6 +410,20 @@ export async function respondWithAI(input: {
 
 
 
+  // Quando a conversa é devolvida para a IA (arrastar para "Em qualificação (IA)"
+  // no Kanban ou rodízio esgotado), tudo que aconteceu antes desse momento
+  // — respostas humanas e transferências anteriores — deixa de bloquear a IA.
+  const { data: lastResume } = await supabaseAdmin
+    .from("conversation_events")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .eq("event_type", "AI_RESUMED")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const resumedAt = lastResume?.created_at ? new Date(lastResume.created_at).getTime() : 0;
+  if (resumedAt) log("retomada da IA em", lastResume?.created_at);
+
   // Um humano só "assume" a conversa quando de fato responde. Enquanto isso
   // (inclusive em conversas antigas atribuídas mas sem resposta) a IA continua
   // atendendo, mantendo o contexto do histórico.
