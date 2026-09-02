@@ -143,7 +143,10 @@ export const deleteConversationAsAdmin = createServerFn({ method: "POST" })
       }
     }
 
-    const deletedByName = profile?.full_name ?? profile?.email ?? null;
+    // Prioriza o nome cadastrado na senha de exclusão (o responsável real),
+    // e não o nome da conta/empresa usada para acessar o painel.
+    const deletedByName =
+      credential.display_name?.trim() || profile?.full_name || profile?.email || null;
 
     await supabaseAdmin.from("conversation_deletion_logs").insert({
       company_id: conversation.company_id,
