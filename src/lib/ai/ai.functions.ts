@@ -28,16 +28,80 @@ async function currentCompany(context: { supabase: any; userId: string }): Promi
   return data.company_id as string;
 }
 
+export type KnowledgeScope = {
+  companyId: string;
+  companyName: string;
+  isPlatformAdmin: boolean;
+  companies: { id: string; name: string }[];
+};
+
+/**
+ * Resolve a empresa alvo: administradores de empresa ficam presos à própria
+ * empresa; o super administrador pode escolher qualquer empresa.
+ */
+async function resolveScope(
+  context: { supabase: any; userId: string },
+  companyId?: string | null,
+): Promise<{ companyId: string; db: any; isPlatformAdmin: boolean }> {
+  const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin");
+  if (isPlatformAdmin) {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const target = companyId ?? (await currentCompany(context).catch(() => null));
+    if (!target) {
+      const { data: first } = await supabaseAdmin
+        .from("companies")
+        .select("id")
+        .order("name", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (!first?.id) throw new Error("Nenhuma empresa cadastrada.");
+      return { companyId: first.id as string, db: supabaseAdmin, isPlatformAdmin: true };
+    }
+    return { companyId: target, db: supabaseAdmin, isPlatformAdmin: true };
+  }
+
+  const own = await currentCompany(context);
+  if (companyId && companyId !== own) throw new Error("Acesso restrito à sua empresa.");
+  return { companyId: own, db: context.supabase, isPlatformAdmin: false };
+}
+
+/** Empresas disponíveis para o usuário atual na base de conhecimento. */
+export const getKnowledgeScope = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<KnowledgeScope> => {
+    const { companyId, db, isPlatformAdmin } = await resolveScope(context, null);
+    if (isPlatformAdmin) {
+      const { data } = await db.from("companies").select("id, name").order("name", { ascending: true });
+      const companies = (data ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }));
+      return {
+        companyId,
+        companyName: companies.find((c: { id: string }) => c.id === companyId)?.name ?? "",
+        isPlatformAdmin: true,
+        companies,
+      };
+    }
+    const { data } = await db.from("companies").select("id, name").eq("id", companyId).maybeSingle();
+    return {
+      companyId,
+      companyName: data?.name ?? "",
+      isPlatformAdmin: false,
+      companies: data ? [{ id: data.id, name: data.name }] : [],
+    };
+  });
+
 export const listKnowledge = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<KnowledgeItem[]> => {
-    const { data, error } = await context.supabase
+  .inputValidator((data?: { companyId?: string | null }) => data ?? {})
+  .handler(async ({ data: input, context }): Promise<KnowledgeItem[]> => {
+    const { companyId, db } = await resolveScope(context, input?.companyId ?? null);
+    const { data, error } = await db
       .from("knowledge_base")
       .select("id, title, category, content, status, updated_at")
+      .eq("company_id", companyId)
       .order("status", { ascending: true })
       .order("title", { ascending: true });
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => ({
+    return (data ?? []).map((row: any) => ({
       id: row.id,
       title: row.title,
       category: row.category as string,
@@ -50,14 +114,21 @@ export const listKnowledge = createServerFn({ method: "GET" })
 export const saveKnowledge = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (data: { id?: string; title: string; category: string; content: string; status: string }) => {
+    (data: {
+      id?: string;
+      companyId?: string | null;
+      title: string;
+      category: string;
+      content: string;
+      status: string;
+    }) => {
       if (!data.title?.trim()) throw new Error("Informe o título.");
       if (!data.content?.trim()) throw new Error("Informe o conteúdo.");
       return data;
     },
   )
   .handler(async ({ data, context }) => {
-    const companyId = await currentCompany(context);
+    const { companyId, db } = await resolveScope(context, data.companyId ?? null);
     const payload = {
       company_id: companyId,
       title: data.title.trim(),
@@ -68,15 +139,16 @@ export const saveKnowledge = createServerFn({ method: "POST" })
     };
 
     if (data.id) {
-      const { error } = await context.supabase
+      const { error } = await db
         .from("knowledge_base")
         .update(payload)
-        .eq("id", data.id);
+        .eq("id", data.id)
+        .eq("company_id", companyId);
       if (error) throw new Error(error.message);
       return { id: data.id };
     }
 
-    const { data: row, error } = await context.supabase
+    const { data: row, error } = await db
       .from("knowledge_base")
       .insert(payload)
       .select("id")
@@ -87,18 +159,24 @@ export const saveKnowledge = createServerFn({ method: "POST" })
 
 export const deleteKnowledge = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id: string }) => data)
+  .inputValidator((data: { id: string; companyId?: string | null }) => data)
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("knowledge_base").delete().eq("id", data.id);
+    const { companyId, db } = await resolveScope(context, data.companyId ?? null);
+    const { error } = await db
+      .from("knowledge_base")
+      .delete()
+      .eq("id", data.id)
+      .eq("company_id", companyId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
 
 export const getAiConfig = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<AiConfig> => {
-    const companyId = await currentCompany(context);
-    const { data } = await context.supabase
+  .inputValidator((data?: { companyId?: string | null }) => data ?? {})
+  .handler(async ({ data: input, context }): Promise<AiConfig> => {
+    const { companyId, db } = await resolveScope(context, input?.companyId ?? null);
+    const { data } = await db
       .from("system_settings")
       .select("value")
       .eq("company_id", companyId)
@@ -107,7 +185,7 @@ export const getAiConfig = createServerFn({ method: "GET" })
     const value = (data?.value ?? {}) as Partial<AiConfig>;
     return {
       enabled: Boolean(value.enabled),
-      agentName: value.agentName ?? "Assistente",
+      agentName: value.agentName ?? "Ana",
       companyName: value.companyName ?? "",
       extraInstructions: value.extraInstructions ?? "",
     };
@@ -115,21 +193,21 @@ export const getAiConfig = createServerFn({ method: "GET" })
 
 export const saveAiConfig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: AiConfig) => data)
+  .inputValidator((data: AiConfig & { companyId?: string | null }) => data)
   .handler(async ({ data, context }) => {
-    const companyId = await currentCompany(context);
     const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
     const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin");
     if (!isAdmin && !isPlatformAdmin) throw new Error("Somente administradores.");
+    const { companyId, db } = await resolveScope(context, data.companyId ?? null);
 
     const value = {
       enabled: Boolean(data.enabled),
-      agentName: data.agentName.trim() || "Assistente",
+      agentName: data.agentName.trim() || "Ana",
       companyName: data.companyName.trim(),
       extraInstructions: data.extraInstructions.trim(),
     };
 
-    const { data: existing } = await context.supabase
+    const { data: existing } = await db
       .from("system_settings")
       .select("id")
       .eq("company_id", companyId)
@@ -137,8 +215,8 @@ export const saveAiConfig = createServerFn({ method: "POST" })
       .maybeSingle();
 
     const { error } = existing
-      ? await context.supabase.from("system_settings").update({ value }).eq("id", existing.id)
-      : await context.supabase
+      ? await db.from("system_settings").update({ value }).eq("id", existing.id)
+      : await db
           .from("system_settings")
           .insert({ company_id: companyId, key: "ai", value });
     if (error) throw new Error(error.message);
@@ -151,11 +229,12 @@ export const saveAiConfig = createServerFn({ method: "POST" })
  */
 export const testAiReply = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const companyId = await currentCompany(context);
+  .inputValidator((data?: { companyId?: string | null }) => data ?? {})
+  .handler(async ({ data: input, context }) => {
     const { data: isAdmin } = await context.supabase.rpc("is_company_admin");
     const { data: isPlatformAdmin } = await context.supabase.rpc("is_platform_admin");
     if (!isAdmin && !isPlatformAdmin) throw new Error("Somente administradores.");
+    const { companyId } = await resolveScope(context, input?.companyId ?? null);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { respondWithAI, loadAiSettings } = await import("@/lib/ai/agent.server");

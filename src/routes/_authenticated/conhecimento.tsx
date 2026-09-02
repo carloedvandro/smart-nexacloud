@@ -28,6 +28,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   deleteKnowledge,
   getAiConfig,
+  getKnowledgeScope,
   listKnowledge,
   saveAiConfig,
   saveKnowledge,
@@ -81,9 +82,11 @@ const EMPTY: KnowledgeItem = {
 };
 
 function ConhecimentoPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin: isCompanyAdmin, roles } = useAuth();
+  const isAdmin = isCompanyAdmin || roles.includes("PLATFORM_ADMIN");
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<KnowledgeItem | null>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
 
   const fetchList = useServerFn(listKnowledge);
   const fetchConfig = useServerFn(getAiConfig);
@@ -91,9 +94,24 @@ function ConhecimentoPage() {
   const remove = useServerFn(deleteKnowledge);
   const persistConfig = useServerFn(saveAiConfig);
   const runTest = useServerFn(testAiReply);
+  const fetchScope = useServerFn(getKnowledgeScope);
 
-  const { data: items, isLoading } = useQuery({ queryKey: ["knowledge"], queryFn: () => fetchList() });
-  const { data: config } = useQuery({ queryKey: ["ai-config"], queryFn: () => fetchConfig() });
+  const { data: scope } = useQuery({ queryKey: ["knowledge-scope"], queryFn: () => fetchScope() });
+  useEffect(() => {
+    if (scope && !companyId) setCompanyId(scope.companyId);
+  }, [scope, companyId]);
+  const scopeCompanyId = companyId ?? scope?.companyId ?? null;
+
+  const { data: items, isLoading } = useQuery({
+    queryKey: ["knowledge", scopeCompanyId],
+    queryFn: () => fetchList({ data: { companyId: scopeCompanyId } }),
+    enabled: Boolean(scopeCompanyId),
+  });
+  const { data: config } = useQuery({
+    queryKey: ["ai-config", scopeCompanyId],
+    queryFn: () => fetchConfig({ data: { companyId: scopeCompanyId } }),
+    enabled: Boolean(scopeCompanyId),
+  });
 
   const [form, setForm] = useState<AiConfig>({
     enabled: false,
@@ -106,7 +124,7 @@ function ConhecimentoPage() {
   }, [config]);
 
   const saveConfig = useMutation({
-    mutationFn: (value: AiConfig) => persistConfig({ data: value }),
+    mutationFn: (value: AiConfig) => persistConfig({ data: { ...value, companyId: scopeCompanyId } }),
     onSuccess: () => {
       toast.success("Configuração da IA salva.");
       void queryClient.invalidateQueries({ queryKey: ["ai-config"] });
@@ -115,7 +133,7 @@ function ConhecimentoPage() {
   });
 
   const testIa = useMutation({
-    mutationFn: () => runTest({ data: undefined as never }),
+    mutationFn: () => runTest({ data: { companyId: scopeCompanyId } }),
     onSuccess: (result: { status: string; reason: string }) => {
       if (result.status === "replied") toast.success("A IA respondeu a última conversa.");
       else if (result.status === "handoff")
@@ -130,6 +148,7 @@ function ConhecimentoPage() {
       persist({
         data: {
           ...(item.id ? { id: item.id } : {}),
+          companyId: scopeCompanyId,
           title: item.title,
           category: item.category,
           content: item.content,
@@ -145,7 +164,7 @@ function ConhecimentoPage() {
   });
 
   const removeItem = useMutation({
-    mutationFn: (id: string) => remove({ data: { id } }),
+    mutationFn: (id: string) => remove({ data: { id, companyId: scopeCompanyId } }),
     onSuccess: () => {
       toast.success("Conteúdo removido.");
       void queryClient.invalidateQueries({ queryKey: ["knowledge"] });
@@ -156,8 +175,39 @@ function ConhecimentoPage() {
   const activeCount = (items ?? []).filter((i) => i.status === "ACTIVE").length;
 
   return (
-    <AppShell title="Conhecimento IA" description="Base oficial consultada pela inteligência artificial">
+    <AppShell
+      title="Conhecimento IA"
+      description={
+        scope?.companyName
+          ? `Base oficial da ${scope.isPlatformAdmin ? (scope.companies.find((c) => c.id === scopeCompanyId)?.name ?? scope.companyName) : scope.companyName}`
+          : "Base oficial consultada pela inteligência artificial"
+      }
+    >
       <div className="space-y-6">
+        {scope?.isPlatformAdmin && scope.companies.length > 0 ? (
+          <Card className="shadow-panel">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Empresa</CardTitle>
+              <CardDescription>
+                Cada empresa possui a própria base de conhecimento e configuração da IA.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Select value={scopeCompanyId ?? ""} onValueChange={(v) => setCompanyId(v)}>
+                <SelectTrigger className="max-w-sm">
+                  <SelectValue placeholder="Selecione a empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {scope.companies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+        ) : null}
         <Card className="shadow-panel">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
