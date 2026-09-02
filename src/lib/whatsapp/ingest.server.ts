@@ -324,7 +324,15 @@ export async function processWebhookEvent(input: {
     let echoMedia: { path: string; mimeType: string | null } | null = null;
     if (messageType !== "text") {
       echoMedia = await downloadAndStoreMedia({ connectionId, companyId, body, messageType });
+      // Sem mídia baixada e sem texto o eco viraria um balão vazio
+      // ("não foi possível baixar a mídia"). Melhor ignorar o evento.
+      if (!echoMedia && !content) {
+        console.warn("[whatsapp] eco de mídia descartado: download indisponível", { messageType });
+        return { status: "ignored", reason: "eco de mídia sem conteúdo" };
+      }
     }
+
+
 
     const { data: echo, error: echoError } = await supabaseAdmin.rpc("ingest_outbound_echo", {
       _connection_id: connectionId,
