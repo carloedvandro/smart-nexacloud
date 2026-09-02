@@ -754,7 +754,10 @@ function AdminDeletePasswordCard() {
   });
 
   useEffect(() => {
-    if (credential.data?.display_name) setName(credential.data.display_name);
+    if (credential.data?.display_name) {
+      setName(credential.data.display_name);
+      setEditName(credential.data.display_name);
+    }
   }, [credential.data?.display_name]);
 
   const registered = useQuery({
