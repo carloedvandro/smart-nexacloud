@@ -31,23 +31,54 @@ export const deleteConversationAsAdmin = createServerFn({ method: "POST" })
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (!credential) {
-      throw new Error(
-        "Você ainda não cadastrou uma senha de exclusão. Vá em Configurações › Criar senha de administrador.",
-      );
-    }
-    if (credential.display_name.trim().toLowerCase() !== data.name.trim().toLowerCase()) {
-      throw new Error(`Nome incorreto. Use exatamente o nome cadastrado: "${credential.display_name}".`);
+    if (credential) {
+      if (credential.display_name.trim().toLowerCase() !== data.name.trim().toLowerCase()) {
+        throw new Error(`Nome incorreto. Use exatamente o nome cadastrado: "${credential.display_name}".`);
+      }
+      const { data: verified, error: verifyError } = await supabase.rpc("verify_admin_delete_credential", {
+        _display_name: credential.display_name,
+        _password: data.password,
+      });
+      if (verifyError) throw new Error(verifyError.message);
+      if (!verified) {
+        throw new Error("Senha de administrador incorreta. Confira em Configurações › Criar senha de administrador.");
+      }
+    } else {
+      // Sem senha de exclusão cadastrada: confirma com o e-mail/senha da própria conta.
+      const { data: me } = await supabase
+        .from("profiles")
+        .select("email, full_name")
+        .eq("id", userId)
+        .maybeSingle();
+      if (!me?.email) {
+        throw new Error(
+          "Cadastre a sua senha de exclusão em Configurações › Criar senha de administrador para confirmar.",
+        );
+      }
+      const { createClient } = await import("@supabase/supabase-js");
+      const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+      const authClient = createClient(process.env["SUPABASE_URL"]!, key, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: {
+          fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+            const h = new Headers(init?.headers);
+            if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization");
+            h.set("apikey", key);
+            return fetch(input, { ...init, headers: h });
+          },
+        },
+      });
+      const { error: signInError } = await authClient.auth.signInWithPassword({
+        email: me.email,
+        password: data.password,
+      });
+      if (signInError) {
+        throw new Error(
+          "Senha incorreta. Use a senha da sua conta ou cadastre uma senha de exclusão em Configurações › Criar senha de administrador.",
+        );
+      }
     }
 
-    const { data: verified, error: verifyError } = await supabase.rpc("verify_admin_delete_credential", {
-      _display_name: credential.display_name,
-      _password: data.password,
-    });
-    if (verifyError) throw new Error(verifyError.message);
-    if (!verified) {
-      throw new Error("Senha de administrador incorreta. Confira em Configurações › Criar senha de administrador.");
-    }
 
 
     const { data: conversation, error: convError } = await supabase
