@@ -31,31 +31,23 @@ export const deleteConversationAsAdmin = createServerFn({ method: "POST" })
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (credential) {
-      if (credential.display_name.trim().toLowerCase() !== data.name.trim().toLowerCase()) {
-        throw new Error(`Nome incorreto. Use exatamente o nome cadastrado: "${credential.display_name}".`);
-      }
-      const { data: verified, error: verifyError } = await supabase.rpc("verify_admin_delete_credential", {
-        _display_name: credential.display_name,
-        _password: data.password,
-      });
-      if (verifyError) throw new Error(verifyError.message);
-      if (!verified) {
-        throw new Error("Senha de administrador incorreta. Confira em Configurações › Criar senha de administrador.");
-      }
-    } else {
-      // Primeiro uso: nenhuma senha de exclusão cadastrada ainda.
-      // Registra o nome + senha informados agora (fica vinculado a esta conta)
-      // e segue com a exclusão, que é auditada no log.
-      if (data.password.length < 6) {
-        throw new Error("Defina uma senha de administrador com ao menos 6 caracteres.");
-      }
-      const { error: setError } = await supabase.rpc("set_admin_delete_credential", {
-        _display_name: data.name.trim(),
-        _password: data.password,
-      });
-      if (setError) throw new Error(setError.message);
+    if (!credential) {
+      throw new Error(
+        "Você não possui senha de exclusão. Cadastre em Configurações › Criar senha de administrador (máximo de 2 responsáveis por empresa).",
+      );
     }
+    if (credential.display_name.trim().toLowerCase() !== data.name.trim().toLowerCase()) {
+      throw new Error(`Nome incorreto. Use exatamente o nome cadastrado nesta conta: "${credential.display_name}".`);
+    }
+    const { data: verified, error: verifyError } = await supabase.rpc("verify_admin_delete_credential", {
+      _display_name: credential.display_name,
+      _password: data.password,
+    });
+    if (verifyError) throw new Error(verifyError.message);
+    if (!verified) {
+      throw new Error("Senha de administrador incorreta. Confira em Configurações › Criar senha de administrador.");
+    }
+
 
 
 
