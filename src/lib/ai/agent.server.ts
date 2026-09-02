@@ -356,7 +356,7 @@ export async function respondWithAI(input: {
 
   const { data: conversation } = await supabaseAdmin
     .from("conversations")
-    .select("id, status, assigned_user_id, channel_id, lead:leads(whatsapp, name)")
+    .select("id, status, assigned_user_id, channel_id, lead:leads(whatsapp, name, phone)")
     .eq("id", conversationId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -365,21 +365,40 @@ export async function respondWithAI(input: {
     return { status: "skipped", reason: "conversa inexistente" };
   }
 
-  // Consultor interno: o administrador marca no cadastro o nome do consultor
-  // junto com o nome da empresa (ex.: "Cacá APSP"). Nesse caso a IA vira
-  // assistente interna: não qualifica, não transfere e não entra na fila.
-  const { data: company } = await supabaseAdmin
-    .from("companies")
-    .select("name")
-    .eq("id", companyId)
-    .maybeSingle();
+  // Pessoa interna: reconhecida pelo nome marcado com a empresa (ex.: "Cacá APSP")
+  // OU pelo telefone cadastrado na equipe (perfis e números conectados da empresa).
+  // Nesse caso a IA vira assistente interna: não qualifica, não transfere e nunca
+  // manda a conversa para o rodízio da fila.
+  const [{ data: company }, { data: staffProfiles }, { data: staffConnections }] = await Promise.all([
+    supabaseAdmin.from("companies").select("name").eq("id", companyId).maybeSingle(),
+    supabaseAdmin.from("profiles").select("full_name, phone").eq("company_id", companyId),
+    supabaseAdmin.from("whatsapp_connections").select("phone_number").eq("company_id", companyId),
+  ]);
   const markers = companyMarkers(company?.name, settings.companyName);
   const leadRegisteredName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
-  const isConsultantChat = isConsultantLead(leadRegisteredName, markers);
-  const consultantName = consultantFirstName(leadRegisteredName, markers);
   const leadWhatsapp = ((conversation.lead as { whatsapp?: string | null } | null)?.whatsapp ?? "").trim();
-  const consultantPhone = leadWhatsapp && !leadWhatsapp.includes("@lid") ? leadWhatsapp : null;
-  if (isConsultantChat) log("modo consultor interno", leadRegisteredName);
+  const leadPhone = ((conversation.lead as { phone?: string | null } | null)?.phone ?? "").trim();
+  const digits = (value: string | null | undefined) => (value ?? "").replace(/\D/g, "");
+  const leadDigits = [digits(leadPhone), leadWhatsapp.includes("@lid") ? "" : digits(leadWhatsapp)].filter(
+    (d) => d.length >= 10,
+  );
+  const staffNumbers = new Set(
+    [
+      ...(staffProfiles ?? []).map((p) => digits(p.phone)),
+      ...(staffConnections ?? []).map((c) => digits(c.phone_number)),
+    ].filter((d) => d.length >= 10),
+  );
+  const matchedProfile = (staffProfiles ?? []).find((p) =>
+    leadDigits.some((d) => digits(p.phone) && digits(p.phone) === d),
+  );
+  const isStaffPhone = leadDigits.some((d) => staffNumbers.has(d));
+  const isConsultantChat = isConsultantLead(leadRegisteredName, markers) || isStaffPhone;
+  const consultantName = consultantFirstName(
+    leadRegisteredName || (matchedProfile?.full_name ?? ""),
+    markers,
+  );
+  const consultantPhone = leadWhatsapp && !leadWhatsapp.includes("@lid") ? leadWhatsapp : leadPhone || null;
+  if (isConsultantChat) log("modo consultor interno", leadRegisteredName, { porTelefone: isStaffPhone });
 
   // Conversa encerrada volta a atender o consultor interno (suporte contínuo);
   // pausada continua respeitando a pausa manual.
@@ -551,7 +570,8 @@ export async function respondWithAI(input: {
   if (unreadableMedia) {
     if (isConsultantChat) {
       log("skip: consultor enviou mídia sem texto");
-      return { status: "skipped", reason: "mídia sem texto" };
+      // Reason padronizada: impede que a ingestão coloque a conversa no rodízio.
+      return { status: "skipped", reason: "conversa com consultor" };
     }
     await handoff(companyId, conversationId, "mídia recebida sem texto");
     return { status: "handoff", reason: "mídia" };
@@ -578,7 +598,7 @@ export async function respondWithAI(input: {
       role: "system",
       content: isConsultantChat
         ? buildConsultantPrompt(settings, knowledge, {
-            registeredName: leadRegisteredName,
+            registeredName: leadRegisteredName || matchedProfile?.full_name || consultantName,
             firstName: consultantName,
             phone: consultantPhone,
           })
