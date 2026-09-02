@@ -488,7 +488,7 @@ export async function respondWithAI(input: {
 
   const { data: history } = await supabaseAdmin
     .from("messages")
-    .select("sender_type, sender_name, content, message_type, transcription")
+    .select("sender_type, sender_name, content, message_type, transcription, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(HISTORY_LIMIT);
@@ -526,8 +526,14 @@ export async function respondWithAI(input: {
   // (pessoa sem fone, ambiente, ou outro robô/IA que só lê texto).
   const AUDIO_TYPES = ["audio", "ptt", "voice"];
   const lastCustomerIsAudio = AUDIO_TYPES.includes(String(lastCustomer.message_type ?? "").toLowerCase());
+  // A retomada manual inicia um novo ciclo de atendimento. Textos antigos que
+  // pareciam vir de outro robô não podem bloquear novamente esta nova conversa.
   const customerTexts = ordered
-    .filter((m) => m.sender_type === "customer")
+    .filter(
+      (m) =>
+        m.sender_type === "customer" &&
+        (!resumedAt || new Date(m.created_at).getTime() > resumedAt),
+    )
     .map((m) => ((m.transcription || m.content) ?? "").toLowerCase());
   // Preferência de modalidade vale para a mensagem atual. Uma frase antiga
   // pedindo texto não deve impedir para sempre respostas aos novos áudios.
@@ -555,11 +561,15 @@ export async function respondWithAI(input: {
   );
   // Trocas muito rápidas e ininterruptas indicam robô do outro lado: um humano
   // não mantém dezenas de idas e vindas em segundos.
-  const { count: totalAiReplies } = await supabaseAdmin
+  let aiReplyCountQuery = supabaseAdmin
     .from("messages")
     .select("id", { count: "exact", head: true })
     .eq("conversation_id", conversationId)
     .eq("sender_type", "ai");
+  if (lastResume?.created_at) {
+    aiReplyCountQuery = aiReplyCountQuery.gt("created_at", lastResume.created_at);
+  }
+  const { count: totalAiReplies } = await aiReplyCountQuery;
   const LOOP_LIMIT = 25;
   if (counterpartIsBot || (totalAiReplies ?? 0) >= LOOP_LIMIT) {
 
