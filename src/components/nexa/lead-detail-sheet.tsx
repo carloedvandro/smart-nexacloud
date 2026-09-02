@@ -29,6 +29,7 @@ import {
   listLeadConversations,
   listLeadMemory,
   listLeadNotes,
+  setLeadName,
   setLeadStatus,
   upsertLeadMemory,
 } from "@/lib/nexa/crm";
