@@ -8,9 +8,22 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  */
 export const purgeCompanyConversations = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { alsoDeleteLeads?: boolean } | undefined) => input ?? {})
+  .inputValidator((input: { alsoDeleteLeads?: boolean; name?: string; password?: string } | undefined) => {
+    const name = (input?.name ?? "").trim();
+    const password = input?.password ?? "";
+    if (!name) throw new Error("Informe o nome do administrador.");
+    if (!password) throw new Error("Informe a senha de administrador.");
+    return { alsoDeleteLeads: input?.alsoDeleteLeads ?? false, name, password };
+  })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+
+    const { data: credentialOk, error: credentialError } = await supabase.rpc(
+      "verify_admin_delete_credential",
+      { _display_name: data.name, _password: data.password },
+    );
+    if (credentialError) throw new Error(credentialError.message);
+    if (!credentialOk) throw new Error("Nome ou senha de administrador inválidos.");
 
     const [{ data: isCompanyAdmin }, { data: isPlatformAdmin }] = await Promise.all([
       supabase.rpc("is_company_admin"),
