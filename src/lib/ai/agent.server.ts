@@ -448,11 +448,12 @@ export async function respondWithAI(input: {
 
     log("enviando resposta", { destino: recipient, temCredenciais: Boolean(creds) });
     if (recipient && creds) {
-      // Voz feminina humanizada: tentamos o áudio primeiro; se a síntese
-      // falhar ou o link não sair, a mesma resposta segue em texto.
-      const voice = await synthesizeReplyAudio({ companyId, connectionId, text });
+      // Espelhamos a modalidade do cliente: voz só quando ele falou por áudio e
+      // não sinalizou que não consegue ouvir. Caso contrário, resposta escrita.
+      const voice = preferAudio ? await synthesizeReplyAudio({ companyId, connectionId, text }) : null;
       const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
       const asAudio = Boolean(voice && voiceUrl);
+
 
       // Reservamos a mensagem ANTES do envio. A MEGA pode disparar o eco do
       // WhatsApp ainda durante a chamada de envio; sem esta reserva, esse eco
