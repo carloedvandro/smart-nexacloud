@@ -30,6 +30,7 @@ import { ConversationStatusBadge } from "@/components/nexa/status-badge";
 import { LeadDetailSheet } from "@/components/nexa/lead-detail-sheet";
 import { PurgeConversationsButton } from "@/components/nexa/purge-conversations-button";
 import { InvitePersonalWhatsAppButton } from "@/components/nexa/invite-personal-whatsapp-button";
+import { DeleteConversationButton } from "@/components/nexa/delete-conversation-button";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -275,14 +276,17 @@ function ConversasPage() {
               </div>
             ) : (
               (conversations ?? []).map((conv) => (
-                <button
+                <div
                   key={conv.id}
-                  onClick={() => select(conv.id)}
-                  aria-current={selectedId === conv.id}
                   className={cn(
-                    "flex w-full items-start gap-3 border-b border-chat-line/70 px-3 py-3 text-left transition-colors hover:bg-chat-shell focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-chat-brand",
+                    "flex items-start gap-1 border-b border-chat-line/70 pr-2 transition-colors hover:bg-chat-shell",
                     selectedId === conv.id && "bg-chat-shell",
                   )}
+                >
+                <button
+                  onClick={() => select(conv.id)}
+                  aria-current={selectedId === conv.id}
+                  className="flex min-w-0 flex-1 items-start gap-3 px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-chat-brand"
                 >
                   <Avatar name={conv.lead?.name} phone={conv.lead?.whatsapp ?? conv.lead?.phone} size="sm" />
                   <span className="min-w-0 flex-1">
@@ -311,6 +315,18 @@ function ConversasPage() {
                     </span>
                   </span>
                 </button>
+                {isAdmin ? (
+                  <DeleteConversationButton
+                    conversationId={conv.id}
+                    leadName={conv.lead?.name ?? conv.lead?.whatsapp ?? conv.lead?.phone ?? null}
+                    className="mt-3"
+                    onDeleted={() => {
+                      if (selectedId === conv.id) void navigate({ to: "/conversas", search: {} });
+                      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+                    }}
+                  />
+                ) : null}
+                </div>
               ))
             )}
           </div>

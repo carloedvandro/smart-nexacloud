@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_delete_credentials: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          display_name: string
+          password_hash: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          display_name: string
+          password_hash: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          display_name?: string
+          password_hash?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_delete_credentials_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_delete_credentials_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_sessions: {
         Row: {
           company_id: string
@@ -474,6 +516,72 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversation_deletion_logs: {
+        Row: {
+          channel: string | null
+          company_id: string
+          confirmed_name: string | null
+          conversation_id: string
+          created_at: string
+          deleted_by: string | null
+          deleted_by_name: string | null
+          id: string
+          lead_id: string | null
+          lead_name: string | null
+          lead_phone: string | null
+          messages_deleted: number
+          metadata: Json
+          reason: string | null
+        }
+        Insert: {
+          channel?: string | null
+          company_id: string
+          confirmed_name?: string | null
+          conversation_id: string
+          created_at?: string
+          deleted_by?: string | null
+          deleted_by_name?: string | null
+          id?: string
+          lead_id?: string | null
+          lead_name?: string | null
+          lead_phone?: string | null
+          messages_deleted?: number
+          metadata?: Json
+          reason?: string | null
+        }
+        Update: {
+          channel?: string | null
+          company_id?: string
+          confirmed_name?: string | null
+          conversation_id?: string
+          created_at?: string
+          deleted_by?: string | null
+          deleted_by_name?: string | null
+          id?: string
+          lead_id?: string | null
+          lead_name?: string | null
+          lead_phone?: string | null
+          messages_deleted?: number
+          metadata?: Json
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_deletion_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_deletion_logs_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1813,6 +1921,10 @@ export type Database = {
         Args: { _connection_id: string; _reason?: string }
         Returns: undefined
       }
+      set_admin_delete_credential: {
+        Args: { _display_name: string; _password: string }
+        Returns: undefined
+      }
       set_conversation_status: {
         Args: {
           _conversation_id: string
@@ -1891,6 +2003,10 @@ export type Database = {
           _value: string
         }
         Returns: undefined
+      }
+      verify_admin_delete_credential: {
+        Args: { _display_name: string; _password: string }
+        Returns: boolean
       }
     }
     Enums: {
