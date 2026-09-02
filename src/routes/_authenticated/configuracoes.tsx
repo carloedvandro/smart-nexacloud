@@ -971,7 +971,146 @@ function AdminDeletePasswordCard() {
         </CardContent>
       </Card>
 
+      {credential.data ? (
+        <Card className="shadow-panel">
+          <CardHeader>
+            <CardTitle className="text-base">Meu acesso de exclusão</CardTitle>
+            <CardDescription>
+              Você pode alterar apenas o <strong>seu próprio</strong> nome de responsável ou remover o
+              seu acesso — nos dois casos a sua senha pessoal é exigida e a ação fica gravada
+              permanentemente no histórico abaixo (ex.: "Carlo Edvandro alterou o nome de Carlo
+              Edvandro para Roberto Silva").
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+              <div>
+                <p className="font-medium">{credential.data.display_name}</p>
+                <p className="text-xs text-muted-foreground">Nome usado para confirmar exclusões</p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setRemoving(false);
+                    setEditing((v) => !v);
+                  }}
+                >
+                  Editar nome
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEditing(false);
+                    setRemoving((v) => !v);
+                  }}
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                  Remover acesso
+                </Button>
+              </div>
+            </div>
 
+            {editing ? (
+              <div className="grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_admin_name">Novo nome de responsável</Label>
+                  <Input
+                    id="edit_admin_name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_admin_pass">Sua senha de exclusão</Label>
+                  <PasswordInput
+                    id="edit_admin_pass"
+                    autoComplete="current-password"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <Button onClick={() => rename.mutate()} disabled={rename.isPending}>
+                    {rename.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                    Salvar novo nome
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {removing ? (
+              <div className="grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="remove_admin_pass">Confirme com a sua senha de exclusão</Label>
+                  <PasswordInput
+                    id="remove_admin_pass"
+                    autoComplete="current-password"
+                    value={removePassword}
+                    onChange={(e) => setRemovePassword(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Ao remover, a vaga fica livre para cadastrar um novo responsável com nova senha.
+                    A remoção fica registrada com o seu nome.
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <Button
+                    variant="destructive"
+                    onClick={() => removeSelf.mutate()}
+                    disabled={removeSelf.isPending}
+                  >
+                    {removeSelf.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                    Remover meu acesso de exclusão
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className="shadow-panel">
+        <CardHeader>
+          <CardTitle className="text-base">Histórico de responsáveis</CardTitle>
+          <CardDescription>
+            Registro permanente de criações, trocas de nome, atualizações de senha e remoções. Não
+            pode ser apagado.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {credentialLogs.isLoading ? (
+            <Skeleton className="h-20 w-full" />
+          ) : (credentialLogs.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma alteração registrada ainda.</p>
+          ) : (
+            (credentialLogs.data ?? []).map((log) => (
+              <div key={log.id} className="rounded-lg border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">
+                    {log.action === "RENAMED"
+                      ? `${log.actor_name ?? "—"} alterou o nome de ${log.previous_display_name ?? "—"} para ${log.new_display_name ?? "—"}`
+                      : log.action === "REMOVED"
+                        ? `${log.actor_name ?? "—"} removeu o próprio acesso de exclusão`
+                        : log.action === "PASSWORD_UPDATED"
+                          ? `${log.actor_name ?? "—"} atualizou a senha de exclusão`
+                          : `${log.new_display_name ?? log.actor_name ?? "—"} cadastrou senha de exclusão`}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(log.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Conta: {log.full_name ?? "—"}
+                  {log.email ? ` · ${log.email}` : ""}
+                </p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="shadow-panel">
         <CardHeader>
