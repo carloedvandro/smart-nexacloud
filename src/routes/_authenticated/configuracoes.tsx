@@ -37,6 +37,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AVAILABILITY_LABEL, type Availability } from "@/lib/nexa/domain";
 import { PasswordInput } from "@/components/nexa/password-input";
+import { PlatformDeleteAdminsCard } from "@/components/nexa/platform-delete-admins";
+
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
