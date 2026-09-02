@@ -1615,6 +1615,10 @@ export type Database = {
         Args: { _consultant_id: string; _lead_id: string }
         Returns: undefined
       }
+      assign_lead_and_service: {
+        Args: { _consultant_id: string; _lead_id: string }
+        Returns: string
+      }
       assign_whatsapp_instance: {
         Args: { _connection_id: string; _user_id: string }
         Returns: undefined
@@ -1731,6 +1735,7 @@ export type Database = {
       }
       is_company_admin: { Args: never; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
+      lead_company_scope: { Args: { _lead_id: string }; Returns: string }
       log_impersonation: {
         Args: { _target_user_id: string }
         Returns: undefined
@@ -1826,6 +1831,13 @@ export type Database = {
           _qr_code?: string
           _qr_code_status?: string
           _status: Database["public"]["Enums"]["whatsapp_connection_status"]
+        }
+        Returns: undefined
+      }
+      set_lead_stage: {
+        Args: {
+          _lead_id: string
+          _status: Database["public"]["Enums"]["lead_status"]
         }
         Returns: undefined
       }
