@@ -376,6 +376,9 @@ export async function respondWithAI(input: {
   const markers = companyMarkers(company?.name, settings.companyName);
   const leadRegisteredName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
   const isConsultantChat = isConsultantLead(leadRegisteredName, markers);
+  const consultantName = consultantFirstName(leadRegisteredName, markers);
+  const leadWhatsapp = ((conversation.lead as { whatsapp?: string | null } | null)?.whatsapp ?? "").trim();
+  const consultantPhone = leadWhatsapp && !leadWhatsapp.includes("@lid") ? leadWhatsapp : null;
   if (isConsultantChat) log("modo consultor interno", leadRegisteredName);
 
   // Conversa encerrada volta a atender o consultor interno (suporte contínuo);
