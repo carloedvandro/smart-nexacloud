@@ -50,12 +50,25 @@ export async function listLeads(params: {
       : query.eq("assigned_user_id", params.assignedTo);
   }
   if (params.search?.trim()) {
-    const term = `%${params.search.trim()}%`;
-    const digits = params.search.replace(/\D/g, "");
+    const raw = params.search.trim();
+    const term = `%${raw}%`;
+    const digits = raw.replace(/\D/g, "");
     const filters = [`name.ilike.${term}`, `email.ilike.${term}`];
-    if (digits) filters.push(`whatsapp.ilike.%${digits}%`);
+    if (digits) {
+      // busca por parte do número (com ou sem formatação salva no banco)
+      const loose = `%${digits.split("").join("%")}%`;
+      filters.push(
+        `whatsapp.ilike.%${digits}%`,
+        `phone.ilike.%${digits}%`,
+        `whatsapp.ilike.${loose}`,
+        `phone.ilike.${loose}`,
+      );
+    } else {
+      filters.push(`city.ilike.${term}`);
+    }
     query = query.or(filters.join(","));
   }
+
 
   const { data, error, count } = await query;
   if (error) throw new Error(error.message);
