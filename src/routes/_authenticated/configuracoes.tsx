@@ -66,7 +66,8 @@ type MemberRow = {
 type InviteRow = { id: string; email: string; role: string; created_at: string };
 
 function SettingsPage() {
-  const { profile, companyId, isAdmin, refresh } = useAuth();
+  const { profile, companyId, isAdmin, roles, refresh } = useAuth();
+  const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
 
   return (
     <AppShell title="Configurações" description="Perfil, segurança, empresa e equipe">
@@ -78,6 +79,9 @@ function SettingsPage() {
           {isAdmin ? <TabsTrigger value="equipe">Equipe e permissões</TabsTrigger> : null}
           {isAdmin ? (
             <TabsTrigger value="senha-admin">Criar senha de administrador</TabsTrigger>
+          ) : null}
+          {isPlatformAdmin ? (
+            <TabsTrigger value="exclusao-global">Exclusões (todas as empresas)</TabsTrigger>
           ) : null}
         </TabsList>
 
@@ -106,10 +110,17 @@ function SettingsPage() {
             <AdminDeletePasswordCard />
           </TabsContent>
         ) : null}
+
+        {isPlatformAdmin ? (
+          <TabsContent value="exclusao-global">
+            <PlatformDeleteAdminsCard />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </AppShell>
   );
 }
+
 
 function ProfileCard({ onSaved }: { onSaved: () => Promise<void> }) {
   const { profile } = useAuth();
