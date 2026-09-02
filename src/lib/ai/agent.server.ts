@@ -450,6 +450,7 @@ export async function respondWithAI(input: {
   // inicia um novo atendimento e a IA volta a responder.
   const HUMAN_TAKEOVER_TTL_MS = 12 * 60 * 60 * 1_000;
   const humanReplies = (possibleHumanReplies ?? []).filter((message) => {
+    if (new Date(message.created_at).getTime() <= resumedAt) return false;
     if (message.sender_id || message.sender_type === "admin") return true;
     const fromDevice = (message.metadata as { origin?: string } | null)?.origin === "device";
     if (!fromDevice) return true;
