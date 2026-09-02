@@ -795,8 +795,9 @@ function AdminDeletePasswordCard() {
           <CardDescription>
             Esta senha é pessoal e intransferível: é com o seu nome e esta senha que você confirma a
             exclusão de conversas. Nunca compartilhe com outra pessoa — toda exclusão fica registrada
-            no log abaixo com data, hora e autor. Cada empresa pode ter no máximo <strong>2</strong>{" "}
-            responsáveis com senha de exclusão, e o nome usado na confirmação é sempre o cadastrado
+            no log abaixo com data, hora e autor. O número de responsáveis com senha de exclusão é
+            definido pelo super administrador para cada empresa (padrão <strong>2</strong>), e o nome
+
             nesta conta.
           </CardDescription>
 
