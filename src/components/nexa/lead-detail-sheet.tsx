@@ -119,6 +119,14 @@ export function LeadDetailSheet({
             </SheetHeader>
 
             <div className="space-y-5 px-4 pb-8">
+              <LeadNameForm
+                leadId={lead.id}
+                currentName={lead.name}
+                onSaved={() => {
+                  invalidate(["lead"]);
+                  void queryClient.invalidateQueries({ queryKey: ["leads", companyId] });
+                }}
+              />
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label>Situação</Label>
