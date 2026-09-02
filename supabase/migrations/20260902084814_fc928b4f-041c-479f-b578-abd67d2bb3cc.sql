@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.enforce_admin_delete_credential_limit() FROM PUBLIC, anon, authenticated;
