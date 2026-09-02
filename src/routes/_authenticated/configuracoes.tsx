@@ -37,6 +37,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AVAILABILITY_LABEL, type Availability } from "@/lib/nexa/domain";
 import { PasswordInput } from "@/components/nexa/password-input";
+import { PlatformDeleteAdminsCard } from "@/components/nexa/platform-delete-admins";
+
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -66,7 +68,8 @@ type MemberRow = {
 type InviteRow = { id: string; email: string; role: string; created_at: string };
 
 function SettingsPage() {
-  const { profile, companyId, isAdmin, refresh } = useAuth();
+  const { profile, companyId, isAdmin, roles, refresh } = useAuth();
+  const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
 
   return (
     <AppShell title="Configurações" description="Perfil, segurança, empresa e equipe">
@@ -78,6 +81,9 @@ function SettingsPage() {
           {isAdmin ? <TabsTrigger value="equipe">Equipe e permissões</TabsTrigger> : null}
           {isAdmin ? (
             <TabsTrigger value="senha-admin">Criar senha de administrador</TabsTrigger>
+          ) : null}
+          {isPlatformAdmin ? (
+            <TabsTrigger value="exclusao-global">Exclusões (todas as empresas)</TabsTrigger>
           ) : null}
         </TabsList>
 
@@ -106,10 +112,17 @@ function SettingsPage() {
             <AdminDeletePasswordCard />
           </TabsContent>
         ) : null}
+
+        {isPlatformAdmin ? (
+          <TabsContent value="exclusao-global">
+            <PlatformDeleteAdminsCard />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </AppShell>
   );
 }
+
 
 function ProfileCard({ onSaved }: { onSaved: () => Promise<void> }) {
   const { profile } = useAuth();
@@ -782,9 +795,10 @@ function AdminDeletePasswordCard() {
           <CardDescription>
             Esta senha é pessoal e intransferível: é com o seu nome e esta senha que você confirma a
             exclusão de conversas. Nunca compartilhe com outra pessoa — toda exclusão fica registrada
-            no log abaixo com data, hora e autor. Cada empresa pode ter no máximo <strong>2</strong>{" "}
-            responsáveis com senha de exclusão, e o nome usado na confirmação é sempre o cadastrado
-            nesta conta.
+            no log abaixo com data, hora e autor. O número de responsáveis com senha de exclusão é
+            definido pelo super administrador para cada empresa (padrão <strong>2</strong>), e o nome
+            usado na confirmação é sempre o cadastrado nesta conta.
+
           </CardDescription>
 
         </CardHeader>
