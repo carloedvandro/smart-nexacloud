@@ -66,6 +66,15 @@ export async function listLeads(params: {
     } else {
       filters.push(`city.ilike.${term}`);
     }
+    // "Número oculto pelo WhatsApp" é um rótulo de exibição (LID) — permitir buscar por essas palavras
+    const normalized = raw
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    const hiddenWords = ["numero", "oculto", "ocultos", "oculta", "pelo", "whatsapp", "zap", "lid"];
+    if (normalized.length >= 3 && hiddenWords.some((w) => w.startsWith(normalized) || normalized.includes(w))) {
+      filters.push("whatsapp.ilike.%@lid%", "phone.ilike.%@lid%");
+    }
     query = query.or(filters.join(","));
   }
 
