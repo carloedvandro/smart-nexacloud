@@ -76,6 +76,9 @@ function SettingsPage() {
           <TabsTrigger value="seguranca">Segurança</TabsTrigger>
           {isAdmin ? <TabsTrigger value="empresa">Empresa</TabsTrigger> : null}
           {isAdmin ? <TabsTrigger value="equipe">Equipe e permissões</TabsTrigger> : null}
+          {isAdmin ? (
+            <TabsTrigger value="senha-admin">Criar senha de administrador</TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="perfil">
