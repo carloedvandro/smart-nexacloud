@@ -424,7 +424,7 @@ export async function processWebhookEvent(input: {
           .limit(1)
           .maybeSingle(),
       ]);
-      result.lead_id = conversation?.lead_id ?? undefined;
+      if (conversation?.lead_id) result.lead_id = conversation.lead_id;
       recoverUnansweredDuplicate = latestCustomer?.id === result.message_id && !laterReply;
       if (recoverUnansweredDuplicate) {
         console.info("[whatsapp-worker] retomando mensagem gravada sem resposta", {
