@@ -752,6 +752,21 @@ function AdminDeletePasswordCard() {
     if (credential.data?.display_name) setName(credential.data.display_name);
   }, [credential.data?.display_name]);
 
+  const registered = useQuery({
+    queryKey: ["admin-delete-credentials", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("company_list_delete_credentials");
+      if (error) throw error;
+      return (data ?? []) as {
+        user_id: string;
+        display_name: string;
+        full_name: string | null;
+        email: string | null;
+        updated_at: string;
+      }[];
+    },
+  });
+
   const logs = useQuery({
     queryKey: ["conversation-deletion-logs", companyId],
     queryFn: async () => {
@@ -764,6 +779,7 @@ function AdminDeletePasswordCard() {
       return data ?? [];
     },
   });
+
 
   const save = useMutation({
     mutationFn: async () => {
@@ -780,6 +796,7 @@ function AdminDeletePasswordCard() {
       setPassword("");
       setConfirm("");
       void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential", profile?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-delete-credentials", companyId] });
       toast.success("Senha de administrador salva");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -844,6 +861,51 @@ function AdminDeletePasswordCard() {
           </div>
         </CardContent>
       </Card>
+
+      <Card className="shadow-panel">
+        <CardHeader>
+          <CardTitle className="text-base">Responsáveis já cadastrados</CardTitle>
+          <CardDescription>
+            Usuários desta empresa que já possuem senha de exclusão. Salvar novamente com o mesmo
+            usuário apenas atualiza a senha — não cria um novo responsável.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {registered.isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : registered.error ? (
+            <p className="text-sm text-muted-foreground">
+              Somente administradores da empresa podem ver esta lista.
+            </p>
+          ) : (registered.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum responsável cadastrado ainda.</p>
+          ) : (
+            (registered.data ?? []).map((item) => (
+              <div
+                key={item.user_id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"
+              >
+                <div>
+                  <p className="font-medium">{item.display_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.full_name ?? "—"}
+                    {item.email ? ` · ${item.email}` : ""}
+                    {item.user_id === profile?.id ? " · você" : ""}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Atualizada em{" "}
+                  {new Date(item.updated_at).toLocaleString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                  })}
+                </span>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+
 
       <Card className="shadow-panel">
         <CardHeader>

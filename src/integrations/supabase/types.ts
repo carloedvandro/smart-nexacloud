@@ -1775,6 +1775,16 @@ export type Database = {
         Returns: Json
       }
       company_license_usage: { Args: { _company?: string }; Returns: Json }
+      company_list_delete_credentials: {
+        Args: never
+        Returns: {
+          display_name: string
+          email: string
+          full_name: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
       company_remove_member: { Args: { _user_id: string }; Returns: undefined }
       company_set_member_role: {
         Args: {
