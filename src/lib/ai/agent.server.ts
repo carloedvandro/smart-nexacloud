@@ -505,10 +505,12 @@ export async function respondWithAI(input: {
   // consultor elegível no momento e a conversa permanece na fila.
   const { data: completedHandoffs } = await supabaseAdmin
     .from("ai_sessions")
-    .select("handoff_reason")
+    .select("handoff_reason, ended_at, created_at")
     .eq("conversation_id", conversationId)
     .eq("status", "HANDOFF");
   const hasIntentionalHandoff = (completedHandoffs ?? []).some((session) => {
+    const at = new Date(session.ended_at ?? session.created_at).getTime();
+    if (at <= resumedAt) return false;
     const reason = session.handoff_reason?.toLowerCase() ?? "";
     return !reason.includes("falha na geração") && !reason.includes("falha permanente da ia");
   });
