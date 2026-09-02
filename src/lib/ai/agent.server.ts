@@ -410,6 +410,20 @@ export async function respondWithAI(input: {
 
 
 
+  // Quando a conversa é devolvida para a IA (arrastar para "Em qualificação (IA)"
+  // no Kanban ou rodízio esgotado), tudo que aconteceu antes desse momento
+  // — respostas humanas e transferências anteriores — deixa de bloquear a IA.
+  const { data: lastResume } = await supabaseAdmin
+    .from("conversation_events")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .eq("event_type", "AI_RESUMED")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const resumedAt = lastResume?.created_at ? new Date(lastResume.created_at).getTime() : 0;
+  if (resumedAt) log("retomada da IA em", lastResume?.created_at);
+
   // Um humano só "assume" a conversa quando de fato responde. Enquanto isso
   // (inclusive em conversas antigas atribuídas mas sem resposta) a IA continua
   // atendendo, mantendo o contexto do histórico.
@@ -436,6 +450,7 @@ export async function respondWithAI(input: {
   // inicia um novo atendimento e a IA volta a responder.
   const HUMAN_TAKEOVER_TTL_MS = 12 * 60 * 60 * 1_000;
   const humanReplies = (possibleHumanReplies ?? []).filter((message) => {
+    if (new Date(message.created_at).getTime() <= resumedAt) return false;
     if (message.sender_id || message.sender_type === "admin") return true;
     const fromDevice = (message.metadata as { origin?: string } | null)?.origin === "device";
     if (!fromDevice) return true;
@@ -490,10 +505,12 @@ export async function respondWithAI(input: {
   // consultor elegível no momento e a conversa permanece na fila.
   const { data: completedHandoffs } = await supabaseAdmin
     .from("ai_sessions")
-    .select("handoff_reason")
+    .select("handoff_reason, ended_at, created_at")
     .eq("conversation_id", conversationId)
     .eq("status", "HANDOFF");
   const hasIntentionalHandoff = (completedHandoffs ?? []).some((session) => {
+    const at = new Date(session.ended_at ?? session.created_at).getTime();
+    if (at <= resumedAt) return false;
     const reason = session.handoff_reason?.toLowerCase() ?? "";
     return !reason.includes("falha na geração") && !reason.includes("falha permanente da ia");
   });
