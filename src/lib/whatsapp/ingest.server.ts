@@ -386,6 +386,55 @@ export async function processWebhookEvent(input: {
     lead_id?: string;
   };
 
+  // A primeira tentativa pode ter gravado/transcrito a mensagem e ser
+  // interrompida antes da resposta. O RPC então a devolve como duplicada nas
+  // retentativas; recuperamos seu contexto para não abandonar o áudio.
+  let recoverUnansweredDuplicate = false;
+  if (result.duplicate && result.message_id) {
+    const { data: inbound } = await supabaseAdmin
+      .from("messages")
+      .select("conversation_id, created_at")
+      .eq("id", result.message_id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (inbound?.conversation_id) {
+      result.conversation_id = inbound.conversation_id;
+      const [{ data: conversation }, { data: latestCustomer }, { data: laterReply }] = await Promise.all([
+        supabaseAdmin
+          .from("conversations")
+          .select("lead_id")
+          .eq("id", inbound.conversation_id)
+          .maybeSingle(),
+        supabaseAdmin
+          .from("messages")
+          .select("id")
+          .eq("conversation_id", inbound.conversation_id)
+          .eq("sender_type", "customer")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabaseAdmin
+          .from("messages")
+          .select("id")
+          .eq("conversation_id", inbound.conversation_id)
+          .in("sender_type", ["ai", "consultant", "admin"])
+          .in("delivery_status", ["SENT", "DELIVERED", "READ"])
+          .gt("created_at", inbound.created_at)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (conversation?.lead_id) result.lead_id = conversation.lead_id;
+      recoverUnansweredDuplicate = latestCustomer?.id === result.message_id && !laterReply;
+      if (recoverUnansweredDuplicate) {
+        console.info("[whatsapp-worker] retomando mensagem gravada sem resposta", {
+          messageId: result.message_id,
+          conversationId: inbound.conversation_id,
+        });
+      }
+    }
+  }
+
   // Lead criado por LID: se a MEGA informou o número real, gravamos no lead.
   if (result.lead_id && realPhone) {
     await supabaseAdmin
@@ -447,7 +496,7 @@ export async function processWebhookEvent(input: {
     });
   }
 
-  if (!ratedNow && !result.duplicate && result.conversation_id) {
+  if (!ratedNow && (!result.duplicate || recoverUnansweredDuplicate) && result.conversation_id) {
     const { respondWithAI } = await import("@/lib/ai/agent.server");
     const ai = await respondWithAI({
       companyId,
