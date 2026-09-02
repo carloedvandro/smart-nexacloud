@@ -394,9 +394,16 @@ export async function respondWithAI(input: {
       t,
     ),
   );
-  const aiReplyCount = ordered.filter((m) => m.sender_type === "ai").length;
-  const LOOP_LIMIT = 12;
-  if (counterpartIsBot || aiReplyCount >= LOOP_LIMIT) {
+  // Trocas muito rápidas e ininterruptas indicam robô do outro lado: um humano
+  // não mantém dezenas de idas e vindas em segundos.
+  const { count: totalAiReplies } = await supabaseAdmin
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("sender_type", "ai");
+  const LOOP_LIMIT = 25;
+  if (counterpartIsBot || (totalAiReplies ?? 0) >= LOOP_LIMIT) {
+
     const reason = counterpartIsBot
       ? "interlocutor automatizado (outra IA/robô)"
       : "limite de mensagens automáticas atingido";
