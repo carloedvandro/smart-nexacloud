@@ -117,6 +117,16 @@ export async function upsertLead(input: {
   return data as string;
 }
 
+/** Nome cadastrado manualmente pelo administrador/consultor (usado também pela IA). */
+export async function setLeadName(leadId: string, name: string) {
+  const trimmed = name.trim();
+  const { error } = await supabase
+    .from("leads")
+    .update({ name: trimmed || null })
+    .eq("id", leadId);
+  if (error) throw new Error(error.message);
+}
+
 export async function setLeadStatus(leadId: string, status: LeadStatus) {
   const { error } = await supabase.rpc("set_lead_status", { _lead_id: leadId, _status: status });
   if (error) throw new Error(error.message);
