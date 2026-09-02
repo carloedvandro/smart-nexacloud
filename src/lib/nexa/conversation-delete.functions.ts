@@ -44,40 +44,19 @@ export const deleteConversationAsAdmin = createServerFn({ method: "POST" })
         throw new Error("Senha de administrador incorreta. Confira em Configurações › Criar senha de administrador.");
       }
     } else {
-      // Sem senha de exclusão cadastrada: confirma com o e-mail/senha da própria conta.
-      const { data: me } = await supabase
-        .from("profiles")
-        .select("email, full_name")
-        .eq("id", userId)
-        .maybeSingle();
-      if (!me?.email) {
-        throw new Error(
-          "Cadastre a sua senha de exclusão em Configurações › Criar senha de administrador para confirmar.",
-        );
+      // Primeiro uso: nenhuma senha de exclusão cadastrada ainda.
+      // Registra o nome + senha informados agora (fica vinculado a esta conta)
+      // e segue com a exclusão, que é auditada no log.
+      if (data.password.length < 6) {
+        throw new Error("Defina uma senha de administrador com ao menos 6 caracteres.");
       }
-      const { createClient } = await import("@supabase/supabase-js");
-      const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-      const authClient = createClient(process.env["SUPABASE_URL"]!, key, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        global: {
-          fetch: (input: RequestInfo | URL, init?: RequestInit) => {
-            const h = new Headers(init?.headers);
-            if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization");
-            h.set("apikey", key);
-            return fetch(input, { ...init, headers: h });
-          },
-        },
+      const { error: setError } = await supabase.rpc("set_admin_delete_credential", {
+        _display_name: data.name.trim(),
+        _password: data.password,
       });
-      const { error: signInError } = await authClient.auth.signInWithPassword({
-        email: me.email,
-        password: data.password,
-      });
-      if (signInError) {
-        throw new Error(
-          "Senha incorreta. Use a senha da sua conta ou cadastre uma senha de exclusão em Configurações › Criar senha de administrador.",
-        );
-      }
+      if (setError) throw new Error(setError.message);
     }
+
 
 
 
