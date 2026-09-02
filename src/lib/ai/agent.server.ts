@@ -532,6 +532,10 @@ export async function respondWithAI(input: {
   const unreadableMedia =
     lastCustomer.message_type !== "text" && !lastCustomer.content && !lastCustomer.transcription;
   if (unreadableMedia) {
+    if (isConsultantChat) {
+      log("skip: consultor enviou mídia sem texto");
+      return { status: "skipped", reason: "mídia sem texto" };
+    }
     await handoff(companyId, conversationId, "mídia recebida sem texto");
     return { status: "handoff", reason: "mídia" };
   }
