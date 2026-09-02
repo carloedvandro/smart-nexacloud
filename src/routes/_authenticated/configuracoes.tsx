@@ -752,6 +752,21 @@ function AdminDeletePasswordCard() {
     if (credential.data?.display_name) setName(credential.data.display_name);
   }, [credential.data?.display_name]);
 
+  const registered = useQuery({
+    queryKey: ["admin-delete-credentials", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("company_list_delete_credentials");
+      if (error) throw error;
+      return (data ?? []) as {
+        user_id: string;
+        display_name: string;
+        full_name: string | null;
+        email: string | null;
+        updated_at: string;
+      }[];
+    },
+  });
+
   const logs = useQuery({
     queryKey: ["conversation-deletion-logs", companyId],
     queryFn: async () => {
@@ -764,6 +779,7 @@ function AdminDeletePasswordCard() {
       return data ?? [];
     },
   });
+
 
   const save = useMutation({
     mutationFn: async () => {
