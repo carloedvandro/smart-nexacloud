@@ -53,29 +53,33 @@ export async function listLeads(params: {
     const raw = params.search.trim();
     const term = `%${raw}%`;
     const digits = raw.replace(/\D/g, "");
-    const filters = [`name.ilike.${term}`, `email.ilike.${term}`];
-    if (digits) {
-      // busca por parte do número (com ou sem formatação salva no banco)
-      const loose = `%${digits.split("").join("%")}%`;
-      filters.push(
-        `whatsapp.ilike.%${digits}%`,
-        `phone.ilike.%${digits}%`,
-        `whatsapp.ilike.${loose}`,
-        `phone.ilike.${loose}`,
-      );
-    } else {
-      filters.push(`city.ilike.${term}`);
-    }
-    // "Número oculto pelo WhatsApp" é um rótulo de exibição (LID) — permitir buscar por essas palavras
+    // "Número oculto pelo WhatsApp" é um rótulo de exibição (LID).
+    // Buscar por essas palavras deve trazer SOMENTE os leads sem número real.
     const normalized = raw
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
-    const hiddenWords = ["numero", "oculto", "ocultos", "oculta", "pelo", "whatsapp", "zap", "lid"];
-    if (normalized.length >= 3 && hiddenWords.some((w) => w.startsWith(normalized) || normalized.includes(w))) {
-      filters.push("whatsapp.ilike.%@lid%", "phone.ilike.%@lid%");
+    const hiddenWords = ["oculto", "ocultos", "oculta", "ocultas", "lid", "sem numero", "numero oculto"];
+    const isHiddenSearch = normalized.length >= 4 && hiddenWords.some((w) => w.startsWith(normalized) || normalized.includes(w));
+
+    if (isHiddenSearch) {
+      query = query.or("whatsapp.ilike.%@lid%,phone.ilike.%@lid%");
+    } else {
+      const filters = [`name.ilike.${term}`, `email.ilike.${term}`];
+      if (digits) {
+        // busca por parte do número (com ou sem formatação salva no banco)
+        const loose = `%${digits.split("").join("%")}%`;
+        filters.push(
+          `whatsapp.ilike.%${digits}%`,
+          `phone.ilike.%${digits}%`,
+          `whatsapp.ilike.${loose}`,
+          `phone.ilike.${loose}`,
+        );
+      } else {
+        filters.push(`city.ilike.${term}`);
+      }
+      query = query.or(filters.join(","));
     }
-    query = query.or(filters.join(","));
   }
 
 
