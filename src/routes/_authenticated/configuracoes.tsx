@@ -733,6 +733,11 @@ function AdminDeletePasswordCard() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [removing, setRemoving] = useState(false);
+  const [removePassword, setRemovePassword] = useState("");
 
   const credential = useQuery({
     queryKey: ["admin-delete-credential", profile?.id],
@@ -749,7 +754,10 @@ function AdminDeletePasswordCard() {
   });
 
   useEffect(() => {
-    if (credential.data?.display_name) setName(credential.data.display_name);
+    if (credential.data?.display_name) {
+      setName(credential.data.display_name);
+      setEditName(credential.data.display_name);
+    }
   }, [credential.data?.display_name]);
 
   const registered = useQuery({
@@ -780,6 +788,29 @@ function AdminDeletePasswordCard() {
     },
   });
 
+  const credentialLogs = useQuery({
+    queryKey: ["admin-delete-credential-logs", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("company_list_delete_credential_logs");
+      if (error) throw error;
+      return (data ?? []) as {
+        id: string;
+        action: string;
+        actor_name: string | null;
+        previous_display_name: string | null;
+        new_display_name: string | null;
+        full_name: string | null;
+        email: string | null;
+        created_at: string;
+      }[];
+    },
+  });
+
+  const invalidateAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential", profile?.id] });
+    void queryClient.invalidateQueries({ queryKey: ["admin-delete-credentials", companyId] });
+    void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential-logs", companyId] });
+  };
 
   const save = useMutation({
     mutationFn: async () => {
@@ -795,9 +826,44 @@ function AdminDeletePasswordCard() {
     onSuccess: () => {
       setPassword("");
       setConfirm("");
-      void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential", profile?.id] });
-      void queryClient.invalidateQueries({ queryKey: ["admin-delete-credentials", companyId] });
+      invalidateAll();
       toast.success("Senha de administrador salva");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const rename = useMutation({
+    mutationFn: async () => {
+      if (!editName.trim()) throw new Error("Informe o novo nome");
+      if (!editPassword) throw new Error("Informe a sua senha de exclusão");
+      const { error } = await supabase.rpc("rename_admin_delete_credential", {
+        _new_display_name: editName.trim(),
+        _password: editPassword,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setEditPassword("");
+      setEditing(false);
+      invalidateAll();
+      toast.success("Nome do responsável atualizado (registrado no histórico)");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeSelf = useMutation({
+    mutationFn: async () => {
+      if (!removePassword) throw new Error("Informe a sua senha de exclusão");
+      const { error } = await supabase.rpc("remove_admin_delete_credential", {
+        _password: removePassword,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setRemovePassword("");
+      setRemoving(false);
+      invalidateAll();
+      toast.success("Acesso de exclusão removido (registrado no histórico)");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -905,7 +971,146 @@ function AdminDeletePasswordCard() {
         </CardContent>
       </Card>
 
+      {credential.data ? (
+        <Card className="shadow-panel">
+          <CardHeader>
+            <CardTitle className="text-base">Meu acesso de exclusão</CardTitle>
+            <CardDescription>
+              Você pode alterar apenas o <strong>seu próprio</strong> nome de responsável ou remover o
+              seu acesso — nos dois casos a sua senha pessoal é exigida e a ação fica gravada
+              permanentemente no histórico abaixo (ex.: "Carlo Edvandro alterou o nome de Carlo
+              Edvandro para Roberto Silva").
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+              <div>
+                <p className="font-medium">{credential.data.display_name}</p>
+                <p className="text-xs text-muted-foreground">Nome usado para confirmar exclusões</p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setRemoving(false);
+                    setEditing((v) => !v);
+                  }}
+                >
+                  Editar nome
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEditing(false);
+                    setRemoving((v) => !v);
+                  }}
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                  Remover acesso
+                </Button>
+              </div>
+            </div>
 
+            {editing ? (
+              <div className="grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_admin_name">Novo nome de responsável</Label>
+                  <Input
+                    id="edit_admin_name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_admin_pass">Sua senha de exclusão</Label>
+                  <PasswordInput
+                    id="edit_admin_pass"
+                    autoComplete="current-password"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <Button onClick={() => rename.mutate()} disabled={rename.isPending}>
+                    {rename.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                    Salvar novo nome
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {removing ? (
+              <div className="grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="remove_admin_pass">Confirme com a sua senha de exclusão</Label>
+                  <PasswordInput
+                    id="remove_admin_pass"
+                    autoComplete="current-password"
+                    value={removePassword}
+                    onChange={(e) => setRemovePassword(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Ao remover, a vaga fica livre para cadastrar um novo responsável com nova senha.
+                    A remoção fica registrada com o seu nome.
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <Button
+                    variant="destructive"
+                    onClick={() => removeSelf.mutate()}
+                    disabled={removeSelf.isPending}
+                  >
+                    {removeSelf.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                    Remover meu acesso de exclusão
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className="shadow-panel">
+        <CardHeader>
+          <CardTitle className="text-base">Histórico de responsáveis</CardTitle>
+          <CardDescription>
+            Registro permanente de criações, trocas de nome, atualizações de senha e remoções. Não
+            pode ser apagado.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {credentialLogs.isLoading ? (
+            <Skeleton className="h-20 w-full" />
+          ) : (credentialLogs.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma alteração registrada ainda.</p>
+          ) : (
+            (credentialLogs.data ?? []).map((log) => (
+              <div key={log.id} className="rounded-lg border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">
+                    {log.action === "RENAMED"
+                      ? `${log.actor_name ?? "—"} alterou o nome de ${log.previous_display_name ?? "—"} para ${log.new_display_name ?? "—"}`
+                      : log.action === "REMOVED"
+                        ? `${log.actor_name ?? "—"} removeu o próprio acesso de exclusão`
+                        : log.action === "PASSWORD_UPDATED"
+                          ? `${log.actor_name ?? "—"} atualizou a senha de exclusão`
+                          : `${log.new_display_name ?? log.actor_name ?? "—"} cadastrou senha de exclusão`}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(log.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Conta: {log.full_name ?? "—"}
+                  {log.email ? ` · ${log.email}` : ""}
+                </p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="shadow-panel">
         <CardHeader>
