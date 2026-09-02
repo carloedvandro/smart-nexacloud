@@ -25,16 +25,30 @@ export const deleteConversationAsAdmin = createServerFn({ method: "POST" })
       throw new Error("Apenas administradores podem excluir conversas.");
     }
 
+    const { data: credential } = await supabase
+      .from("admin_delete_credentials")
+      .select("display_name")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!credential) {
+      throw new Error(
+        "Você ainda não cadastrou uma senha de exclusão. Vá em Configurações › Criar senha de administrador.",
+      );
+    }
+    if (credential.display_name.trim().toLowerCase() !== data.name.trim().toLowerCase()) {
+      throw new Error(`Nome incorreto. Use exatamente o nome cadastrado: "${credential.display_name}".`);
+    }
+
     const { data: verified, error: verifyError } = await supabase.rpc("verify_admin_delete_credential", {
-      _display_name: data.name,
+      _display_name: credential.display_name,
       _password: data.password,
     });
     if (verifyError) throw new Error(verifyError.message);
     if (!verified) {
-      throw new Error(
-        "Nome ou senha de administrador inválidos. Cadastre/confira sua senha em Configurações › Senha de administrador.",
-      );
+      throw new Error("Senha de administrador incorreta. Confira em Configurações › Criar senha de administrador.");
     }
+
 
     const { data: conversation, error: convError } = await supabase
       .from("conversations")
