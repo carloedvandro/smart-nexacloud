@@ -352,10 +352,6 @@ export async function respondWithAI(input: {
     log("skip: conversa inexistente");
     return { status: "skipped", reason: "conversa inexistente" };
   }
-  if (["CLOSED", "PAUSED"].includes(conversation.status)) {
-    log("skip: status", conversation.status);
-    return { status: "skipped", reason: `status ${conversation.status}` };
-  }
 
   // Consultor interno: o administrador marca no cadastro o nome do consultor
   // junto com o nome da empresa (ex.: "Cacá APSP"). Nesse caso a IA vira
@@ -369,6 +365,15 @@ export async function respondWithAI(input: {
   const leadRegisteredName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
   const isConsultantChat = isConsultantLead(leadRegisteredName, markers);
   if (isConsultantChat) log("modo consultor interno", leadRegisteredName);
+
+  // Conversa encerrada volta a atender o consultor interno (suporte contínuo);
+  // pausada continua respeitando a pausa manual.
+  const blockingStatus = isConsultantChat ? ["PAUSED"] : ["CLOSED", "PAUSED"];
+  if (blockingStatus.includes(conversation.status)) {
+    log("skip: status", conversation.status);
+    return { status: "skipped", reason: `status ${conversation.status}` };
+  }
+
 
 
   // Um humano só "assume" a conversa quando de fato responde. Enquanto isso
@@ -527,6 +532,10 @@ export async function respondWithAI(input: {
   const unreadableMedia =
     lastCustomer.message_type !== "text" && !lastCustomer.content && !lastCustomer.transcription;
   if (unreadableMedia) {
+    if (isConsultantChat) {
+      log("skip: consultor enviou mídia sem texto");
+      return { status: "skipped", reason: "mídia sem texto" };
+    }
     await handoff(companyId, conversationId, "mídia recebida sem texto");
     return { status: "handoff", reason: "mídia" };
   }
