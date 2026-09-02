@@ -259,7 +259,7 @@ export async function respondWithAI(input: {
 
   const { data: conversation } = await supabaseAdmin
     .from("conversations")
-    .select("id, status, assigned_user_id, channel_id, lead:leads(whatsapp)")
+    .select("id, status, assigned_user_id, channel_id, lead:leads(whatsapp, name)")
     .eq("id", conversationId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -432,8 +432,24 @@ export async function respondWithAI(input: {
   }
 
   const knowledge = await loadKnowledge(companyId);
+
+  // Nome: o cadastrado no CRM (pelo administrador) tem prioridade; o nome do
+  // WhatsApp serve para conferência quando divergir (número pode ter trocado de dono).
+  const crmName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
+  const whatsappName = (lastCustomer.sender_name ?? "").trim();
+  const sameName =
+    crmName && whatsappName && crmName.toLowerCase() === whatsappName.toLowerCase();
+  const nameContext = crmName
+    ? sameName || !whatsappName
+      ? `CONTATO: o lead se chama ${crmName}. Cumprimente-o pelo nome de forma natural (ex.: "Olá, ${crmName}!") sem repetir o nome em todas as mensagens.`
+      : `CONTATO: no cadastro este contato é ${crmName}, mas o WhatsApp mostra o nome "${whatsappName}". Antes de continuar, confirme gentilmente: pergunte se deve chamá-lo de ${crmName} ou de ${whatsappName}, explicando que no cadastro consta ${crmName}. Depois use o nome confirmado.`
+    : whatsappName
+      ? `CONTATO: o WhatsApp mostra o nome "${whatsappName}", mas ele não está confirmado. Pode usá-lo com naturalidade e, se fizer sentido, confirme o nome correto uma única vez.`
+      : "CONTATO: ainda não sabemos o nome do lead. Pergunte o nome dele logo no início do atendimento, uma única vez.";
+
   const messages: ChatMessage[] = [
     { role: "system", content: buildSystemPrompt(settings, knowledge) },
+    { role: "system", content: nameContext },
     ...ordered
       .filter((m) => ((m.transcription || m.content) ?? "").trim())
       .map<ChatMessage>((m) => {
