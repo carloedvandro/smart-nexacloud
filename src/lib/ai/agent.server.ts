@@ -355,11 +355,28 @@ export async function respondWithAI(input: {
   }
 
   const customerText = ((lastCustomer.transcription || lastCustomer.content) ?? "").trim();
+
+  // A modalidade da resposta espelha a do cliente: só respondemos em voz quando
+  // ele mandou áudio e nada indica que do outro lado não é possível ouvir
+  // (pessoa sem fone, ambiente, ou outro robô/IA que só lê texto).
+  const AUDIO_TYPES = ["audio", "ptt", "voice"];
+  const lastCustomerIsAudio = AUDIO_TYPES.includes(String(lastCustomer.message_type ?? "").toLowerCase());
+  const customerTexts = ordered
+    .filter((m) => m.sender_type === "customer")
+    .map((m) => ((m.transcription || m.content) ?? "").toLowerCase());
+  const textOnlyRequest = customerTexts.some((t) =>
+    /(n(ã|a)o\s+(consigo|posso|d(á|a)|dá pra|posso)?\s*(ouvir|escutar|abrir|ouvir\s+áudio))|(n(ã|a)o\s+entendo\s+(á|a)udio)|(n(ã|a)o\s+(recebo|leio|processo)\s+(á|a)udio)|((manda|envie|escreva|prefiro|pode ser|responda|fale)\s+(por\s+)?(escrito|texto|mensagem escrita))|(sem\s+(á|a)udio)|(odeio\s+(á|a)udio)|(sou\s+(uma\s+)?(ia|intelig(ê|e)ncia artificial|assistente virtual|rob(ô|o)))|(n(ã|a)o\s+consigo\s+(processar|interpretar)\s+(á|a)udio)/i.test(
+      t,
+    ),
+  );
+  const preferAudio = lastCustomerIsAudio && !textOnlyRequest;
+
   const explicitHumanRequest =
     /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
     /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
       customerText,
     );
+
 
   // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
   const unreadableMedia =
