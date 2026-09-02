@@ -36,11 +36,13 @@ export async function synthesizeReplyAudio(input: {
     console.info("[voz] iniciando geração", { caracteres: text.length });
     const response = await fetch(GATEWAY_URL, {
       method: "POST",
+      signal: AbortSignal.timeout(40_000),
       headers: {
         "Lovable-API-Key": apiKey,
         "X-Lovable-AIG-SDK": "fetch",
         "Content-Type": "application/json",
       },
+
       body: JSON.stringify({
         model: MODEL,
         input: text.slice(0, 600),
