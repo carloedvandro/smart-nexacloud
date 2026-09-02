@@ -780,6 +780,29 @@ function AdminDeletePasswordCard() {
     },
   });
 
+  const credentialLogs = useQuery({
+    queryKey: ["admin-delete-credential-logs", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("company_list_delete_credential_logs");
+      if (error) throw error;
+      return (data ?? []) as {
+        id: string;
+        action: string;
+        actor_name: string | null;
+        previous_display_name: string | null;
+        new_display_name: string | null;
+        full_name: string | null;
+        email: string | null;
+        created_at: string;
+      }[];
+    },
+  });
+
+  const invalidateAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential", profile?.id] });
+    void queryClient.invalidateQueries({ queryKey: ["admin-delete-credentials", companyId] });
+    void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential-logs", companyId] });
+  };
 
   const save = useMutation({
     mutationFn: async () => {
@@ -795,9 +818,44 @@ function AdminDeletePasswordCard() {
     onSuccess: () => {
       setPassword("");
       setConfirm("");
-      void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential", profile?.id] });
-      void queryClient.invalidateQueries({ queryKey: ["admin-delete-credentials", companyId] });
+      invalidateAll();
       toast.success("Senha de administrador salva");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const rename = useMutation({
+    mutationFn: async () => {
+      if (!editName.trim()) throw new Error("Informe o novo nome");
+      if (!editPassword) throw new Error("Informe a sua senha de exclusão");
+      const { error } = await supabase.rpc("rename_admin_delete_credential", {
+        _new_display_name: editName.trim(),
+        _password: editPassword,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setEditPassword("");
+      setEditing(false);
+      invalidateAll();
+      toast.success("Nome do responsável atualizado (registrado no histórico)");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeSelf = useMutation({
+    mutationFn: async () => {
+      if (!removePassword) throw new Error("Informe a sua senha de exclusão");
+      const { error } = await supabase.rpc("remove_admin_delete_credential", {
+        _password: removePassword,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setRemovePassword("");
+      setRemoving(false);
+      invalidateAll();
+      toast.success("Acesso de exclusão removido (registrado no histórico)");
     },
     onError: (e: Error) => toast.error(e.message),
   });
