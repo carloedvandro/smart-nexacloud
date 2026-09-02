@@ -796,6 +796,7 @@ function AdminDeletePasswordCard() {
       setPassword("");
       setConfirm("");
       void queryClient.invalidateQueries({ queryKey: ["admin-delete-credential", profile?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-delete-credentials", companyId] });
       toast.success("Senha de administrador salva");
     },
     onError: (e: Error) => toast.error(e.message),
