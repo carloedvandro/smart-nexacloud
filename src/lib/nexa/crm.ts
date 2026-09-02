@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import type { ConversationStatus, LeadStatus } from "@/lib/nexa/domain";
-import { assignConversationWithNotice } from "@/lib/queue/assign.functions";
+import { assignConversationWithNotice, assignLeadWithService } from "@/lib/queue/assign.functions";
 import { sendWhatsAppMessage } from "@/lib/whatsapp/whatsapp.functions";
 
 type Tables = Database["public"]["Tables"];
@@ -96,6 +96,12 @@ export async function setLeadStatus(leadId: string, status: LeadStatus) {
   if (error) throw new Error(error.message);
 }
 
+/** Muda a etapa do lead e sincroniza a situação da conversa aberta. */
+export async function setLeadStage(leadId: string, status: LeadStatus) {
+  const { error } = await supabase.rpc("set_lead_stage", { _lead_id: leadId, _status: status });
+  if (error) throw new Error(error.message);
+}
+
 export async function assignLead(leadId: string, consultantId: string | null) {
   const { error } = await supabase.rpc("assign_lead", {
     _lead_id: leadId,
@@ -103,6 +109,15 @@ export async function assignLead(leadId: string, consultantId: string | null) {
   });
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Atribui o lead e já coloca o atendimento em andamento (lead + conversa +
+ * aviso no WhatsApp pessoal do consultor).
+ */
+export async function assignLeadAndService(leadId: string, consultantId: string | null) {
+  return assignLeadWithService({ data: { leadId, consultantId } });
+}
+
 
 /* ------------------------------ Memória e notas ----------------------------- */
 
