@@ -36,7 +36,6 @@ export async function synthesizeReplyAudio(input: {
     console.info("[voz] iniciando geração", { caracteres: text.length });
     const response = await fetch(GATEWAY_URL, {
       method: "POST",
-      signal: AbortSignal.timeout(40_000),
       headers: {
         "Lovable-API-Key": apiKey,
         "X-Lovable-AIG-SDK": "fetch",

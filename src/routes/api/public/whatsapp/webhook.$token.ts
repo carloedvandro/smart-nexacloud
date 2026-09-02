@@ -12,7 +12,6 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook/$token")({
       GET: () => new Response(JSON.stringify({ ok: true }), jsonInit()),
       POST: async ({ request, params }) => {
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { processWebhookEvent } = await import("@/lib/whatsapp/ingest.server");
 
         const token = params.token;
         if (!isUuid(token)) {
@@ -39,7 +38,7 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook/$token")({
         const externalEventId = extractEventId(payload);
 
         // Idempotência: o índice único (connection_id, external_event_id) barra repetições.
-        const { data: eventRow, error: eventError } = await supabaseAdmin
+        const { error: eventError } = await supabaseAdmin
           .from("whatsapp_events")
           .insert({
             company_id: connection.company_id,
@@ -60,23 +59,9 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook/$token")({
           return new Response(JSON.stringify({ ok: true, stored: false }), jsonInit());
         }
 
-        const outcome = await processWebhookEvent({
-          connectionId: connection.id,
-          companyId: connection.company_id,
-          payload,
-        });
-
-        if (eventRow?.id) {
-          await supabaseAdmin
-            .from("whatsapp_events")
-            .update({
-              processed_at: new Date().toISOString(),
-              error: outcome.status === "error" ? (outcome.reason ?? "erro") : null,
-            })
-            .eq("id", eventRow.id);
-        }
-
-        return new Response(JSON.stringify({ ok: true, ...outcome }), jsonInit());
+        // O trabalho pesado roda pela fila persistente. Responder agora evita
+        // que a MEGA encerre o webhook e mate transcrição/TTS com HTTP 499.
+        return new Response(JSON.stringify({ ok: true, queued: true }), jsonInit());
       },
     },
   },

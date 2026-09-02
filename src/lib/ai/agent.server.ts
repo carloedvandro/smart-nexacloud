@@ -493,7 +493,9 @@ export async function respondWithAI(input: {
   const customerTexts = ordered
     .filter((m) => m.sender_type === "customer")
     .map((m) => ((m.transcription || m.content) ?? "").toLowerCase());
-  const textOnlyRequest = customerTexts.some((t) =>
+  // Preferência de modalidade vale para a mensagem atual. Uma frase antiga
+  // pedindo texto não deve impedir para sempre respostas aos novos áudios.
+  const textOnlyRequest = [customerText.toLowerCase()].some((t) =>
     /(n(ã|a)o\s+(consigo|posso|d(á|a)|dá pra|posso)?\s*(ouvir|escutar|abrir|ouvir\s+áudio))|(n(ã|a)o\s+entendo\s+(á|a)udio)|(n(ã|a)o\s+(recebo|leio|processo)\s+(á|a)udio)|((manda|envie|escreva|prefiro|pode ser|responda|fale)\s+(por\s+)?(escrito|texto|mensagem escrita))|(sem\s+(á|a)udio)|(odeio\s+(á|a)udio)|(sou\s+(uma\s+)?(ia|intelig(ê|e)ncia artificial|assistente virtual|rob(ô|o)))|(n(ã|a)o\s+consigo\s+(processar|interpretar)\s+(á|a)udio)/i.test(
       t,
     ),
@@ -644,32 +646,10 @@ export async function respondWithAI(input: {
     if (recipient && creds) {
       // Espelhamos a modalidade do cliente: voz só quando ele falou por áudio e
       // não sinalizou que não consegue ouvir. Caso contrário, resposta escrita.
-      // Cada etapa da voz tem tempo-limite: se travar, a resposta sai em texto
-      // em vez de o lead ficar sem nenhuma resposta.
-      const withTimeout = async <T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> => {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-          return await Promise.race([
-            promise,
-            new Promise<null>((resolve) => {
-              timer = setTimeout(() => {
-                log(`tempo-limite em ${label}; seguindo sem áudio`);
-                resolve(null);
-              }, ms);
-            }),
-          ]);
-        } catch (error) {
-          log(`falha em ${label}`, error instanceof Error ? error.message : String(error));
-          return null;
-        } finally {
-          if (timer) clearTimeout(timer);
-        }
-      };
-
       const voice = preferAudio
-        ? await withTimeout(synthesizeReplyAudio({ companyId, connectionId, text }), 45_000, "geração de voz")
+        ? await synthesizeReplyAudio({ companyId, connectionId, text })
         : null;
-      const voiceUrl = voice ? await withTimeout(signedMediaUrl(voice.path), 10_000, "link do áudio") : null;
+      const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
       const asAudio = Boolean(voice && voiceUrl);
       if (preferAudio && !asAudio) log("cliente falou por áudio, mas a voz não ficou pronta; enviando texto");
 
@@ -695,12 +675,12 @@ export async function respondWithAI(input: {
       }
 
       log("voz pronta; iniciando entrega no WhatsApp", { formato: asAudio ? "audio" : "text" });
-      let sent = asAudio
+      let sent = voice && voiceUrl
         ? await MegaApiService.sendMedia(creds, {
             to: recipient,
-            url: voiceUrl!,
+            url: voiceUrl,
             mediaType: "audio",
-            mimeType: voice!.mimeType,
+            mimeType: voice.mimeType,
             fileName: `resposta-${Date.now()}.mp3`,
           })
         : await MegaApiService.sendText(creds, recipient, text);

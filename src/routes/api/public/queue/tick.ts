@@ -31,6 +31,12 @@ async function handle(request: Request): Promise<Response> {
     return new Response(JSON.stringify({ ok: false }), init(500));
   }
 
+  // Processa eventos recebidos pelo WhatsApp fora da requisição do provedor.
+  // A fila tem lease e retentativas, portanto uma execução interrompida volta
+  // automaticamente no próximo tick sem perder o áudio do lead.
+  const { processPendingWhatsappEvents } = await import("@/lib/whatsapp/event-worker.server");
+  const whatsappProcessed = await processPendingWhatsappEvents(3);
+
   // Avisa no WhatsApp os consultores com oferta pendente ou repassada.
   const { notifyAllQueueOffers } = await import("@/lib/queue/bridge.server");
   await notifyAllQueueOffers();
@@ -50,7 +56,14 @@ async function handle(request: Request): Promise<Response> {
     );
   }
 
-  return new Response(JSON.stringify({ ok: true, processed: Number(data ?? 0) }), init());
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      processed: Number(data ?? 0),
+      whatsappProcessed,
+    }),
+    init(),
+  );
 
 }
 
