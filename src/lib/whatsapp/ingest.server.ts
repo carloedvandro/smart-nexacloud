@@ -229,6 +229,24 @@ export async function processWebhookEvent(input: {
     return { status: "processed", reason: "connection" };
   }
 
+  // ---- Somente o NÚMERO TRONCO alimenta o painel ----
+  // Instâncias pessoais de consultores (não tronco) continuam conectadas para
+  // conexão/QR, mas nada do WhatsApp pessoal delas entra no CRM: nem mensagens
+  // recebidas, nem ecos do aparelho, nem mídia. Isso impede que contatos
+  // privados de um consultor virem leads/conversas da empresa.
+  {
+    const { data: connection } = await supabaseAdmin
+      .from("whatsapp_connections")
+      .select("is_trunk")
+      .eq("id", connectionId)
+      .maybeSingle();
+    if (!connection?.is_trunk) {
+      return { status: "ignored", reason: "instância não é o número tronco" };
+    }
+  }
+
+
+
   // ---- Eventos de status de mensagem ----
   const mappedStatus = STATUS_MAP[eventType.toLowerCase()];
   const externalId = firstString(body, ["key.id", "id", "messageId", "keyId"]);
@@ -306,7 +324,15 @@ export async function processWebhookEvent(input: {
     let echoMedia: { path: string; mimeType: string | null } | null = null;
     if (messageType !== "text") {
       echoMedia = await downloadAndStoreMedia({ connectionId, companyId, body, messageType });
+      // Sem mídia baixada e sem texto o eco viraria um balão vazio
+      // ("não foi possível baixar a mídia"). Melhor ignorar o evento.
+      if (!echoMedia && !content) {
+        console.warn("[whatsapp] eco de mídia descartado: download indisponível", { messageType });
+        return { status: "ignored", reason: "eco de mídia sem conteúdo" };
+      }
     }
+
+
 
     const { data: echo, error: echoError } = await supabaseAdmin.rpc("ingest_outbound_echo", {
       _connection_id: connectionId,
