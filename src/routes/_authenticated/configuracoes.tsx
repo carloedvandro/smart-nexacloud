@@ -100,6 +100,12 @@ function SettingsPage() {
             <TeamCard companyId={companyId} currentUserId={profile?.id ?? null} />
           </TabsContent>
         ) : null}
+
+        {isAdmin ? (
+          <TabsContent value="senha-admin">
+            <AdminDeletePasswordCard />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </AppShell>
   );
