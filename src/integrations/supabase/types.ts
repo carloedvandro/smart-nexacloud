@@ -1762,6 +1762,10 @@ export type Database = {
         Args: { _email: string; _user_id: string }
         Returns: string
       }
+      ai_resume_conversation: {
+        Args: { _conversation_id: string; _reason?: string }
+        Returns: undefined
+      }
       assert_company_license: {
         Args: {
           _company: string

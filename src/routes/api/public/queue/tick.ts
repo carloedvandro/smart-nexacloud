@@ -80,6 +80,10 @@ async function runTick(): Promise<{ processed: number; whatsappProcessed: number
   const { notifyAllQueueOffers } = await import("@/lib/queue/bridge.server");
   await notifyAllQueueOffers();
 
+  // Rodízio esgotado: a IA retoma e avisa o cliente que ninguém pôde atender.
+  const { notifyAiResumedConversations } = await import("@/lib/ai/resume.server");
+  await notifyAiResumedConversations().catch((e) => console.error("[ia] retomada falhou", e));
+
   // Pede avaliação nos leads que ficaram abandonados após o rodízio.
   const { data: companies } = await supabaseAdmin
     .from("conversations")
