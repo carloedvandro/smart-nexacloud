@@ -733,6 +733,11 @@ function AdminDeletePasswordCard() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [removing, setRemoving] = useState(false);
+  const [removePassword, setRemovePassword] = useState("");
 
   const credential = useQuery({
     queryKey: ["admin-delete-credential", profile?.id],
