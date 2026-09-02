@@ -292,7 +292,11 @@ export async function respondWithAI(input: {
         .eq("conversation_id", conversationId)
         .eq("sender_type", "ai")
     : { data: [] };
-  const hasHumanReply = (possibleHumanReplies ?? []).some((message) => {
+  // A "tomada" humana vale enquanto o atendimento está em andamento. Depois de
+  // muitas horas sem qualquer resposta humana, uma nova mensagem do cliente
+  // inicia um novo atendimento e a IA volta a responder.
+  const HUMAN_TAKEOVER_TTL_MS = 12 * 60 * 60 * 1_000;
+  const humanReplies = (possibleHumanReplies ?? []).filter((message) => {
     if (message.sender_id || message.sender_type === "admin") return true;
     const fromDevice = (message.metadata as { origin?: string } | null)?.origin === "device";
     if (!fromDevice) return true;
@@ -307,10 +311,15 @@ export async function respondWithAI(input: {
       return closeInTime && samePayload;
     });
   });
-  if (hasHumanReply) {
+  const lastHumanReplyAt = humanReplies.reduce(
+    (latest, message) => Math.max(latest, new Date(message.created_at).getTime()),
+    0,
+  );
+  if (lastHumanReplyAt && Date.now() - lastHumanReplyAt < HUMAN_TAKEOVER_TTL_MS) {
     log("skip: consultor já respondeu nesta conversa");
     return { status: "skipped", reason: "conversa com consultor" };
   }
+
 
   const { count: pendingOffers } = await supabaseAdmin
     .from("assignment_attempts")
