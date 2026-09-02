@@ -22,10 +22,10 @@ import {
   type LeadStatus,
 } from "@/lib/nexa/domain";
 import {
-  assignLead,
+  assignLeadAndService,
   getOrCreateConversation,
   listConsultants,
-  setLeadStatus,
+  setLeadStage,
   type LeadRow,
 } from "@/lib/nexa/crm";
 import { cn } from "@/lib/utils";
