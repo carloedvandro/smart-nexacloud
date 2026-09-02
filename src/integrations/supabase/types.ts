@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_delete_credential_logs: {
+        Row: {
+          action: string
+          actor_name: string | null
+          actor_user_id: string | null
+          company_id: string | null
+          created_at: string
+          id: string
+          metadata: Json
+          new_display_name: string | null
+          previous_display_name: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_name?: string | null
+          actor_user_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          new_display_name?: string | null
+          previous_display_name?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_name?: string | null
+          actor_user_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          new_display_name?: string | null
+          previous_display_name?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_delete_credential_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_delete_credentials: {
         Row: {
           company_id: string | null
@@ -1775,6 +1822,19 @@ export type Database = {
         Returns: Json
       }
       company_license_usage: { Args: { _company?: string }; Returns: Json }
+      company_list_delete_credential_logs: {
+        Args: never
+        Returns: {
+          action: string
+          actor_name: string
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          new_display_name: string
+          previous_display_name: string
+        }[]
+      }
       company_list_delete_credentials: {
         Args: never
         Returns: {
@@ -1986,6 +2046,14 @@ export type Database = {
       }
       release_whatsapp_instance: {
         Args: { _connection_id: string; _reason?: string }
+        Returns: undefined
+      }
+      remove_admin_delete_credential: {
+        Args: { _password: string }
+        Returns: undefined
+      }
+      rename_admin_delete_credential: {
+        Args: { _new_display_name: string; _password: string }
         Returns: undefined
       }
       set_admin_delete_credential: {
