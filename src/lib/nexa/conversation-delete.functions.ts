@@ -119,6 +119,30 @@ export const deleteConversationAsAdmin = createServerFn({ method: "POST" })
       .eq("id", conversation.id);
     if (deleteError) throw new Error(deleteError.message);
 
+    // Remove também o lead quando não sobrar nenhuma outra conversa dele,
+    // para que ele desapareça de Leads e do Kanban.
+    let leadDeleted = false;
+    if (lead?.id) {
+      const { count: remaining } = await supabaseAdmin
+        .from("conversations")
+        .select("id", { count: "exact", head: true })
+        .eq("lead_id", lead.id);
+
+      if (!remaining) {
+        for (const table of ["lead_memory", "lead_notes", "privacy_consents"] as const) {
+          const { error } = await supabaseAdmin.from(table).delete().eq("lead_id", lead.id);
+          if (error) throw new Error(`${table}: ${error.message}`);
+        }
+        for (const table of ["ai_sessions", "ai_summaries", "service_ratings"] as const) {
+          const { error } = await supabaseAdmin.from(table).delete().eq("lead_id", lead.id);
+          if (error) throw new Error(`${table}: ${error.message}`);
+        }
+        const { error: leadError } = await supabaseAdmin.from("leads").delete().eq("id", lead.id);
+        if (leadError) throw new Error(leadError.message);
+        leadDeleted = true;
+      }
+    }
+
     const deletedByName = profile?.full_name ?? profile?.email ?? null;
 
     await supabaseAdmin.from("conversation_deletion_logs").insert({
@@ -141,8 +165,8 @@ export const deleteConversationAsAdmin = createServerFn({ method: "POST" })
       action: "DELETE_CONVERSATION",
       entity_type: "conversations",
       entity_id: conversation.id,
-      metadata: { messages_deleted: messagesCount ?? 0, lead_id: lead?.id ?? null },
+      metadata: { messages_deleted: messagesCount ?? 0, lead_id: lead?.id ?? null, lead_deleted: leadDeleted },
     });
 
-    return { deleted: true, messagesDeleted: messagesCount ?? 0 };
+    return { deleted: true, messagesDeleted: messagesCount ?? 0, leadDeleted };
   });
