@@ -357,6 +357,20 @@ export async function respondWithAI(input: {
     return { status: "skipped", reason: `status ${conversation.status}` };
   }
 
+  // Consultor interno: o administrador marca no cadastro o nome do consultor
+  // junto com o nome da empresa (ex.: "Cacá APSP"). Nesse caso a IA vira
+  // assistente interna: não qualifica, não transfere e não entra na fila.
+  const { data: company } = await supabaseAdmin
+    .from("companies")
+    .select("name")
+    .eq("id", companyId)
+    .maybeSingle();
+  const markers = companyMarkers(company?.name, settings.companyName);
+  const leadRegisteredName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
+  const isConsultantChat = isConsultantLead(leadRegisteredName, markers);
+  if (isConsultantChat) log("modo consultor interno", leadRegisteredName);
+
+
   // Um humano só "assume" a conversa quando de fato responde. Enquanto isso
   // (inclusive em conversas antigas atribuídas mas sem resposta) a IA continua
   // atendendo, mantendo o contexto do histórico.
