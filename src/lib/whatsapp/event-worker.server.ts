@@ -9,8 +9,28 @@ type ClaimedEvent = {
   attempts: number;
 };
 
+/**
+ * Eventos antigos não podem ser reprocessados: o WhatsApp/MEGA reenvia e a fila
+ * pode acumular. Reproduzir um áudio de uma hora atrás duplica a conversa no
+ * painel e faz a IA responder mensagens já vencidas.
+ */
+const STALE_EVENT_MS = 5 * 60_000;
+
+/** Momento em que a mensagem foi criada no WhatsApp (segundos ou ms). */
+function eventTimestampMs(payload: Record<string, unknown>): number | null {
+  const data = (payload["data"] as Record<string, unknown> | undefined) ?? payload;
+  for (const source of [payload, data]) {
+    for (const key of ["messageTimestamp", "timestamp", "t", "date_time"]) {
+      const raw = source[key];
+      const value = typeof raw === "string" ? Number(raw) : typeof raw === "number" ? raw : NaN;
+      if (Number.isFinite(value) && value > 0) return value > 1e12 ? value : value * 1_000;
+    }
+  }
+  return null;
+}
+
 /** Processa a fila persistente sem depender da conexão HTTP do webhook. */
-export async function processPendingWhatsappEvents(limit = 5): Promise<number> {
+export async function processPendingWhatsappEvents(limit = 10): Promise<number> {
   const { data, error } = await supabaseAdmin.rpc("claim_whatsapp_events", { _limit: limit });
   if (error) {
     console.error("[whatsapp-worker] falha ao reservar eventos", error.message);
@@ -23,6 +43,13 @@ export async function processPendingWhatsappEvents(limit = 5): Promise<number> {
       await finishEvent(event, "evento sem empresa ou conexão");
       continue;
     }
+
+    const sentAt = eventTimestampMs(event.payload);
+    if (sentAt && Date.now() - sentAt > STALE_EVENT_MS) {
+      await finishEvent(event, "evento expirado (mensagem antiga, não reprocessada)");
+      continue;
+    }
+
 
     try {
       const outcome = await processWebhookEvent({

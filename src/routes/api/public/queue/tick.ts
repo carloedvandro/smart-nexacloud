@@ -74,7 +74,7 @@ async function runTick(): Promise<{ processed: number; whatsappProcessed: number
   // A fila tem lease e retentativas, portanto uma execução interrompida volta
   // automaticamente no próximo tick sem perder o áudio do lead.
   const { processPendingWhatsappEvents } = await import("@/lib/whatsapp/event-worker.server");
-  const whatsappProcessed = await processPendingWhatsappEvents(3);
+  const whatsappProcessed = await processPendingWhatsappEvents(12);
 
   // Avisa no WhatsApp os consultores com oferta pendente ou repassada.
   const { notifyAllQueueOffers } = await import("@/lib/queue/bridge.server");
