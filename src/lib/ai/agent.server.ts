@@ -415,7 +415,7 @@ export async function respondWithAI(input: {
     (latest, message) => Math.max(latest, new Date(message.created_at).getTime()),
     0,
   );
-  if (lastHumanReplyAt && Date.now() - lastHumanReplyAt < HUMAN_TAKEOVER_TTL_MS) {
+  if (!isConsultantChat && lastHumanReplyAt && Date.now() - lastHumanReplyAt < HUMAN_TAKEOVER_TTL_MS) {
     log("skip: consultor já respondeu nesta conversa");
     return { status: "skipped", reason: "conversa com consultor" };
   }
@@ -426,7 +426,7 @@ export async function respondWithAI(input: {
     .select("id", { count: "exact", head: true })
     .eq("conversation_id", conversationId)
     .eq("status", "WAITING");
-  if ((pendingOffers ?? 0) > 0) {
+  if (!isConsultantChat && (pendingOffers ?? 0) > 0) {
     log("skip: oferta de fila aguardando consultor");
     return { status: "skipped", reason: "conversa com consultor" };
   }
@@ -458,7 +458,7 @@ export async function respondWithAI(input: {
     const reason = session.handoff_reason?.toLowerCase() ?? "";
     return !reason.includes("falha na geração") && !reason.includes("falha permanente da ia");
   });
-  if (hasIntentionalHandoff) {
+  if (!isConsultantChat && hasIntentionalHandoff) {
     log("skip: transferência humana já solicitada");
     return { status: "skipped", reason: "conversa com consultor" };
   }
@@ -481,6 +481,7 @@ export async function respondWithAI(input: {
   const preferAudio = lastCustomerIsAudio && !textOnlyRequest;
 
   const explicitHumanRequest =
+    !isConsultantChat &&
     /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
     /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
       customerText,
@@ -547,8 +548,13 @@ export async function respondWithAI(input: {
       : "CONTATO: ainda não sabemos o nome do lead. Pergunte o nome dele logo no início do atendimento, uma única vez.";
 
   const messages: ChatMessage[] = [
-    { role: "system", content: buildSystemPrompt(settings, knowledge) },
-    { role: "system", content: nameContext },
+    {
+      role: "system",
+      content: isConsultantChat
+        ? buildConsultantPrompt(settings, knowledge, leadRegisteredName)
+        : buildSystemPrompt(settings, knowledge),
+    },
+    ...(isConsultantChat ? [] : [{ role: "system" as const, content: nameContext }]),
     ...ordered
       .filter((m) => ((m.transcription || m.content) ?? "").trim())
       .map<ChatMessage>((m) => {
@@ -587,7 +593,7 @@ export async function respondWithAI(input: {
     : await callGateway(messages);
   if (generation.kind !== "ok") {
     log("geração não concluída", { tipo: generation.kind, erro: generation.message.slice(0, 300) });
-    if (generation.kind === "terminal") {
+    if (generation.kind === "terminal" && !isConsultantChat) {
       await handoff(companyId, conversationId, `falha permanente da IA: ${generation.message.slice(0, 300)}`);
       return { status: "handoff", reason: "gateway" };
     }
@@ -597,7 +603,7 @@ export async function respondWithAI(input: {
   }
   const raw = generation.text;
 
-  const needsHuman = explicitHumanRequest || raw.includes(HANDOFF_TOKEN);
+  const needsHuman = !isConsultantChat && (explicitHumanRequest || raw.includes(HANDOFF_TOKEN));
   const text = raw.replaceAll(HANDOFF_TOKEN, "").trim();
 
   if (text) {
