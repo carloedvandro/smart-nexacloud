@@ -12,7 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { getKnowledgeScope } from "@/lib/ai/ai.functions";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LEAD_SOURCE_LABEL,
@@ -78,7 +80,12 @@ async function fetchKanbanLeads(companyId: string) {
 }
 
 function KanbanPage() {
-  const { companyId } = useAuth();
+  const { companyId: myCompanyId, roles } = useAuth();
+  const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
+  const fetchScope = useServerFn(getKnowledgeScope);
+  const { data: scope } = useQuery({ queryKey: ["kanban-scope"], queryFn: () => fetchScope() });
+  const [companyOverride, setCompanyOverride] = useState<string | null>(null);
+  const companyId = companyOverride ?? myCompanyId ?? scope?.companyId ?? null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -171,6 +178,20 @@ function KanbanPage() {
       title="Kanban de leads"
       description={`${filtered.length} lead(s) no funil — atualização em tempo real`}
     >
+      {isPlatformAdmin && (scope?.companies?.length ?? 0) > 0 ? (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Empresa</span>
+          <Select value={companyId ?? ""} onValueChange={(v) => setCompanyOverride(v)}>
+            <SelectTrigger className="sm:w-72"><SelectValue placeholder="Selecionar empresa" /></SelectTrigger>
+            <SelectContent>
+              {(scope?.companies ?? []).map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
       <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
