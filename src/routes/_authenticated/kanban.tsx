@@ -145,11 +145,17 @@ function KanbanPage() {
     });
   }, [leads, search, consultantFilter]);
 
+  const refreshAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ["kanban-leads", companyId] });
+    void queryClient.invalidateQueries({ queryKey: ["leads"] });
+    void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  };
+
   const moveLead = useMutation({
     mutationFn: ({ leadId, status }: { leadId: string; status: LeadStatus }) =>
-      setLeadStatus(leadId, status),
+      setLeadStage(leadId, status),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["kanban-leads", companyId] });
+      refreshAll();
       toast.success("Etapa atualizada");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -157,13 +163,18 @@ function KanbanPage() {
 
   const changeOwner = useMutation({
     mutationFn: ({ leadId, consultantId }: { leadId: string; consultantId: string | null }) =>
-      assignLead(leadId, consultantId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["kanban-leads", companyId] });
-      toast.success("Responsável atualizado");
+      assignLeadAndService(leadId, consultantId),
+    onSuccess: (result) => {
+      refreshAll();
+      if (result?.notification && !result.notification.notified && result.notification.reason) {
+        toast.warning(result.notification.reason);
+      } else {
+        toast.success("Responsável atualizado e atendimento em andamento");
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const openConversation = useMutation({
     mutationFn: (leadId: string) => getOrCreateConversation(leadId),
