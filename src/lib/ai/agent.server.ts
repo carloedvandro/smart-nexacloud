@@ -335,7 +335,7 @@ export async function respondWithAI(input: {
 
   const { data: history } = await supabaseAdmin
     .from("messages")
-    .select("sender_type, content, message_type, transcription")
+    .select("sender_type, sender_name, content, message_type, transcription")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(HISTORY_LIMIT);
