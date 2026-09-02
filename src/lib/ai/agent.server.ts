@@ -106,9 +106,94 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+/** Normaliza para comparação: sem acentos, minúsculo. */
+function normalizeText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+const GENERIC_COMPANY_WORDS = new Set([
+  "ltda",
+  "me",
+  "eireli",
+  "sa",
+  "s",
+  "a",
+  "de",
+  "da",
+  "do",
+  "dos",
+  "das",
+  "e",
+  "corretora",
+  "seguros",
+  "seguro",
+  "assessoria",
+  "consultoria",
+  "planos",
+  "plano",
+  "saude",
+  "empresa",
+  "grupo",
+]);
+
+/**
+ * Marcadores que identificam um consultor interno no nome do lead.
+ * Ex.: empresa "APSP Corretora" -> "apsp"; empresa "Nexa Atende" -> "nexa", "atende", "na".
+ */
+function companyMarkers(...names: (string | null | undefined)[]): string[] {
+  const markers = new Set<string>();
+  for (const raw of names) {
+    const name = (raw ?? "").trim();
+    if (!name) continue;
+    const words = normalizeText(name)
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 2 && !GENERIC_COMPANY_WORDS.has(w));
+    for (const word of words) markers.add(word);
+    if (words.length >= 2) markers.add(words.map((w) => w[0]).join(""));
+  }
+  return [...markers].filter((m) => m.length >= 2);
+}
+
+/** O administrador marca o consultor escrevendo o nome da empresa junto ao nome. */
+function isConsultantLead(leadName: string | null | undefined, markers: string[]): boolean {
+  const name = normalizeText((leadName ?? "").trim());
+  if (!name) return false;
+  const tokens = name.split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.length < 2) return false;
+  return markers.some((marker) => tokens.includes(marker));
+}
+
+function buildConsultantPrompt(
+  settings: AiSettings,
+  knowledge: { title: string; category: string; content: string }[],
+  consultantName: string,
+) {
+  const base = knowledge.length
+    ? knowledge.map((k) => `### ${k.title} (${k.category})\n${k.content}`).join("\n\n")
+    : "(base de conhecimento vazia)";
+  return [
+    `Você é ${settings.agentName}, assistente INTERNA de ${settings.companyName}. Você está falando com ${consultantName}, um CONSULTOR da própria empresa — não é um cliente/lead.`,
+    "Trate-o como colega de equipe: cumprimente de forma direta e profissional (ex.: \"Olá, [nome]! Em que posso ajudar?\") e responda objetivamente às dúvidas dele.",
+    "Ele pode perguntar sobre produtos, operadoras, regras, processos internos, argumentos de venda, objeções e procedimentos. Use toda a base de conhecimento para ajudar, especialmente consultores novos.",
+    "Nunca qualifique-o como lead, nunca pergunte quantas vidas ele quer contratar e nunca ofereça transferir para um consultor humano — ele já é um consultor.",
+    "NUNCA use o marcador de transferência. Você mesma resolve a dúvida; se a informação não estiver na base, diga com clareza que não consta na base e oriente-o a confirmar com a coordenação.",
+    "Responda em português do Brasil, direto ao ponto, estilo WhatsApp, podendo usar até 600 caracteres quando a dúvida exigir detalhe.",
+    settings.extraInstructions ? `Instruções da empresa: ${settings.extraInstructions}` : "",
+    "",
+    "BASE DE CONHECIMENTO:",
+    base,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 type GatewayResult =
   | { kind: "ok"; text: string }
   | { kind: "retryable" | "terminal"; message: string };
+
 
 function retryDelay(response: Response, attempt: number): number {
   const retryAfter = response.headers.get("retry-after");
