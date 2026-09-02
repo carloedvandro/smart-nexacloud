@@ -644,9 +644,35 @@ export async function respondWithAI(input: {
     if (recipient && creds) {
       // Espelhamos a modalidade do cliente: voz só quando ele falou por áudio e
       // não sinalizou que não consegue ouvir. Caso contrário, resposta escrita.
-      const voice = preferAudio ? await synthesizeReplyAudio({ companyId, connectionId, text }) : null;
-      const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
+      // Cada etapa da voz tem tempo-limite: se travar, a resposta sai em texto
+      // em vez de o lead ficar sem nenhuma resposta.
+      const withTimeout = async <T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            promise,
+            new Promise<null>((resolve) => {
+              timer = setTimeout(() => {
+                log(`tempo-limite em ${label}; seguindo sem áudio`);
+                resolve(null);
+              }, ms);
+            }),
+          ]);
+        } catch (error) {
+          log(`falha em ${label}`, error instanceof Error ? error.message : String(error));
+          return null;
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      };
+
+      const voice = preferAudio
+        ? await withTimeout(synthesizeReplyAudio({ companyId, connectionId, text }), 45_000, "geração de voz")
+        : null;
+      const voiceUrl = voice ? await withTimeout(signedMediaUrl(voice.path), 10_000, "link do áudio") : null;
       const asAudio = Boolean(voice && voiceUrl);
+      if (preferAudio && !asAudio) log("cliente falou por áudio, mas a voz não ficou pronta; enviando texto");
+
 
 
       // Reservamos a mensagem ANTES do envio. A MEGA pode disparar o eco do
