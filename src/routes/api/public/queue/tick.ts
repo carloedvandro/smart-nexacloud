@@ -24,11 +24,50 @@ async function handle(request: Request): Promise<Response> {
     }
   }
 
+  // O processamento de áudio pode levar mais que o limite de inatividade da
+  // infraestrutura HTTP. Devolver um stream imediatamente e emitir batimentos
+  // mantém a execução viva até transcrição, LLM, TTS, storage e MEGA terminarem.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode('{"status":"processing"}\n'));
+      const heartbeat = setInterval(() => {
+        controller.enqueue(encoder.encode('{"status":"processing"}\n'));
+      }, 2_000);
+
+      void runTick()
+        .then((result) => {
+          controller.enqueue(encoder.encode(`${JSON.stringify({ ok: true, ...result })}\n`));
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error("[fila] execução do tick falhou", message);
+          controller.enqueue(encoder.encode(`${JSON.stringify({ ok: false, error: message })}\n`));
+        })
+        .finally(() => {
+          clearInterval(heartbeat);
+          controller.close();
+        });
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store, no-transform",
+      "x-accel-buffering": "no",
+    },
+  });
+}
+
+async function runTick(): Promise<{ processed: number; whatsappProcessed: number }> {
+
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin.rpc("queue_tick");
   if (error) {
     console.error("[fila] tick falhou", error.message);
-    return new Response(JSON.stringify({ ok: false }), init(500));
+    throw new Error(error.message);
   }
 
   // Processa eventos recebidos pelo WhatsApp fora da requisição do provedor.
@@ -56,15 +95,7 @@ async function handle(request: Request): Promise<Response> {
     );
   }
 
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      processed: Number(data ?? 0),
-      whatsappProcessed,
-    }),
-    init(),
-  );
-
+  return { processed: Number(data ?? 0), whatsappProcessed };
 }
 
 function init(status = 200): ResponseInit {
