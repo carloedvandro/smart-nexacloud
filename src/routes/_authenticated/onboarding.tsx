@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
 });
 
 function OnboardingPage() {
-  const { profile, loading, refresh } = useAuth();
+  const { profile, loading, profileLoaded, refresh } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -49,6 +49,14 @@ function OnboardingPage() {
     setBusy(false);
     toast.success("Empresa criada. Você é o administrador.");
     void navigate({ to: "/dashboard", replace: true });
+  }
+
+  if (loading || !profileLoaded || profile?.company_id) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="size-8 animate-spin rounded-full border-2 border-border border-t-primary" />
+      </div>
+    );
   }
 
   return (
