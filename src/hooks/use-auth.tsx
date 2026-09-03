@@ -23,6 +23,7 @@ type AuthContextValue = {
   isAdmin: boolean;
   companyId: string | null;
   loading: boolean;
+  profileLoaded: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -118,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: roles.includes("ADMIN"),
       companyId: profile?.company_id ?? null,
       loading,
+      profileLoaded,
       refresh: () => loadContext(session?.user?.id),
       signOut: async () => {
         await supabase.auth.signOut();
@@ -125,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRoles([]);
       },
     }),
-    [session, profile, roles, loading],
+    [session, profile, roles, loading, profileLoaded],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

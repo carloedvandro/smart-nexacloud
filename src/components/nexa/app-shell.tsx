@@ -25,7 +25,7 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const { profile, isAdmin, roles, loading, signOut } = useAuth();
+  const { profile, isAdmin, roles, loading, profileLoaded, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -34,14 +34,14 @@ export function AppShell({
   const isPlatformAdminGuard = roles.includes("PLATFORM_ADMIN");
 
   useEffect(() => {
-    if (loading || !profile || profile.company_id) return;
+    if (loading || !profileLoaded || !profile || profile.company_id) return;
     // Administrador da plataforma não precisa de vínculo operacional com empresa.
     if (isPlatformAdminGuard) {
       if (pathname !== "/plataforma") void navigate({ to: "/plataforma", replace: true });
       return;
     }
     void navigate({ to: "/onboarding", replace: true });
-  }, [loading, profile, navigate, isPlatformAdminGuard, pathname]);
+  }, [loading, profileLoaded, profile, navigate, isPlatformAdminGuard, pathname]);
 
 
   useEffect(() => {
