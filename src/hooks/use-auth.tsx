@@ -34,43 +34,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<NexaProfile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const seqRef = useRef(0);
 
   async function loadContext(userId: string | undefined) {
+    const seq = ++seqRef.current;
     if (!userId) {
       setProfile(null);
       setRoles([]);
+      setProfileLoaded(true);
       return;
     }
-    let [{ data: profileRow }, { data: roleRows }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, company_id, full_name, email, phone, avatar_url, availability, is_active")
-        .eq("id", userId)
-        .maybeSingle(),
-      supabase.from("user_roles").select("role").eq("user_id", userId),
-    ]);
+
+    async function fetchAll() {
+      return Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, company_id, full_name, email, phone, avatar_url, availability, is_active")
+          .eq("id", userId)
+          .maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", userId),
+      ]);
+    }
+
+    let [{ data: profileRow }, { data: roleRows }] = await fetchAll();
+
+    // Corrida de sessão (produção): o token pode não estar anexado na primeira
+    // chamada e a RLS devolve vazio. Tenta novamente antes de concluir.
+    if (!profileRow) {
+      await new Promise((r) => setTimeout(r, 400));
+      [{ data: profileRow }, { data: roleRows }] = await fetchAll();
+    }
 
     // Sem empresa: tenta aceitar um convite pendente para este e-mail.
     if (profileRow && !(profileRow as NexaProfile).company_id) {
       const { data: claimed } = await supabase.rpc("claim_company_invite");
       if (claimed) {
-        const [{ data: freshProfile }, { data: freshRoles }] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, company_id, full_name, email, phone, avatar_url, availability, is_active")
-            .eq("id", userId)
-            .maybeSingle(),
-          supabase.from("user_roles").select("role").eq("user_id", userId),
-        ]);
-        profileRow = freshProfile;
-        roleRows = freshRoles;
+        [{ data: profileRow }, { data: roleRows }] = await fetchAll();
       }
     }
 
+    // Só aplica o resultado da chamada mais recente.
+    if (seq !== seqRef.current) return;
+
     setProfile((profileRow as NexaProfile | null) ?? null);
     setRoles(((roleRows ?? []) as { role: AppRole }[]).map((r) => r.role));
-
+    setProfileLoaded(true);
   }
+
 
   useEffect(() => {
     let active = true;
