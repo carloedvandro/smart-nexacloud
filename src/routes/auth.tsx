@@ -124,7 +124,7 @@ function AuthPage() {
           <div className="mb-8 lg:hidden">
             <NexaLogo />
           </div>
-          <Tabs defaultValue="signin">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "signin" | "signup")}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Entrar</TabsTrigger>
               <TabsTrigger value="signup">Criar conta</TabsTrigger>
