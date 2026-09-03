@@ -11,7 +11,8 @@ import { MegaApiService, extractConnectedPhone } from "@/lib/whatsapp/mega.serve
 import type { MediaKind } from "@/lib/whatsapp/media.server";
 
 type Json = Record<string, unknown>;
-type MessageType = "text" | "audio" | "image" | "sticker" | "document" | "video" | "system" | "other";
+type MessageType =
+  "text" | "audio" | "image" | "sticker" | "document" | "video" | "system" | "other";
 
 /** Inclui a chave apenas quando há valor (exactOptionalPropertyTypes). */
 function opt<K extends string, T>(key: K, value: T | null | undefined) {
@@ -114,12 +115,12 @@ export function extractRealPhone(payload: unknown): string | null {
       "remoteJidAlt",
       "key.participantAlt",
       "participantAlt",
-    ]) ?? deepString(payload, /^(senderPn|participantPn|remoteJidAlt|participantAlt|senderPhone)$/i);
+    ]) ??
+    deepString(payload, /^(senderPn|participantPn|remoteJidAlt|participantAlt|senderPhone)$/i);
   if (!candidate || candidate.includes("@lid")) return null;
   const local = candidate.split("@")[0]?.split(":")[0] ?? "";
   return PhoneNormalizationService.normalize(local);
 }
-
 
 export function detectMessageType(payload: unknown): MessageType {
   // 1) pela presença do nó da mídia, em qualquer nível
@@ -150,7 +151,6 @@ export function detectMessageType(payload: unknown): MessageType {
 
   return "text";
 }
-
 
 function normalizeEventType(payload: unknown, fallback: string | null): string {
   return (
@@ -245,8 +245,6 @@ export async function processWebhookEvent(input: {
     }
   }
 
-
-
   // ---- Eventos de status de mensagem ----
   const mappedStatus = STATUS_MAP[eventType.toLowerCase()];
   const externalId = firstString(body, ["key.id", "id", "messageId", "keyId"]);
@@ -273,7 +271,6 @@ export async function processWebhookEvent(input: {
   // em campos paralelos (senderPn / participantPn / remoteJidAlt).
   const realPhone = parsed.isLid ? extractRealPhone(payload) : parsed.phone;
 
-
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
   const detected = detectMessageType(body);
   const messageType = detected === "text" ? detectMessageType(payload) : detected;
@@ -283,10 +280,11 @@ export async function processWebhookEvent(input: {
   // Diagnóstico: evento sem texto e sem mídia identificada — registramos o
   // formato recebido para ajustar a leitura do payload.
   if (messageType === "text" && !content) {
-    console.warn("[whatsapp] evento sem conteúdo reconhecido", JSON.stringify(payload).slice(0, 1500));
+    console.warn(
+      "[whatsapp] evento sem conteúdo reconhecido",
+      JSON.stringify(payload).slice(0, 1500),
+    );
   }
-
-
 
   if (fromMe) {
     // Mensagem enviada pelo próprio número da empresa. Se ela já existe no
@@ -332,8 +330,6 @@ export async function processWebhookEvent(input: {
       }
     }
 
-
-
     const { data: echo, error: echoError } = await supabaseAdmin.rpc("ingest_outbound_echo", {
       _connection_id: connectionId,
       _remote_jid: parsed.jid,
@@ -342,6 +338,7 @@ export async function processWebhookEvent(input: {
       ...opt("_content", content),
       ...opt("_media_url", echoMedia?.path ?? null),
       ...opt("_mime_type", echoMedia?.mimeType ?? mimeTypeHint),
+      ...opt("_real_phone", realPhone),
       _metadata: { remote_jid: parsed.jid, is_lid: parsed.isLid, event: eventType },
     });
     if (echoError) {
@@ -397,6 +394,7 @@ export async function processWebhookEvent(input: {
     ...opt("_content", content),
     ...opt("_media_url", mediaUrl),
     ...opt("_mime_type", mimeType),
+    ...opt("_real_phone", realPhone),
     _metadata: { remote_jid: parsed.jid, is_lid: parsed.isLid, event: eventType },
   });
 
@@ -426,30 +424,31 @@ export async function processWebhookEvent(input: {
 
     if (inbound?.conversation_id) {
       result.conversation_id = inbound.conversation_id;
-      const [{ data: conversation }, { data: latestCustomer }, { data: laterReply }] = await Promise.all([
-        supabaseAdmin
-          .from("conversations")
-          .select("lead_id")
-          .eq("id", inbound.conversation_id)
-          .maybeSingle(),
-        supabaseAdmin
-          .from("messages")
-          .select("id")
-          .eq("conversation_id", inbound.conversation_id)
-          .eq("sender_type", "customer")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabaseAdmin
-          .from("messages")
-          .select("id")
-          .eq("conversation_id", inbound.conversation_id)
-          .in("sender_type", ["ai", "consultant", "admin"])
-          .in("delivery_status", ["SENT", "DELIVERED", "READ"])
-          .gt("created_at", inbound.created_at)
-          .limit(1)
-          .maybeSingle(),
-      ]);
+      const [{ data: conversation }, { data: latestCustomer }, { data: laterReply }] =
+        await Promise.all([
+          supabaseAdmin
+            .from("conversations")
+            .select("lead_id")
+            .eq("id", inbound.conversation_id)
+            .maybeSingle(),
+          supabaseAdmin
+            .from("messages")
+            .select("id")
+            .eq("conversation_id", inbound.conversation_id)
+            .eq("sender_type", "customer")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabaseAdmin
+            .from("messages")
+            .select("id")
+            .eq("conversation_id", inbound.conversation_id)
+            .in("sender_type", ["ai", "consultant", "admin"])
+            .in("delivery_status", ["SENT", "DELIVERED", "READ"])
+            .gt("created_at", inbound.created_at)
+            .limit(1)
+            .maybeSingle(),
+        ]);
       if (conversation?.lead_id) result.lead_id = conversation.lead_id;
       recoverUnansweredDuplicate = latestCustomer?.id === result.message_id && !laterReply;
       if (recoverUnansweredDuplicate) {
@@ -480,9 +479,6 @@ export async function processWebhookEvent(input: {
       body,
     });
   }
-
-
-
 
   console.info("[whatsapp] mensagem processada", {
     evento: eventType,
@@ -549,7 +545,6 @@ export async function processWebhookEvent(input: {
 
     // O consultor acompanha a conversa pelo painel (realtime); nada é
     // espelhado para o WhatsApp pessoal dele.
-
   }
 
   // Oportunidade barata de expirar ofertas vencidas (SLA) a cada evento recebido.
@@ -565,15 +560,11 @@ export async function processWebhookEvent(input: {
     console.error("[avaliação] falha ao solicitar", error),
   );
 
-
-
-
   return {
     status: result.duplicate ? "duplicate" : "processed",
     ...(result.message_id ? { messageId: result.message_id } : {}),
   };
 }
-
 
 async function handleConnectionEvent(connectionId: string, eventType: string, payload: unknown) {
   const raw = (
@@ -676,7 +667,6 @@ async function downloadAndStoreMedia(input: {
     return null;
   }
 
-
   const findDownloadValue = (
     source: unknown,
     keys: string[],
@@ -726,7 +716,8 @@ async function downloadAndStoreMedia(input: {
     Array.isArray((encoded as { data?: unknown }).data)
   ) {
     const values = (encoded as { data: unknown[] }).data;
-    if (values.every((value) => typeof value === "number")) bytes = new Uint8Array(values as number[]);
+    if (values.every((value) => typeof value === "number"))
+      bytes = new Uint8Array(values as number[]);
   } else {
     const url = findDownloadValue(
       result.data,
