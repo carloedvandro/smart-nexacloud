@@ -37,6 +37,7 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
+  const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,13 +47,26 @@ function AuthPage() {
     if (!loading && session) void navigate({ to: "/dashboard", replace: true });
   }, [loading, session, navigate]);
 
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("tab");
+    if (param === "signup") setTab("signup");
+    else setTab("signin");
+  }, []);
+
+
   async function handleSignIn(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(
+        /invalid login credentials/i.test(error.message)
+          ? "E-mail ou senha incorretos."
+          : /email not confirmed/i.test(error.message)
+            ? "E-mail ainda não confirmado. Verifique sua caixa de entrada."
+            : error.message,
+      );
       return;
     }
     void navigate({ to: "/dashboard", replace: true });
@@ -110,7 +124,7 @@ function AuthPage() {
           <div className="mb-8 lg:hidden">
             <NexaLogo />
           </div>
-          <Tabs defaultValue="signin">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "signin" | "signup")}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Entrar</TabsTrigger>
               <TabsTrigger value="signup">Criar conta</TabsTrigger>
