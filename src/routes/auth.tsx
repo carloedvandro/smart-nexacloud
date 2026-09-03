@@ -60,7 +60,13 @@ function AuthPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(
+        /invalid login credentials/i.test(error.message)
+          ? "E-mail ou senha incorretos."
+          : /email not confirmed/i.test(error.message)
+            ? "E-mail ainda não confirmado. Verifique sua caixa de entrada."
+            : error.message,
+      );
       return;
     }
     void navigate({ to: "/dashboard", replace: true });
