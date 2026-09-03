@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -46,14 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const uid: string = userId;
     async function fetchAll() {
       return Promise.all([
         supabase
           .from("profiles")
           .select("id, company_id, full_name, email, phone, avatar_url, availability, is_active")
-          .eq("id", userId)
+          .eq("id", uid)
           .maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", userId),
+        supabase.from("user_roles").select("role").eq("user_id", uid),
       ]);
     }
 
