@@ -47,6 +47,13 @@ function AuthPage() {
     if (!loading && session) void navigate({ to: "/dashboard", replace: true });
   }, [loading, session, navigate]);
 
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("tab");
+    if (param === "signup") setTab("signup");
+    else setTab("signin");
+  }, []);
+
+
   async function handleSignIn(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
