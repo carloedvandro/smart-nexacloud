@@ -336,6 +336,21 @@ async function callGateway(messages: ChatMessage[]): Promise<GatewayResult> {
 }
 
 async function handoff(companyId: string, conversationId: string, reason: string): Promise<boolean> {
+  // O Kanban precisa mostrar imediatamente que o lead saiu da IA.
+  const { data: convRow } = await supabaseAdmin
+    .from("conversations")
+    .select("lead_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (convRow?.lead_id) {
+    await supabaseAdmin
+      .from("leads")
+      .update({ status: "WAITING_HUMAN" })
+      .eq("id", convRow.lead_id)
+      .eq("company_id", companyId)
+      .in("status", ["NEW", "AI_QUALIFYING", "QUALIFIED", "WAITING_CUSTOMER"]);
+  }
+
   const { error: sessionError } = await supabaseAdmin
     .from("ai_sessions")
     .update({ status: "HANDOFF", ended_at: new Date().toISOString(), handoff_reason: reason })
@@ -581,8 +596,9 @@ export async function respondWithAI(input: {
     /\b(falar|conversar|atendimento|transferir|transfere|transfira|transfer(ê|e)ncia|passar|passa|chamar|encaminhar|me\s+manda)\b[^.?!]{0,40}\b(consultor(?:a)?|atendente|corretor(?:a)?|vendedor(?:a)?|humano|humana|pessoa\s+(real|de\s+verdade)|algu(é|e)m\s+(real|de\s+verdade)?)\b/i;
   const humanRequestShort =
     /\b(quero|gostaria|preciso|pode|poderia|posso)\b[^.?!]{0,30}\b(consultor(?:a)?|atendente|corretor(?:a)?|atendimento\s+humano|humano|humana)\b/i;
-  const explicitHumanRequest =
-    !isConsultantChat && (humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText));
+  // Mesmo em conversa interna, se a pessoa pede um humano de forma explícita
+  // nós transferimos: quem pede atendimento humano não pode ficar com a IA.
+  const explicitHumanRequest = humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText);
 
 
   // Anti-loop: outro robô/IA do outro lado responderia para sempre. Paramos
@@ -741,7 +757,7 @@ export async function respondWithAI(input: {
   }
   const raw = generation.text;
 
-  const needsHuman = !isConsultantChat && (explicitHumanRequest || raw.includes(HANDOFF_TOKEN));
+  const needsHuman = explicitHumanRequest || (!isConsultantChat && raw.includes(HANDOFF_TOKEN));
   const text = stripNarration(raw.replaceAll(HANDOFF_TOKEN, ""));
 
   if (text) {
