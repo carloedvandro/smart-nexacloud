@@ -384,7 +384,7 @@ export async function respondWithAI(input: {
 
   const { data: conversation } = await supabaseAdmin
     .from("conversations")
-    .select("id, status, assigned_user_id, channel_id, lead:leads(whatsapp, name, phone)")
+    .select("id, status, assigned_user_id, channel_id, lead_id, lead:leads(whatsapp, name, phone)")
     .eq("id", conversationId)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -805,6 +805,17 @@ export async function respondWithAI(input: {
     .update({ status: "AI_ACTIVE", assigned_user_id: null })
     .eq("id", conversationId)
     .eq("company_id", companyId);
+
+  // O Kanban precisa refletir a realidade: quem está atendendo agora é a IA.
+  const leadId = input.leadId ?? (conversation as { lead_id?: string | null }).lead_id ?? null;
+  if (leadId && !isConsultantChat) {
+    await supabaseAdmin
+      .from("leads")
+      .update({ status: "AI_QUALIFYING" })
+      .eq("id", leadId)
+      .eq("company_id", companyId)
+      .in("status", ["NEW", "WAITING_HUMAN", "WAITING_CUSTOMER", "IN_SERVICE"]);
+  }
 
   log("respondido com sucesso");
   return { status: "replied" };
