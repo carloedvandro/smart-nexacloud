@@ -106,6 +106,33 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+/**
+ * Remove anotações de narração que o modelo às vezes coloca no início
+ * (ex.: "(resposta em áudio)", "[áudio]", "Resposta em áudio:").
+ * Elas soam robóticas quando lidas em voz alta.
+ */
+function stripNarration(value: string): string {
+  let text = value.trim();
+  const patterns = [
+    /^\s*[([{][^)\]}]{0,60}[)\]}]\s*[:\-–]?\s*/i,
+    /^\s*(resposta|mensagem|áudio|audio|transcri(ç|c)ão)\s+(em|de|por)\s+(á|a)udio\s*[:\-–]?\s*/i,
+    /^\s*(á|a)udio\s*[:\-–]\s*/i,
+    /^\s*\*[^*]{0,60}\*\s*/,
+  ];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const pattern of patterns) {
+      const next = text.replace(pattern, "");
+      if (next !== text) {
+        text = next.trim();
+        changed = true;
+      }
+    }
+  }
+  return text.trim();
+}
+
 /** Normaliza para comparação: sem acentos, minúsculo. */
 function normalizeText(value: string): string {
   return value
