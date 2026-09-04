@@ -13,7 +13,9 @@ import { synthesizeReplyAudio } from "@/lib/ai/tts.server";
 const MODEL = "google/gemini-2.5-flash";
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const HANDOFF_TOKEN = "[TRANSFERIR_HUMANO]";
-const HISTORY_LIMIT = 14;
+// Contexto longo: o atendimento costuma passar de 14 mensagens (qualificação,
+// transferência, retomada). Com pouco histórico a IA repetia perguntas já feitas.
+const HISTORY_LIMIT = 60;
 
 export type AiSettings = {
   enabled: boolean;
@@ -648,6 +650,22 @@ export async function respondWithAI(input: {
       ? `CONTATO: o WhatsApp mostra o nome "${whatsappName}", mas ele não está confirmado. Pode usá-lo com naturalidade e, se fizer sentido, confirme o nome correto uma única vez.`
       : "CONTATO: ainda não sabemos o nome do lead. Pergunte o nome dele logo no início do atendimento, uma única vez.";
 
+  // Fatos já confirmados pelo lead (cidade, idades, plano atual, etc.).
+  // Evita que a IA volte a perguntar algo que já foi respondido antes.
+
+  const leadIdForMemory = (conversation as { lead_id?: string | null }).lead_id ?? input.leadId ?? null;
+  const { data: leadFacts } = leadIdForMemory
+    ? await supabaseAdmin
+        .from("lead_memory")
+        .select("key, value")
+        .eq("lead_id", leadIdForMemory)
+        .limit(40)
+    : { data: [] };
+  const factsContext = (leadFacts ?? [])
+    .filter((f) => (f.value ?? "").trim())
+    .map((f) => `- ${f.key}: ${f.value}`)
+    .join("\n");
+
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -660,6 +678,17 @@ export async function respondWithAI(input: {
         : buildSystemPrompt(settings, knowledge),
     },
     ...(isConsultantChat ? [] : [{ role: "system" as const, content: nameContext }]),
+    {
+      role: "system" as const,
+      content: [
+        "CONTINUIDADE DO ATENDIMENTO: o histórico abaixo é a MESMA conversa, mesmo que tenha havido transferência ou pausa.",
+        "Nunca volte a perguntar algo que o cliente já respondeu (cidade, estado, idades, número de vidas, plano atual, tipo de plano, operadora preferida). Se já souber, apenas confirme rapidamente e siga em frente.",
+        "Se o cliente mudar de assunto (ex.: passar de plano de saúde para odontológico), reaproveite os dados já informados em vez de recomeçar a qualificação.",
+        factsContext ? `FATOS JÁ REGISTRADOS SOBRE ESTE CLIENTE:\n${factsContext}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    },
     ...ordered
       .filter((m) => ((m.transcription || m.content) ?? "").trim())
       .map<ChatMessage>((m) => {
