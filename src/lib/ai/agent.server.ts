@@ -808,7 +808,7 @@ export async function respondWithAI(input: {
 
   // O Kanban precisa refletir a realidade: quem está atendendo agora é a IA.
   const leadId = input.leadId ?? (conversation as { lead_id?: string | null }).lead_id ?? null;
-  if (leadId && !isConsultantChat) {
+  if (leadId) {
     await supabaseAdmin
       .from("leads")
       .update({ status: "AI_QUALIFYING" })
