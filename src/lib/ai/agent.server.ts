@@ -652,12 +652,6 @@ export async function respondWithAI(input: {
 
   // Fatos já confirmados pelo lead (cidade, idades, plano atual, etc.).
   // Evita que a IA volte a perguntar algo que já foi respondido antes.
-  const { data: memoryRows } = await supabaseAdmin
-    .from("lead_memory")
-    .select("key, value")
-    .eq("conversation_id_placeholder_never" as never, "" as never)
-    .limit(0);
-  void memoryRows;
 
   const leadIdForMemory = (conversation as { lead_id?: string | null }).lead_id ?? input.leadId ?? null;
   const { data: leadFacts } = leadIdForMemory
