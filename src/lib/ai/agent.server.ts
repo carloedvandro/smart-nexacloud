@@ -678,6 +678,17 @@ export async function respondWithAI(input: {
         : buildSystemPrompt(settings, knowledge),
     },
     ...(isConsultantChat ? [] : [{ role: "system" as const, content: nameContext }]),
+    {
+      role: "system" as const,
+      content: [
+        "CONTINUIDADE DO ATENDIMENTO: o histórico abaixo é a MESMA conversa, mesmo que tenha havido transferência ou pausa.",
+        "Nunca volte a perguntar algo que o cliente já respondeu (cidade, estado, idades, número de vidas, plano atual, tipo de plano, operadora preferida). Se já souber, apenas confirme rapidamente e siga em frente.",
+        "Se o cliente mudar de assunto (ex.: passar de plano de saúde para odontológico), reaproveite os dados já informados em vez de recomeçar a qualificação.",
+        factsContext ? `FATOS JÁ REGISTRADOS SOBRE ESTE CLIENTE:\n${factsContext}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    },
     ...ordered
       .filter((m) => ((m.transcription || m.content) ?? "").trim())
       .map<ChatMessage>((m) => {
