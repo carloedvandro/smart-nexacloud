@@ -525,7 +525,9 @@ export async function respondWithAI(input: {
     .select("id", { count: "exact", head: true })
     .eq("conversation_id", conversationId)
     .eq("status", "WAITING");
-  if (!isConsultantChat && (pendingOffers ?? 0) > 0) {
+  // Vale inclusive em conversa de consultor interno: se ele pediu atendimento
+  // humano, a IA não pode retomar a conversa na mensagem seguinte.
+  if ((pendingOffers ?? 0) > 0) {
     log("skip: oferta de fila aguardando consultor");
     return { status: "skipped", reason: "conversa com consultor" };
   }
@@ -559,7 +561,7 @@ export async function respondWithAI(input: {
     const reason = session.handoff_reason?.toLowerCase() ?? "";
     return !reason.includes("falha na geração") && !reason.includes("falha permanente da ia");
   });
-  if (!isConsultantChat && hasIntentionalHandoff) {
+  if (hasIntentionalHandoff) {
     log("skip: transferência humana já solicitada");
     return { status: "skipped", reason: "conversa com consultor" };
   }
