@@ -13,7 +13,9 @@ import { synthesizeReplyAudio } from "@/lib/ai/tts.server";
 const MODEL = "google/gemini-2.5-flash";
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const HANDOFF_TOKEN = "[TRANSFERIR_HUMANO]";
-const HISTORY_LIMIT = 14;
+// Contexto longo: o atendimento costuma passar de 14 mensagens (qualificação,
+// transferência, retomada). Com pouco histórico a IA repetia perguntas já feitas.
+const HISTORY_LIMIT = 60;
 
 export type AiSettings = {
   enabled: boolean;
