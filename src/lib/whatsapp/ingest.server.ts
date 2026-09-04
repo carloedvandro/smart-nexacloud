@@ -71,6 +71,46 @@ function deepString(payload: unknown, pattern: RegExp): string | null {
   return typeof found === "string" && found.trim() ? found.trim() : null;
 }
 
+/**
+ * Mensagens interativas (botões, listas, templates e "native flow") não têm
+ * `conversation`/`text`: o texto fica em contentText/description/hydrated*.
+ * Sem isto elas chegavam ao painel como "(sem conteúdo)" e a IA respondia
+ * dizendo que não conseguia ver as opções.
+ */
+function extractInteractiveText(payload: unknown): string | null {
+  const node =
+    (deepFind(payload, /^(buttonsMessage|listMessage|templateMessage|interactiveMessage|viewOnceMessage)$/i) as
+      | Json
+      | undefined) ?? undefined;
+  if (!node) return null;
+
+  const header =
+    deepString(node, /^(contentText|hydratedContentText|description)$/i) ??
+    deepString(node, /^(text|title|hydratedTitle)$/i);
+
+  const options: string[] = [];
+  const collect = (value: unknown, depth = 0) => {
+    if (!value || typeof value !== "object" || depth > 6) return;
+    if (Array.isArray(value)) {
+      for (const item of value) collect(item, depth + 1);
+      return;
+    }
+    const obj = value as Json;
+    const label =
+      firstString(obj, ["buttonText.displayText", "displayText", "title", "buttonParamsJson"]) ?? null;
+    if (label && label.length <= 120 && !label.startsWith("{")) options.push(label);
+    for (const child of Object.values(obj)) collect(child, depth + 1);
+  };
+  collect(pick(node, "buttons"));
+  collect(pick(node, "sections"));
+  collect(pick(node, "hydratedButtons"));
+  collect(deepFind(node, /^nativeFlowMessage$/i));
+
+  const unique = [...new Set(options.filter((o) => o !== header))];
+  const parts = [header, unique.length ? `Opções: ${unique.join(" | ")}` : null].filter(Boolean);
+  return parts.length ? parts.join("\n") : null;
+}
+
 export function extractText(payload: unknown): string | null {
   return (
     firstString(payload, [
@@ -88,6 +128,7 @@ export function extractText(payload: unknown): string | null {
     ]) ??
     deepString(payload, /^conversation$/i) ??
     deepString(payload, /^caption$/i) ??
+    extractInteractiveText(payload) ??
     deepString(payload, /^(selectedDisplayText|selectedButtonId|title)$/i)
   );
 }
