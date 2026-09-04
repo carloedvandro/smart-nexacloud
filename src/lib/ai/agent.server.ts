@@ -85,6 +85,7 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
     `CONTEXTO TEMPORAL: agora é ${dateTime} no horário de Brasília (São Paulo). A saudação correta neste momento é "${greeting}". Nunca use outra saudação de período do dia e nunca cite datas/horários diferentes deste.`,
     "Fale português do Brasil, em tom humano, acolhedor e objetivo. Responda com no máximo 240 caracteres e até 3 frases curtas, estilo WhatsApp, sem markdown pesado.",
     "ÁUDIO: você ouve e entende áudios do cliente (eles chegam transcritos, marcados como \"(áudio enviado pelo cliente)\"). Você responde em áudio APENAS quando o cliente falou por áudio; se ele escreveu, responda por escrito. Se ele disser que não consegue ouvir/abrir áudios, que prefere texto, ou se for outro robô/IA que só lê texto, responda sempre por escrito e de forma completa e clara, sem depender de voz. NUNCA diga que é uma inteligência artificial que não consegue ouvir ou enviar áudios.",
+    "FORMATO DA RESPOSTA: escreva SOMENTE a fala natural, como uma pessoa falaria no WhatsApp. É proibido começar (ou incluir) qualquer rótulo, narração ou anotação como \"(resposta em áudio)\", \"[áudio]\", \"Áudio:\", asteriscos de ação ou descrição do que você está fazendo. Comece direto pela saudação ou pela resposta.",
     "Se a mensagem do cliente for confusa, vazia ou só um sinal como \"?\", peça gentilmente que ele repita ou explique melhor a dúvida — nunca invente que houve um problema técnico.",
     "Objetivo: qualificar o interessado (plano para pessoa física/família, empresa com CNPJ ou por adesão; quantas vidas; idades; cidade/estado; se já tem plano hoje; acomodação e preferência de operadora/hospital) e agendar a cotação com um consultor humano.",
     "- Depois de responder à dúvida ou concluir a qualificação, pergunte de forma natural se a pessoa ainda tem alguma dúvida ou se deseja falar com um consultor humano. Não repita essa pergunta em todas as mensagens.",
@@ -105,6 +106,33 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
 }
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+/**
+ * Remove anotações de narração que o modelo às vezes coloca no início
+ * (ex.: "(resposta em áudio)", "[áudio]", "Resposta em áudio:").
+ * Elas soam robóticas quando lidas em voz alta.
+ */
+function stripNarration(value: string): string {
+  let text = value.trim();
+  const patterns = [
+    /^\s*[([{][^)\]}]{0,60}[)\]}]\s*[:\-–]?\s*/i,
+    /^\s*(resposta|mensagem|áudio|audio|transcri(ç|c)ão)\s+(em|de|por)\s+(á|a)udio\s*[:\-–]?\s*/i,
+    /^\s*(á|a)udio\s*[:\-–]\s*/i,
+    /^\s*\*[^*]{0,60}\*\s*/,
+  ];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const pattern of patterns) {
+      const next = text.replace(pattern, "");
+      if (next !== text) {
+        text = next.trim();
+        changed = true;
+      }
+    }
+  }
+  return text.trim();
+}
 
 /** Normaliza para comparação: sem acentos, minúsculo. */
 function normalizeText(value: string): string {
@@ -681,7 +709,7 @@ export async function respondWithAI(input: {
   const raw = generation.text;
 
   const needsHuman = !isConsultantChat && (explicitHumanRequest || raw.includes(HANDOFF_TOKEN));
-  const text = raw.replaceAll(HANDOFF_TOKEN, "").trim();
+  const text = stripNarration(raw.replaceAll(HANDOFF_TOKEN, ""));
 
   if (text) {
     const destination =

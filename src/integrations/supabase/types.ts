@@ -821,6 +821,51 @@ export type Database = {
           },
         ]
       }
+      lead_identities: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          identifier: string
+          identifier_type: string
+          lead_id: string
+          source: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          identifier: string
+          identifier_type: string
+          lead_id: string
+          source?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          identifier?: string
+          identifier_type?: string
+          lead_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_identities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_identities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_memory: {
         Row: {
           company_id: string
@@ -1881,6 +1926,7 @@ export type Database = {
         Returns: string
       }
       current_company_id: { Args: never; Returns: string }
+      dedup_leads_by_lid_phone: { Args: never; Returns: number }
       enqueue_conversation: {
         Args: { _conversation_id: string; _reason?: string }
         Returns: string
@@ -1905,33 +1951,64 @@ export type Database = {
         }
         Returns: boolean
       }
-      ingest_inbound_message: {
-        Args: {
-          _connection_id: string
-          _content?: string
-          _external_message_id: string
-          _media_url?: string
-          _message_type?: Database["public"]["Enums"]["message_type"]
-          _metadata?: Json
-          _mime_type?: string
-          _push_name?: string
-          _remote_jid: string
-        }
-        Returns: Json
-      }
-      ingest_outbound_echo: {
-        Args: {
-          _connection_id: string
-          _content?: string
-          _external_message_id: string
-          _media_url?: string
-          _message_type?: Database["public"]["Enums"]["message_type"]
-          _metadata?: Json
-          _mime_type?: string
-          _remote_jid: string
-        }
-        Returns: Json
-      }
+      ingest_inbound_message:
+        | {
+            Args: {
+              _connection_id: string
+              _content?: string
+              _external_message_id: string
+              _media_url?: string
+              _message_type?: Database["public"]["Enums"]["message_type"]
+              _metadata?: Json
+              _mime_type?: string
+              _push_name?: string
+              _remote_jid: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _connection_id: string
+              _content?: string
+              _external_message_id: string
+              _media_url?: string
+              _message_type?: Database["public"]["Enums"]["message_type"]
+              _metadata?: Json
+              _mime_type?: string
+              _push_name?: string
+              _real_phone?: string
+              _remote_jid: string
+            }
+            Returns: Json
+          }
+      ingest_outbound_echo:
+        | {
+            Args: {
+              _connection_id: string
+              _content?: string
+              _external_message_id: string
+              _media_url?: string
+              _message_type?: Database["public"]["Enums"]["message_type"]
+              _metadata?: Json
+              _mime_type?: string
+              _remote_jid: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _connection_id: string
+              _content?: string
+              _external_message_id: string
+              _media_url?: string
+              _message_type?: Database["public"]["Enums"]["message_type"]
+              _metadata?: Json
+              _mime_type?: string
+              _real_phone?: string
+              _remote_jid: string
+            }
+            Returns: Json
+          }
       invite_link_info: { Args: { _token: string }; Returns: Json }
       is_abandoned_conversation: {
         Args: { _conversation_id: string }
@@ -1940,6 +2017,15 @@ export type Database = {
       is_company_admin: { Args: never; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       lead_company_scope: { Args: { _lead_id: string }; Returns: string }
+      link_lead_identity: {
+        Args: {
+          _identifier: string
+          _identifier_type: string
+          _lead_id: string
+          _source?: string
+        }
+        Returns: undefined
+      }
       log_impersonation: {
         Args: { _target_user_id: string }
         Returns: undefined
@@ -1947,6 +2033,10 @@ export type Database = {
       mark_conversation_read: {
         Args: { _conversation_id: string }
         Returns: undefined
+      }
+      merge_leads: {
+        Args: { _drop_id: string; _keep_id: string }
+        Returns: string
       }
       normalize_phone: { Args: { _raw: string }; Returns: string }
       platform_invite_company_member: {
@@ -2059,6 +2149,10 @@ export type Database = {
       rename_admin_delete_credential: {
         Args: { _new_display_name: string; _password: string }
         Returns: undefined
+      }
+      resolve_lead_identity: {
+        Args: { _company_id: string; _identifier: string }
+        Returns: string
       }
       set_admin_delete_credential: {
         Args: { _display_name: string; _password: string }
