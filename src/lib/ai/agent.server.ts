@@ -574,12 +574,16 @@ export async function respondWithAI(input: {
   );
   const preferAudio = lastCustomerIsAudio && !textOnlyRequest;
 
+  // Pedido explícito de humano precisa ser uma FRASE ("falar com um consultor",
+  // "quero atendimento humano"). Antes bastava a palavra "pessoa" + um verbo
+  // qualquer, então "quero um plano para 1 pessoa" era tratado como transferência.
+  const humanRequestPhrase =
+    /\b(falar|conversar|atendimento|transferir|transfere|transfira|transfer(ê|e)ncia|passar|passa|chamar|encaminhar|me\s+manda)\b[^.?!]{0,40}\b(consultor(?:a)?|atendente|corretor(?:a)?|vendedor(?:a)?|humano|humana|pessoa\s+(real|de\s+verdade)|algu(é|e)m\s+(real|de\s+verdade)?)\b/i;
+  const humanRequestShort =
+    /\b(quero|gostaria|preciso|pode|poderia|posso)\b[^.?!]{0,30}\b(consultor(?:a)?|atendente|corretor(?:a)?|atendimento\s+humano|humano|humana)\b/i;
   const explicitHumanRequest =
-    !isConsultantChat &&
-    /\b(consultor(?:a)?|atendente|atendimento humano|pessoa|humano)\b/i.test(customerText) &&
-    /\b(falar|transferir|transfere|transferência|passar|chamar|quero|gostaria|pode|preciso)\b/i.test(
-      customerText,
-    );
+    !isConsultantChat && (humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText));
+
 
   // Anti-loop: outro robô/IA do outro lado responderia para sempre. Paramos
   // assim que o interlocutor se identifica como automático, ou quando a troca
