@@ -384,7 +384,7 @@ export async function respondWithAI(input: {
 
   const { data: conversation } = await supabaseAdmin
     .from("conversations")
-    .select("id, status, assigned_user_id, channel_id, lead:leads(whatsapp, name, phone)")
+    .select("id, status, assigned_user_id, channel_id, lead_id, lead:leads(whatsapp, name, phone)")
     .eq("id", conversationId)
     .eq("company_id", companyId)
     .maybeSingle();
