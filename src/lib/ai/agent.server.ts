@@ -681,7 +681,7 @@ export async function respondWithAI(input: {
   const raw = generation.text;
 
   const needsHuman = !isConsultantChat && (explicitHumanRequest || raw.includes(HANDOFF_TOKEN));
-  const text = raw.replaceAll(HANDOFF_TOKEN, "").trim();
+  const text = stripNarration(raw.replaceAll(HANDOFF_TOKEN, ""));
 
   if (text) {
     const destination =
