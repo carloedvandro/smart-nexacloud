@@ -650,6 +650,28 @@ export async function respondWithAI(input: {
       ? `CONTATO: o WhatsApp mostra o nome "${whatsappName}", mas ele não está confirmado. Pode usá-lo com naturalidade e, se fizer sentido, confirme o nome correto uma única vez.`
       : "CONTATO: ainda não sabemos o nome do lead. Pergunte o nome dele logo no início do atendimento, uma única vez.";
 
+  // Fatos já confirmados pelo lead (cidade, idades, plano atual, etc.).
+  // Evita que a IA volte a perguntar algo que já foi respondido antes.
+  const { data: memoryRows } = await supabaseAdmin
+    .from("lead_memory")
+    .select("key, value")
+    .eq("conversation_id_placeholder_never" as never, "" as never)
+    .limit(0);
+  void memoryRows;
+
+  const leadIdForMemory = (conversation as { lead_id?: string | null }).lead_id ?? input.leadId ?? null;
+  const { data: leadFacts } = leadIdForMemory
+    ? await supabaseAdmin
+        .from("lead_memory")
+        .select("key, value")
+        .eq("lead_id", leadIdForMemory)
+        .limit(40)
+    : { data: [] };
+  const factsContext = (leadFacts ?? [])
+    .filter((f) => (f.value ?? "").trim())
+    .map((f) => `- ${f.key}: ${f.value}`)
+    .join("\n");
+
   const messages: ChatMessage[] = [
     {
       role: "system",
