@@ -561,7 +561,7 @@ export async function respondWithAI(input: {
     const reason = session.handoff_reason?.toLowerCase() ?? "";
     return !reason.includes("falha na geração") && !reason.includes("falha permanente da ia");
   });
-  if (!isConsultantChat && hasIntentionalHandoff) {
+  if (hasIntentionalHandoff) {
     log("skip: transferência humana já solicitada");
     return { status: "skipped", reason: "conversa com consultor" };
   }
