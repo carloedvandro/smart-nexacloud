@@ -331,6 +331,495 @@ export type Database = {
           },
         ]
       }
+      broadcast_campaign_contacts: {
+        Row: {
+          campaign_id: string
+          company_id: string
+          contact_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          campaign_id: string
+          company_id: string
+          contact_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          campaign_id?: string
+          company_id?: string
+          contact_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_campaign_contacts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "broadcast_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_campaign_contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_campaign_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "broadcast_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broadcast_campaigns: {
+        Row: {
+          auto_resume: boolean
+          campaign_limit: number | null
+          company_id: string
+          consecutive_failures: number
+          created_at: string
+          created_by: string | null
+          daily_limit: number
+          finished_at: string | null
+          id: string
+          instance_id: string | null
+          last_activity_at: string | null
+          max_consecutive_failures: number
+          max_interval_seconds: number
+          message_id: string | null
+          messages_per_minute: number
+          min_interval_seconds: number
+          name: string
+          next_send_at: string | null
+          pause_reason: string | null
+          require_opt_in: boolean
+          scheduled_at: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["broadcast_campaign_status"]
+          updated_at: string
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          auto_resume?: boolean
+          campaign_limit?: number | null
+          company_id: string
+          consecutive_failures?: number
+          created_at?: string
+          created_by?: string | null
+          daily_limit?: number
+          finished_at?: string | null
+          id?: string
+          instance_id?: string | null
+          last_activity_at?: string | null
+          max_consecutive_failures?: number
+          max_interval_seconds?: number
+          message_id?: string | null
+          messages_per_minute?: number
+          min_interval_seconds?: number
+          name: string
+          next_send_at?: string | null
+          pause_reason?: string | null
+          require_opt_in?: boolean
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["broadcast_campaign_status"]
+          updated_at?: string
+          window_end?: string
+          window_start?: string
+        }
+        Update: {
+          auto_resume?: boolean
+          campaign_limit?: number | null
+          company_id?: string
+          consecutive_failures?: number
+          created_at?: string
+          created_by?: string | null
+          daily_limit?: number
+          finished_at?: string | null
+          id?: string
+          instance_id?: string | null
+          last_activity_at?: string | null
+          max_consecutive_failures?: number
+          max_interval_seconds?: number
+          message_id?: string | null
+          messages_per_minute?: number
+          min_interval_seconds?: number
+          name?: string
+          next_send_at?: string | null
+          pause_reason?: string | null
+          require_opt_in?: boolean
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["broadcast_campaign_status"]
+          updated_at?: string
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_campaigns_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_campaigns_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "broadcast_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broadcast_contacts: {
+        Row: {
+          company_id: string
+          company_name: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata: Json
+          name: string | null
+          note: string | null
+          opt_in: boolean
+          opt_in_source: string | null
+          phone: string | null
+          source: string | null
+          status: Database["public"]["Enums"]["broadcast_contact_status"]
+          tags: string[]
+          updated_at: string
+          whatsapp: string
+        }
+        Insert: {
+          company_id: string
+          company_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          name?: string | null
+          note?: string | null
+          opt_in?: boolean
+          opt_in_source?: string | null
+          phone?: string | null
+          source?: string | null
+          status?: Database["public"]["Enums"]["broadcast_contact_status"]
+          tags?: string[]
+          updated_at?: string
+          whatsapp: string
+        }
+        Update: {
+          company_id?: string
+          company_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          name?: string | null
+          note?: string | null
+          opt_in?: boolean
+          opt_in_source?: string | null
+          phone?: string | null
+          source?: string | null
+          status?: Database["public"]["Enums"]["broadcast_contact_status"]
+          tags?: string[]
+          updated_at?: string
+          whatsapp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broadcast_logs: {
+        Row: {
+          action: string
+          campaign_id: string | null
+          company_id: string
+          created_at: string
+          id: string
+          metadata: Json
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          action: string
+          campaign_id?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          action?: string
+          campaign_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_logs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "broadcast_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broadcast_messages: {
+        Row: {
+          company_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          status: Database["public"]["Enums"]["content_status"]
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          status?: Database["public"]["Enums"]["content_status"]
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          status?: Database["public"]["Enums"]["content_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_messages_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_messages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broadcast_queue: {
+        Row: {
+          attempts: number
+          campaign_id: string
+          company_id: string
+          contact_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          instance_id: string | null
+          message_id: string | null
+          provider_message_id: string | null
+          rendered_content: string | null
+          scheduled_at: string
+          sent_at: string | null
+          status: Database["public"]["Enums"]["broadcast_queue_status"]
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          campaign_id: string
+          company_id: string
+          contact_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          instance_id?: string | null
+          message_id?: string | null
+          provider_message_id?: string | null
+          rendered_content?: string | null
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["broadcast_queue_status"]
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          campaign_id?: string
+          company_id?: string
+          contact_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          instance_id?: string | null
+          message_id?: string | null
+          provider_message_id?: string | null
+          rendered_content?: string | null
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["broadcast_queue_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_queue_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "broadcast_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_queue_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_queue_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "broadcast_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_queue_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_queue_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "broadcast_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broadcast_settings: {
+        Row: {
+          auto_resume: boolean
+          company_id: string
+          created_at: string
+          daily_limit: number
+          emergency_stop: boolean
+          hourly_limit: number
+          id: string
+          max_consecutive_failures: number
+          max_interval_seconds: number
+          messages_per_minute: number
+          min_interval_seconds: number
+          timezone: string
+          updated_at: string
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          auto_resume?: boolean
+          company_id: string
+          created_at?: string
+          daily_limit?: number
+          emergency_stop?: boolean
+          hourly_limit?: number
+          id?: string
+          max_consecutive_failures?: number
+          max_interval_seconds?: number
+          messages_per_minute?: number
+          min_interval_seconds?: number
+          timezone?: string
+          updated_at?: string
+          window_end?: string
+          window_start?: string
+        }
+        Update: {
+          auto_resume?: boolean
+          company_id?: string
+          created_at?: string
+          daily_limit?: number
+          emergency_stop?: boolean
+          hourly_limit?: number
+          id?: string
+          max_consecutive_failures?: number
+          max_interval_seconds?: number
+          messages_per_minute?: number
+          min_interval_seconds?: number
+          timezone?: string
+          updated_at?: string
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_hours: {
         Row: {
           company_id: string
@@ -1510,6 +1999,7 @@ export type Database = {
           assigned_at: string | null
           assigned_by: string | null
           company_id: string
+          connection_type: Database["public"]["Enums"]["whatsapp_connection_type"]
           created_at: string
           id: string
           instance_id: string | null
@@ -1535,6 +2025,7 @@ export type Database = {
           assigned_at?: string | null
           assigned_by?: string | null
           company_id: string
+          connection_type?: Database["public"]["Enums"]["whatsapp_connection_type"]
           created_at?: string
           id?: string
           instance_id?: string | null
@@ -1560,6 +2051,7 @@ export type Database = {
           assigned_at?: string | null
           assigned_by?: string | null
           company_id?: string
+          connection_type?: Database["public"]["Enums"]["whatsapp_connection_type"]
           created_at?: string
           id?: string
           instance_id?: string | null
@@ -1841,6 +2333,36 @@ export type Database = {
       }
       bootstrap_company: {
         Args: { _document?: string; _legal_name?: string; _name: string }
+        Returns: string
+      }
+      broadcast_claim_next: {
+        Args: { _limit?: number }
+        Returns: {
+          campaign_id: string
+          company_id: string
+          connection_id: string
+          contact_id: string
+          content: string
+          phone: string
+          queue_id: string
+        }[]
+      }
+      broadcast_emergency_stop: { Args: never; Returns: number }
+      broadcast_enqueue_campaign: {
+        Args: { _campaign_id: string }
+        Returns: number
+      }
+      broadcast_finalize: {
+        Args: {
+          _error?: string
+          _ok: boolean
+          _provider_message_id?: string
+          _queue_id: string
+        }
+        Returns: undefined
+      }
+      broadcast_render: {
+        Args: { _content: string; _name: string }
         Returns: string
       }
       can_view_conversation: {
@@ -2251,6 +2773,26 @@ export type Database = {
         | "CANCELLED"
       assignment_status: "ACTIVE" | "RELEASED" | "TRANSFERRED" | "CLOSED"
       availability_status: "ONLINE" | "OFFLINE" | "PAUSED" | "BUSY"
+      broadcast_campaign_status:
+        | "DRAFT"
+        | "SCHEDULED"
+        | "RUNNING"
+        | "PAUSED"
+        | "COMPLETED"
+        | "CANCELLED"
+        | "ERROR"
+      broadcast_contact_status:
+        | "ATIVO"
+        | "PAUSADO"
+        | "BLOQUEADO"
+        | "DESCADASTRADO"
+      broadcast_queue_status:
+        | "PENDING"
+        | "PROCESSING"
+        | "SENT"
+        | "FAILED"
+        | "SKIPPED"
+        | "CANCELLED"
       company_status: "ACTIVE" | "SUSPENDED" | "INACTIVE"
       content_status: "DRAFT" | "ACTIVE" | "ARCHIVED"
       conversation_status:
@@ -2320,6 +2862,7 @@ export type Database = {
         | "LOGGED_OUT"
         | "AVAILABLE"
         | "BLOCKED"
+      whatsapp_connection_type: "TRUNK" | "BROADCAST"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2456,6 +2999,29 @@ export const Constants = {
       ],
       assignment_status: ["ACTIVE", "RELEASED", "TRANSFERRED", "CLOSED"],
       availability_status: ["ONLINE", "OFFLINE", "PAUSED", "BUSY"],
+      broadcast_campaign_status: [
+        "DRAFT",
+        "SCHEDULED",
+        "RUNNING",
+        "PAUSED",
+        "COMPLETED",
+        "CANCELLED",
+        "ERROR",
+      ],
+      broadcast_contact_status: [
+        "ATIVO",
+        "PAUSADO",
+        "BLOQUEADO",
+        "DESCADASTRADO",
+      ],
+      broadcast_queue_status: [
+        "PENDING",
+        "PROCESSING",
+        "SENT",
+        "FAILED",
+        "SKIPPED",
+        "CANCELLED",
+      ],
       company_status: ["ACTIVE", "SUSPENDED", "INACTIVE"],
       content_status: ["DRAFT", "ACTIVE", "ARCHIVED"],
       conversation_status: [
@@ -2533,6 +3099,7 @@ export const Constants = {
         "AVAILABLE",
         "BLOCKED",
       ],
+      whatsapp_connection_type: ["TRUNK", "BROADCAST"],
     },
   },
 } as const
