@@ -120,6 +120,27 @@ const QUEUE_LABEL: Record<string, string> = {
   CANCELLED: "Cancelada",
 };
 
+type OverviewInstance = { id: string; name: string | null; status: string; phoneNumber: string | null };
+type HistoryRow = {
+  id: string;
+  status: string;
+  sent_at: string | null;
+  created_at: string;
+  attempts: number;
+  error_message: string | null;
+  provider_message_id: string | null;
+  campaign: { id: string; name: string } | null;
+  contact: { id: string; name: string | null; whatsapp: string } | null;
+  instance: { id: string; name: string | null } | null;
+};
+type LogRow = {
+  id: string;
+  action: string;
+  user_name: string | null;
+  created_at: string;
+  campaign: { id: string; name: string } | null;
+};
+
 const CONTACT_STATUS = ["ATIVO", "PAUSADO", "BLOQUEADO", "DESCADASTRADO"] as const;
 
 function campaignTone(status: string) {
@@ -193,7 +214,7 @@ function DisparosPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const broadcastInstances = (instances.data ?? []).filter((i) => i.connectionType === "BROADCAST");
+  const broadcastInstances = (instances.data ?? []).filter((i: Instance) => i.connectionType === "BROADCAST");
 
   return (
     <AppShell
@@ -353,7 +374,7 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
               disparo”.
             </p>
           ) : (
-            overview.instances.map((instance) => (
+            overview.instances.map((instance: OverviewInstance) => (
               <div
                 key={instance.id}
                 className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
@@ -571,10 +592,22 @@ function NewCampaignTab({
     : "";
 
   async function submit(startNow: boolean) {
-    if (!name.trim()) return toast.error("Informe o nome da campanha.");
-    if (!instanceId) return toast.error("Selecione a instância de disparo.");
-    if (!messageId) return toast.error("Selecione a mensagem.");
-    if (!audience.length) return toast.error("Selecione pelo menos um contato válido.");
+    if (!name.trim()) {
+      toast.error("Informe o nome da campanha.");
+      return;
+    }
+    if (!instanceId) {
+      toast.error("Selecione a instância de disparo.");
+      return;
+    }
+    if (!messageId) {
+      toast.error("Selecione a mensagem.");
+      return;
+    }
+    if (!audience.length) {
+      toast.error("Selecione pelo menos um contato válido.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -884,7 +917,7 @@ function ContactsTab() {
     const rows = contacts.data ?? [];
     const csv = [
       "nome,telefone,empresa,tags,status,opt_in,origem,cadastro",
-      ...rows.map((c) =>
+      ...rows.map((c: Contact) =>
         [
           c.name ?? "",
           c.whatsapp,
@@ -1028,7 +1061,7 @@ function ContactsTab() {
           ) : (contacts.data ?? []).length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Nenhum contato encontrado.</p>
           ) : (
-            (contacts.data ?? []).map((contact) => (
+            (contacts.data ?? []).map((contact: Contact) => (
               <div
                 key={contact.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
@@ -1310,7 +1343,7 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
               </div>
             )}
 
-            {qr?.id === instance.id ? (
+            {qr && qr.id === instance.id ? (
               <img
                 src={qr.code.startsWith("data:") ? qr.code : `data:image/png;base64,${qr.code}`}
                 alt="QR Code para conectar a instância de disparo"
@@ -1351,12 +1384,12 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
 
   const logs = useQuery({ queryKey: ["broadcast", "logs"], queryFn: () => logsFn({}) });
 
-  const rows = history.data ?? [];
+  const rows: HistoryRow[] = history.data ?? [];
   const totals = {
     total: rows.length,
-    sent: rows.filter((r) => r.status === "SENT").length,
-    pending: rows.filter((r) => r.status === "PENDING" || r.status === "PROCESSING").length,
-    failed: rows.filter((r) => r.status === "FAILED").length,
+    sent: rows.filter((r: HistoryRow) => r.status === "SENT").length,
+    pending: rows.filter((r: HistoryRow) => r.status === "PENDING" || r.status === "PROCESSING").length,
+    failed: rows.filter((r: HistoryRow) => r.status === "FAILED").length,
   };
   const errorRate = totals.total ? Math.round((totals.failed / totals.total) * 100) : 0;
 
@@ -1418,7 +1451,7 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
           ) : rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Nenhum envio no período.</p>
           ) : (
-            rows.map((row) => (
+            rows.map((row: HistoryRow) => (
               <div key={row.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
@@ -1452,7 +1485,7 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
           {(logs.data ?? []).length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma ação registrada.</p>
           ) : (
-            (logs.data ?? []).map((entry) => (
+            (logs.data ?? []).map((entry: LogRow) => (
               <div key={entry.id} className="flex items-center justify-between gap-2 text-sm">
                 <span>
                   <strong>{entry.action}</strong> {entry.campaign?.name ? `· ${entry.campaign.name}` : ""}
