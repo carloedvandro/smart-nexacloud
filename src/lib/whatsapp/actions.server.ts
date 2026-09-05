@@ -287,10 +287,12 @@ async function resolveConnection(input: {
     return trunk.id;
   }
 
+  // Instâncias de disparo jamais atendem: elas são exclusivas das campanhas.
   const { data: fallback } = await supabaseAdmin
     .from("whatsapp_connections")
     .select("id")
     .eq("company_id", input.companyId)
+    .eq("connection_type", "TRUNK")
     .eq("status", "CONNECTED")
     .order("instance_number", { ascending: true })
     .limit(1)

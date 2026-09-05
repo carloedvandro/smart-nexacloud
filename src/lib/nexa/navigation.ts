@@ -7,6 +7,7 @@ import {
   Smartphone,
   BookOpen,
   ListOrdered,
+  Megaphone,
   BarChart3,
   Settings,
   ShieldCheck,
@@ -86,6 +87,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ListOrdered,
     roles: ["ADMIN"],
     description: "Rodízio, SLA e distribuição",
+  },
+  {
+    label: "Disparos",
+    to: "/disparos",
+    icon: Megaphone,
+    roles: ["ADMIN"],
+    description: "Campanhas de WhatsApp em instância dedicada",
   },
   {
     label: "Relatórios",
