@@ -17,6 +17,7 @@ import { Route as AuthenticatedConhecimentoRouteImport } from './routes/_authent
 import { Route as AuthenticatedConsultoresRouteImport } from './routes/_authenticated/consultores'
 import { Route as AuthenticatedConversasRouteImport } from './routes/_authenticated/conversas'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedDisparosRouteImport } from './routes/_authenticated/disparos'
 import { Route as AuthenticatedFilaRouteImport } from './routes/_authenticated/fila'
 import { Route as AuthenticatedKanbanRouteImport } from './routes/_authenticated/kanban'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
@@ -76,6 +77,11 @@ const AuthenticatedConversasRoute = AuthenticatedConversasRouteImport.update({
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDisparosRoute = AuthenticatedDisparosRouteImport.update({
+  id: '/disparos',
+  path: '/disparos',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedFilaRoute = AuthenticatedFilaRouteImport.update({
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/consultores': typeof AuthenticatedConsultoresRoute
   '/conversas': typeof AuthenticatedConversasRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/disparos': typeof AuthenticatedDisparosRoute
   '/fila': typeof AuthenticatedFilaRoute
   '/kanban': typeof AuthenticatedKanbanRoute
   '/leads': typeof AuthenticatedLeadsRoute
@@ -209,6 +216,7 @@ export interface FileRoutesByTo {
   '/consultores': typeof AuthenticatedConsultoresRoute
   '/conversas': typeof AuthenticatedConversasRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/disparos': typeof AuthenticatedDisparosRoute
   '/fila': typeof AuthenticatedFilaRoute
   '/kanban': typeof AuthenticatedKanbanRoute
   '/leads': typeof AuthenticatedLeadsRoute
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/_authenticated/consultores': typeof AuthenticatedConsultoresRoute
   '/_authenticated/conversas': typeof AuthenticatedConversasRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/disparos': typeof AuthenticatedDisparosRoute
   '/_authenticated/fila': typeof AuthenticatedFilaRoute
   '/_authenticated/kanban': typeof AuthenticatedKanbanRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
     | '/consultores'
     | '/conversas'
     | '/dashboard'
+    | '/disparos'
     | '/fila'
     | '/kanban'
     | '/leads'
@@ -294,6 +304,7 @@ export interface FileRouteTypes {
     | '/consultores'
     | '/conversas'
     | '/dashboard'
+    | '/disparos'
     | '/fila'
     | '/kanban'
     | '/leads'
@@ -322,6 +333,7 @@ export interface FileRouteTypes {
     | '/_authenticated/consultores'
     | '/_authenticated/conversas'
     | '/_authenticated/dashboard'
+    | '/_authenticated/disparos'
     | '/_authenticated/fila'
     | '/_authenticated/kanban'
     | '/_authenticated/leads'
@@ -412,6 +424,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/disparos': {
+      id: '/_authenticated/disparos'
+      path: '/disparos'
+      fullPath: '/disparos'
+      preLoaderRoute: typeof AuthenticatedDisparosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/fila': {
@@ -549,6 +568,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedConsultoresRoute: typeof AuthenticatedConsultoresRoute
   AuthenticatedConversasRoute: typeof AuthenticatedConversasRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDisparosRoute: typeof AuthenticatedDisparosRoute
   AuthenticatedFilaRoute: typeof AuthenticatedFilaRoute
   AuthenticatedKanbanRoute: typeof AuthenticatedKanbanRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
@@ -566,6 +586,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedConsultoresRoute: AuthenticatedConsultoresRoute,
   AuthenticatedConversasRoute: AuthenticatedConversasRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDisparosRoute: AuthenticatedDisparosRoute,
   AuthenticatedFilaRoute: AuthenticatedFilaRoute,
   AuthenticatedKanbanRoute: AuthenticatedKanbanRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
