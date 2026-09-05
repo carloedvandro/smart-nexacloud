@@ -17,6 +17,7 @@ import { Route as AuthenticatedConhecimentoRouteImport } from './routes/_authent
 import { Route as AuthenticatedConsultoresRouteImport } from './routes/_authenticated/consultores'
 import { Route as AuthenticatedConversasRouteImport } from './routes/_authenticated/conversas'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedDisparosRouteImport } from './routes/_authenticated/disparos'
 import { Route as AuthenticatedFilaRouteImport } from './routes/_authenticated/fila'
 import { Route as AuthenticatedKanbanRouteImport } from './routes/_authenticated/kanban'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
@@ -27,6 +28,7 @@ import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authentic
 import { Route as AuthenticatedWhatsappRouteImport } from './routes/_authenticated/whatsapp'
 import { Route as ConviteTokenRouteImport } from './routes/convite.$token'
 import { Route as AuthenticatedVerComoUserIdRouteImport } from './routes/_authenticated/ver-como.$userId'
+import { Route as ApiPublicBroadcastTickRouteImport } from './routes/api/public/broadcast/tick'
 import { Route as ApiPublicMediaSplatRouteImport } from './routes/api/public/media/$'
 import { Route as ApiPublicQueueTickRouteImport } from './routes/api/public/queue/tick'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
@@ -75,6 +77,11 @@ const AuthenticatedConversasRoute = AuthenticatedConversasRouteImport.update({
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDisparosRoute = AuthenticatedDisparosRouteImport.update({
+  id: '/disparos',
+  path: '/disparos',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedFilaRoute = AuthenticatedFilaRouteImport.update({
@@ -129,6 +136,11 @@ const AuthenticatedVerComoUserIdRoute =
     path: '/ver-como/$userId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicBroadcastTickRoute = ApiPublicBroadcastTickRouteImport.update({
+  id: '/api/public/broadcast/tick',
+  path: '/api/public/broadcast/tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicMediaSplatRoute = ApiPublicMediaSplatRouteImport.update({
   id: '/api/public/media/$',
   path: '/api/public/media/$',
@@ -176,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/consultores': typeof AuthenticatedConsultoresRoute
   '/conversas': typeof AuthenticatedConversasRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/disparos': typeof AuthenticatedDisparosRoute
   '/fila': typeof AuthenticatedFilaRoute
   '/kanban': typeof AuthenticatedKanbanRoute
   '/leads': typeof AuthenticatedLeadsRoute
@@ -186,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/broadcast/tick': typeof ApiPublicBroadcastTickRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
   '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
@@ -202,6 +216,7 @@ export interface FileRoutesByTo {
   '/consultores': typeof AuthenticatedConsultoresRoute
   '/conversas': typeof AuthenticatedConversasRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/disparos': typeof AuthenticatedDisparosRoute
   '/fila': typeof AuthenticatedFilaRoute
   '/kanban': typeof AuthenticatedKanbanRoute
   '/leads': typeof AuthenticatedLeadsRoute
@@ -212,6 +227,7 @@ export interface FileRoutesByTo {
   '/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/broadcast/tick': typeof ApiPublicBroadcastTickRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
   '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
@@ -230,6 +246,7 @@ export interface FileRoutesById {
   '/_authenticated/consultores': typeof AuthenticatedConsultoresRoute
   '/_authenticated/conversas': typeof AuthenticatedConversasRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/disparos': typeof AuthenticatedDisparosRoute
   '/_authenticated/fila': typeof AuthenticatedFilaRoute
   '/_authenticated/kanban': typeof AuthenticatedKanbanRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
@@ -240,6 +257,7 @@ export interface FileRoutesById {
   '/_authenticated/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/_authenticated/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/broadcast/tick': typeof ApiPublicBroadcastTickRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
   '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
@@ -258,6 +276,7 @@ export interface FileRouteTypes {
     | '/consultores'
     | '/conversas'
     | '/dashboard'
+    | '/disparos'
     | '/fila'
     | '/kanban'
     | '/leads'
@@ -268,6 +287,7 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/convite/$token'
     | '/ver-como/$userId'
+    | '/api/public/broadcast/tick'
     | '/api/public/media/$'
     | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
@@ -284,6 +304,7 @@ export interface FileRouteTypes {
     | '/consultores'
     | '/conversas'
     | '/dashboard'
+    | '/disparos'
     | '/fila'
     | '/kanban'
     | '/leads'
@@ -294,6 +315,7 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/convite/$token'
     | '/ver-como/$userId'
+    | '/api/public/broadcast/tick'
     | '/api/public/media/$'
     | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
@@ -311,6 +333,7 @@ export interface FileRouteTypes {
     | '/_authenticated/consultores'
     | '/_authenticated/conversas'
     | '/_authenticated/dashboard'
+    | '/_authenticated/disparos'
     | '/_authenticated/fila'
     | '/_authenticated/kanban'
     | '/_authenticated/leads'
@@ -321,6 +344,7 @@ export interface FileRouteTypes {
     | '/_authenticated/whatsapp'
     | '/convite/$token'
     | '/_authenticated/ver-como/$userId'
+    | '/api/public/broadcast/tick'
     | '/api/public/media/$'
     | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
@@ -335,6 +359,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ConviteTokenRoute: typeof ConviteTokenRoute
+  ApiPublicBroadcastTickRoute: typeof ApiPublicBroadcastTickRoute
   ApiPublicMediaSplatRoute: typeof ApiPublicMediaSplatRoute
   ApiPublicQueueTickRoute: typeof ApiPublicQueueTickRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRouteWithChildren
@@ -399,6 +424,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/disparos': {
+      id: '/_authenticated/disparos'
+      path: '/disparos'
+      fullPath: '/disparos'
+      preLoaderRoute: typeof AuthenticatedDisparosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/fila': {
@@ -471,6 +503,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVerComoUserIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/broadcast/tick': {
+      id: '/api/public/broadcast/tick'
+      path: '/api/public/broadcast/tick'
+      fullPath: '/api/public/broadcast/tick'
+      preLoaderRoute: typeof ApiPublicBroadcastTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/media/$': {
       id: '/api/public/media/$'
       path: '/api/public/media/$'
@@ -529,6 +568,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedConsultoresRoute: typeof AuthenticatedConsultoresRoute
   AuthenticatedConversasRoute: typeof AuthenticatedConversasRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDisparosRoute: typeof AuthenticatedDisparosRoute
   AuthenticatedFilaRoute: typeof AuthenticatedFilaRoute
   AuthenticatedKanbanRoute: typeof AuthenticatedKanbanRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
@@ -546,6 +586,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedConsultoresRoute: AuthenticatedConsultoresRoute,
   AuthenticatedConversasRoute: AuthenticatedConversasRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDisparosRoute: AuthenticatedDisparosRoute,
   AuthenticatedFilaRoute: AuthenticatedFilaRoute,
   AuthenticatedKanbanRoute: AuthenticatedKanbanRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
@@ -579,6 +620,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ConviteTokenRoute: ConviteTokenRoute,
+  ApiPublicBroadcastTickRoute: ApiPublicBroadcastTickRoute,
   ApiPublicMediaSplatRoute: ApiPublicMediaSplatRoute,
   ApiPublicQueueTickRoute: ApiPublicQueueTickRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRouteWithChildren,
