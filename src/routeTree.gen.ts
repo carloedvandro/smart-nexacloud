@@ -27,6 +27,7 @@ import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authentic
 import { Route as AuthenticatedWhatsappRouteImport } from './routes/_authenticated/whatsapp'
 import { Route as ConviteTokenRouteImport } from './routes/convite.$token'
 import { Route as AuthenticatedVerComoUserIdRouteImport } from './routes/_authenticated/ver-como.$userId'
+import { Route as ApiPublicBroadcastTickRouteImport } from './routes/api/public/broadcast/tick'
 import { Route as ApiPublicMediaSplatRouteImport } from './routes/api/public/media/$'
 import { Route as ApiPublicQueueTickRouteImport } from './routes/api/public/queue/tick'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp/webhook'
@@ -129,6 +130,11 @@ const AuthenticatedVerComoUserIdRoute =
     path: '/ver-como/$userId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicBroadcastTickRoute = ApiPublicBroadcastTickRouteImport.update({
+  id: '/api/public/broadcast/tick',
+  path: '/api/public/broadcast/tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicMediaSplatRoute = ApiPublicMediaSplatRouteImport.update({
   id: '/api/public/media/$',
   path: '/api/public/media/$',
@@ -186,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/broadcast/tick': typeof ApiPublicBroadcastTickRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
   '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
@@ -212,6 +219,7 @@ export interface FileRoutesByTo {
   '/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/broadcast/tick': typeof ApiPublicBroadcastTickRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
   '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
@@ -240,6 +248,7 @@ export interface FileRoutesById {
   '/_authenticated/whatsapp': typeof AuthenticatedWhatsappRoute
   '/convite/$token': typeof ConviteTokenRoute
   '/_authenticated/ver-como/$userId': typeof AuthenticatedVerComoUserIdRoute
+  '/api/public/broadcast/tick': typeof ApiPublicBroadcastTickRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
   '/api/public/queue/tick': typeof ApiPublicQueueTickRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRouteWithChildren
@@ -268,6 +277,7 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/convite/$token'
     | '/ver-como/$userId'
+    | '/api/public/broadcast/tick'
     | '/api/public/media/$'
     | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
@@ -294,6 +304,7 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/convite/$token'
     | '/ver-como/$userId'
+    | '/api/public/broadcast/tick'
     | '/api/public/media/$'
     | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | '/_authenticated/whatsapp'
     | '/convite/$token'
     | '/_authenticated/ver-como/$userId'
+    | '/api/public/broadcast/tick'
     | '/api/public/media/$'
     | '/api/public/queue/tick'
     | '/api/public/whatsapp/webhook'
@@ -335,6 +347,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ConviteTokenRoute: typeof ConviteTokenRoute
+  ApiPublicBroadcastTickRoute: typeof ApiPublicBroadcastTickRoute
   ApiPublicMediaSplatRoute: typeof ApiPublicMediaSplatRoute
   ApiPublicQueueTickRoute: typeof ApiPublicQueueTickRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRouteWithChildren
@@ -471,6 +484,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVerComoUserIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/broadcast/tick': {
+      id: '/api/public/broadcast/tick'
+      path: '/api/public/broadcast/tick'
+      fullPath: '/api/public/broadcast/tick'
+      preLoaderRoute: typeof ApiPublicBroadcastTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/media/$': {
       id: '/api/public/media/$'
       path: '/api/public/media/$'
@@ -579,6 +599,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ConviteTokenRoute: ConviteTokenRoute,
+  ApiPublicBroadcastTickRoute: ApiPublicBroadcastTickRoute,
   ApiPublicMediaSplatRoute: ApiPublicMediaSplatRoute,
   ApiPublicQueueTickRoute: ApiPublicQueueTickRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRouteWithChildren,
