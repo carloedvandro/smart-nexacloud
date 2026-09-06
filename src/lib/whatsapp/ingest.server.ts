@@ -79,9 +79,10 @@ function deepString(payload: unknown, pattern: RegExp): string | null {
  */
 function extractInteractiveText(payload: unknown): string | null {
   const node =
-    (deepFind(payload, /^(buttonsMessage|listMessage|templateMessage|interactiveMessage|viewOnceMessage)$/i) as
-      | Json
-      | undefined) ?? undefined;
+    (deepFind(
+      payload,
+      /^(buttonsMessage|listMessage|templateMessage|interactiveMessage|viewOnceMessage)$/i,
+    ) as Json | undefined) ?? undefined;
   if (!node) return null;
 
   const header =
@@ -97,7 +98,8 @@ function extractInteractiveText(payload: unknown): string | null {
     }
     const obj = value as Json;
     const label =
-      firstString(obj, ["buttonText.displayText", "displayText", "title", "buttonParamsJson"]) ?? null;
+      firstString(obj, ["buttonText.displayText", "displayText", "title", "buttonParamsJson"]) ??
+      null;
     if (label && label.length <= 120 && !label.startsWith("{")) options.push(label);
     for (const child of Object.values(obj)) collect(child, depth + 1);
   };
@@ -109,6 +111,18 @@ function extractInteractiveText(payload: unknown): string | null {
   const unique = [...new Set(options.filter((o) => o !== header))];
   const parts = [header, unique.length ? `Opções: ${unique.join(" | ")}` : null].filter(Boolean);
   return parts.length ? parts.join("\n") : null;
+}
+
+/**
+ * Duração do áudio (em segundos) enviada pelo provedor no nó de mídia
+ * (audioMessage/pttMessage/videoMessage). Usada para estimar quanto tempo o
+ * lead leva para consumir a mensagem antes de a conversa "esfriar".
+ */
+export function extractAudioSeconds(payload: unknown): number | null {
+  const node = deepFind(payload, /(audioMessage|pttMessage|videoMessage)/i) as Json | undefined;
+  const raw = node ? (node["seconds"] ?? (node as Json)["fileLength"]) : null;
+  const value = typeof raw === "string" ? Number(raw) : typeof raw === "number" ? raw : NaN;
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
 }
 
 export function extractText(payload: unknown): string | null {
@@ -436,7 +450,14 @@ export async function processWebhookEvent(input: {
     ...opt("_media_url", mediaUrl),
     ...opt("_mime_type", mimeType),
     ...opt("_real_phone", realPhone),
-    _metadata: { remote_jid: parsed.jid, is_lid: parsed.isLid, event: eventType },
+    _metadata: {
+      remote_jid: parsed.jid,
+      is_lid: parsed.isLid,
+      event: eventType,
+      // Duração do áudio (quando o provedor envia): permite ao painel estimar
+      // quanto tempo o lead leva para ouvir antes de "esfriar" a conversa.
+      ...(messageType === "audio" ? { audio_seconds: extractAudioSeconds(payload) } : {}),
+    },
   });
 
   if (error) {

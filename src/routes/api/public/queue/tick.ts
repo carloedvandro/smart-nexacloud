@@ -134,8 +134,41 @@ async function runTick(
   return { processed: Number(data ?? 0), whatsappProcessed };
 }
 
-/** Sem mensagens por este tempo, a conversa "esfria" e o painel volta a mostrar "Aguardando consultor". */
+/** Respiro após o lead terminar de consumir a última mensagem antes de "esfriar". */
 const COLD_AFTER_MS = 10_000;
+/** Última mensagem é do lead e a IA ainda não respondeu: tolerância antes de esfriar. */
+const PENDING_REPLY_MS = 90_000;
+
+type RecentMessage = {
+  conversation_id: string;
+  sender_type: string;
+  message_type: string;
+  content: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+/**
+ * Quanto tempo o lead leva para consumir a última mensagem da IA:
+ * áudio = duração real enviada pelo provedor; texto = ritmo de leitura
+ * (~3 palavras/s no celular); mídia sem texto = estimativa fixa.
+ */
+function estimateConsumptionSeconds(message: {
+  message_type: string;
+  content: string | null;
+  metadata: Record<string, unknown> | null;
+}): number {
+  if (message.message_type === "audio") {
+    const raw = message.metadata?.["audio_seconds"];
+    const seconds = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) + 5 : 45;
+  }
+  if (message.message_type === "text") {
+    const words = ((message.content ?? "").trim().match(/\S+/g) ?? []).length;
+    return Math.min(120, Math.max(8, Math.ceil(words / 3)));
+  }
+  return 15;
+}
 
 async function coolDownIdleHumanRequests(): Promise<void> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -174,12 +207,64 @@ async function coolDownIdleHumanRequests(): Promise<void> {
     .in("id", leadIds)
     .eq("status", "AI_QUALIFYING");
 
-  const coldLeadIds = (qualifying ?? []).map((l) => l.id);
-  if (coldLeadIds.length === 0) return;
+  const qualifyingSet = new Set((qualifying ?? []).map((l) => l.id));
+  const candidateConvs = conversations.filter((c) => qualifyingSet.has(c.lead_id as string));
+  if (candidateConvs.length === 0) return;
 
-  const coldConvIds = conversations
-    .filter((c) => coldLeadIds.includes(c.lead_id as string))
-    .map((c) => c.id);
+  // Última mensagem de cada conversa e última enviada ao lead (IA/consultor):
+  // o limiar de esfriamento depende do tempo que o lead leva para consumir o
+  // que recebeu — áudio dura o que dura, texto se lê em ~3 palavras/s.
+  const { data: recentMessages } = await supabaseAdmin
+    .from("messages")
+    .select("conversation_id, sender_type, message_type, content, metadata, created_at")
+    .in(
+      "conversation_id",
+      candidateConvs.map((c) => c.id),
+    )
+    .order("created_at", { ascending: false })
+    .limit(400);
+
+  const lastByConv = new Map<string, RecentMessage>();
+  const lastAiByConv = new Map<string, RecentMessage>();
+  for (const message of (recentMessages ?? []) as RecentMessage[]) {
+    if (!lastByConv.has(message.conversation_id)) lastByConv.set(message.conversation_id, message);
+    if (
+      ["ai", "consultant"].includes(message.sender_type) &&
+      !lastAiByConv.has(message.conversation_id)
+    ) {
+      lastAiByConv.set(message.conversation_id, message);
+    }
+  }
+
+  const coldConvIds: string[] = [];
+  const coldLeadIds: string[] = [];
+  for (const conversation of candidateConvs) {
+    const last = lastByConv.get(conversation.id);
+    const lastAi = lastAiByConv.get(conversation.id);
+    if (!last) continue;
+
+    const idleMs = Date.now() - new Date(last.created_at).getTime();
+
+    // A Ana ainda não respondeu à última mensagem do lead: ela está gerando a
+    // resposta — só esfria se a IA demorar demais (falha silenciosa).
+    if (!lastAi || new Date(lastAi.created_at) < new Date(last.created_at)) {
+      if (idleMs > PENDING_REPLY_MS) {
+        coldConvIds.push(conversation.id);
+        coldLeadIds.push(conversation.lead_id as string);
+      }
+      continue;
+    }
+
+    // Lead consumindo (lendo/ouvindo): esfria só após o tempo estimado da
+    // mensagem + respiro. Áudio de 1 min = ~75s; texto curto = ~18s.
+    const thresholdMs = estimateConsumptionSeconds(lastAi) * 1_000 + COLD_AFTER_MS;
+    if (idleMs > thresholdMs) {
+      coldConvIds.push(conversation.id);
+      coldLeadIds.push(conversation.lead_id as string);
+    }
+  }
+
+  if (coldLeadIds.length === 0) return;
 
   await supabaseAdmin.from("leads").update({ status: "WAITING_HUMAN" }).in("id", coldLeadIds);
   await supabaseAdmin
