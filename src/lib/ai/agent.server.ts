@@ -818,6 +818,27 @@ export async function respondWithAI(input: {
   const needsHuman = explicitHumanRequest || (!isConsultantChat && raw.includes(HANDOFF_TOKEN));
   const text = stripNarration(raw.replaceAll(HANDOFF_TOKEN, ""));
 
+  // Outra mensagem pode ter detectado o loop enquanto esta geração ainda estava
+  // em andamento. Revalide imediatamente antes do envio para não deixar uma
+  // resposta atrasada reacender o robô externo depois do bloqueio.
+  const { data: loopBlock } = await supabaseAdmin
+    .from("ai_sessions")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("status", "HANDOFF")
+    .in("handoff_reason", [
+      "interlocutor automatizado (outra IA/robô)",
+      "muitas respostas automáticas em poucos minutos",
+      "limite de mensagens automáticas atingido",
+    ])
+    .gt("ended_at", lastResume?.created_at ?? "1970-01-01T00:00:00.000Z")
+    .limit(1)
+    .maybeSingle();
+  if (loopBlock) {
+    log("skip: geração descartada porque o bloqueio anti-loop já foi acionado");
+    return { status: "handoff", reason: "interlocutor automatizado (outra IA/robô)" };
+  }
+
   if (text) {
     const destination =
       (conversation.lead as { whatsapp: string | null } | null)?.whatsapp ?? conversation.channel_id;
