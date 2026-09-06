@@ -351,12 +351,31 @@ async function handoff(companyId: string, conversationId: string, reason: string
       .in("status", ["NEW", "AI_QUALIFYING", "QUALIFIED", "WAITING_CUSTOMER"]);
   }
 
-  const { error: sessionError } = await supabaseAdmin
+  const endedAt = new Date().toISOString();
+  const { data: endedSessions, error: sessionError } = await supabaseAdmin
     .from("ai_sessions")
-    .update({ status: "HANDOFF", ended_at: new Date().toISOString(), handoff_reason: reason })
+    .update({ status: "HANDOFF", ended_at: endedAt, handoff_reason: reason })
     .eq("conversation_id", conversationId)
-    .eq("status", "ACTIVE");
+    .eq("status", "ACTIVE")
+    .select("id");
   if (sessionError) console.error("[ia] falha ao encerrar sessão na transferência", sessionError.message);
+
+  // Algumas regras determinísticas (como detectar outra IA) são avaliadas antes
+  // da primeira sessão ser criada. Grave mesmo assim um bloqueio durável: sem
+  // esta linha, a próxima mensagem reabria a Ana e o ciclo começava novamente.
+  if (!sessionError && (endedSessions ?? []).length === 0) {
+    const { error: blockError } = await supabaseAdmin.from("ai_sessions").insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      ...(convRow?.lead_id ? { lead_id: convRow.lead_id } : {}),
+      model: MODEL,
+      status: "HANDOFF",
+      ended_at: endedAt,
+      handoff_reason: reason,
+      metadata: { automatic_block: true },
+    });
+    if (blockError) console.error("[ia] falha ao gravar bloqueio da transferência", blockError.message);
+  }
 
   // Entra na fila: o motor escolhe o consultor e inicia a contagem do SLA.
   const { error } = await supabaseAdmin.rpc("enqueue_conversation", {
@@ -606,11 +625,21 @@ export async function respondWithAI(input: {
   // Anti-loop: outro robô/IA do outro lado responderia para sempre. Paramos
   // assim que o interlocutor se identifica como automático, ou quando a troca
   // fica longa demais para um atendimento humano real.
-  const counterpartSaysBot = customerTexts.some((t) =>
-    /(sou\s+(uma\s+)?(ia|intelig(ê|e)ncia\s+artificial|assistente\s+virtual|bot|rob(ô|o)|chatbot|assistente\s+automátic))|(atendente\s+virtual)|(mensagem\s+autom(á|a)tica)|(resposta\s+autom(á|a)tica)|(sistema\s+autom(a|á)tico)|(este\s+(número|canal)\s+n(ã|a)o\s+recebe)|(as\s+an\s+ai|i am an ai|as an ai language model)/i.test(
-      t,
-    ),
-  );
+  const counterpartSaysBot = customerTexts.some((t) => {
+    const normalized = normalizeText(t).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+    return [
+      /\bsou (?:um |uma )?(?:ia|inteligencia artificial|bot|robo|chatbot)\b/,
+      /\bsou (?:um |uma )?assistente(?: de suporte)? (?:inteligente|virtual|automatic[oa])\b/,
+      /\bsou (?:um |uma )?modelo de linguagem(?: de inteligencia artificial)?\b/,
+      /\b(?:meu papel|minha funcao) (?:e|eh) (?:exclusivamente )?(?:fornecer|auxiliar|ajudar|dar) (?:informacoes|suporte|clientes|pessoas)\b/,
+      /\b(?:atendente|assistente) virtual\b/,
+      /\b(?:mensagem|resposta|sistema|atendimento) automatic[oa]\b/,
+      /\bnao sou (?:uma )?pessoa\b/,
+      /\bmeu proprietario\b/,
+      /\b(?:pare|parar|deixe) de (?:me )?(?:responder|escrever).{0,50}\b(?:credito|token|ia|inteligencia artificial)\b/,
+      /\b(?:as an ai|i am an ai|as an ai language model)\b/,
+    ].some((pattern) => pattern.test(normalized));
+  });
 
   // Sinais de robô mesmo quando ele não se identifica:
   // 1) responde quase instantaneamente às nossas mensagens, várias vezes seguidas;
@@ -662,17 +691,10 @@ export async function respondWithAI(input: {
         ? "muitas respostas automáticas em poucos minutos"
         : "limite de mensagens automáticas atingido";
     log("skip: parando respostas automáticas —", reason);
-    await supabaseAdmin
-      .from("ai_sessions")
-      .update({ status: "HANDOFF", ended_at: new Date().toISOString(), handoff_reason: reason })
-      .eq("conversation_id", conversationId)
-      .eq("status", "ACTIVE");
-    await supabaseAdmin
-      .from("conversations")
-      .update({ status: "WAITING_HUMAN" })
-      .eq("id", conversationId)
-      .eq("company_id", companyId);
-    return { status: "skipped", reason };
+    // Não responda nem com despedida: qualquer saída pode disparar novamente a
+    // outra automação. Bloqueie a Ana e encaminhe a conversa à fila humana.
+    await handoff(companyId, conversationId, reason);
+    return { status: "handoff", reason };
   }
 
 
@@ -795,6 +817,27 @@ export async function respondWithAI(input: {
 
   const needsHuman = explicitHumanRequest || (!isConsultantChat && raw.includes(HANDOFF_TOKEN));
   const text = stripNarration(raw.replaceAll(HANDOFF_TOKEN, ""));
+
+  // Outra mensagem pode ter detectado o loop enquanto esta geração ainda estava
+  // em andamento. Revalide imediatamente antes do envio para não deixar uma
+  // resposta atrasada reacender o robô externo depois do bloqueio.
+  const { data: loopBlock } = await supabaseAdmin
+    .from("ai_sessions")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("status", "HANDOFF")
+    .in("handoff_reason", [
+      "interlocutor automatizado (outra IA/robô)",
+      "muitas respostas automáticas em poucos minutos",
+      "limite de mensagens automáticas atingido",
+    ])
+    .gt("ended_at", lastResume?.created_at ?? "1970-01-01T00:00:00.000Z")
+    .limit(1)
+    .maybeSingle();
+  if (loopBlock) {
+    log("skip: geração descartada porque o bloqueio anti-loop já foi acionado");
+    return { status: "handoff", reason: "interlocutor automatizado (outra IA/robô)" };
+  }
 
   if (text) {
     const destination =
