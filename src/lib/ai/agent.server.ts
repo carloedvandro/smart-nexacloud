@@ -94,6 +94,7 @@ function buildSystemPrompt(
     "Fale português do Brasil, em tom humano, acolhedor e objetivo. Responda com no máximo 240 caracteres e até 3 frases curtas, estilo WhatsApp, sem markdown pesado.",
     'ÁUDIO: você ouve e entende áudios do cliente (eles chegam transcritos, marcados como "(áudio enviado pelo cliente)"). Você responde em áudio APENAS quando o cliente falou por áudio; se ele escreveu, responda por escrito. Se ele disser que não consegue ouvir/abrir áudios, que prefere texto, ou se for outro robô/IA que só lê texto, responda sempre por escrito e de forma completa e clara, sem depender de voz. NUNCA diga que é uma inteligência artificial que não consegue ouvir ou enviar áudios.',
     'FORMATO DA RESPOSTA: escreva SOMENTE a fala natural, como uma pessoa falaria no WhatsApp. É proibido começar (ou incluir) qualquer rótulo, narração ou anotação como "(resposta em áudio)", "[áudio]", "Áudio:", asteriscos de ação ou descrição do que você está fazendo. Comece direto pela saudação ou pela resposta.',
+    'BOTÕES: quando a pergunta tiver resposta fechada (ex.: "quer falar com um consultor?", "prefere plano individual ou empresarial?"), você pode terminar a mensagem com [BOTOES: Opção 1 | Opção 2 | Opção 3] — no máximo 3 opções, cada uma com até 24 caracteres, sem pontuação no fim. Use apenas quando fizer sentido; na maioria das mensagens converse em texto normal.',
     'Se a mensagem do cliente for confusa, vazia ou só um sinal como "?", peça gentilmente que ele repita ou explique melhor a dúvida — nunca invente que houve um problema técnico.',
     "Objetivo: qualificar o interessado (plano para pessoa física/família, empresa com CNPJ ou por adesão; quantas vidas; idades; cidade/estado; se já tem plano hoje; acomodação e preferência de operadora/hospital) e agendar a cotação com um consultor humano.",
     "- Depois de responder à dúvida ou concluir a qualificação, pergunte de forma natural se a pessoa ainda tem alguma dúvida ou se deseja falar com um consultor humano. Não repita essa pergunta em todas as mensagens.",
@@ -899,6 +900,22 @@ export async function respondWithAI(input: {
   }
   const text = stripNarration(raw.replaceAll(HANDOFF_TOKEN, ""));
 
+  // Botões opcionais: a Ana pode encerrar a resposta com
+  // [BOTOES: Opção 1 | Opção 2 | Opção 3]. A mensagem vai como lista nativa do
+  // WhatsApp (listMessage) e o clique do cliente volta como texto comum.
+  const buttonMatch = text.match(/\s*\[BOTOES:\s*([^\]]+)\]\s*$/i);
+  const buttons = buttonMatch
+    ? buttonMatch[1]!
+        .split("|")
+        .map((option) => option.trim().slice(0, 24))
+        .filter(Boolean)
+        .slice(0, 3)
+    : [];
+  const bodyText = buttonMatch ? stripNarration(text.replace(buttonMatch[0], "")) : text;
+  if (buttons.length >= 2) {
+    log("resposta com botões", { opcoes: buttons });
+  }
+
   // Outra mensagem pode ter detectado o loop enquanto esta geração ainda estava
   // em andamento. Revalide imediatamente antes do envio para não deixar uma
   // resposta atrasada reacender o robô externo depois do bloqueio.
@@ -929,14 +946,17 @@ export async function respondWithAI(input: {
 
     log("enviando resposta", { destino: recipient, temCredenciais: Boolean(creds) });
     if (recipient && creds) {
+      // Lista com botões vai sempre por escrito (a lista não existe em áudio).
+      const useButtons = buttons.length >= 2;
       // Espelhamos a modalidade do cliente: voz só quando ele falou por áudio e
       // não sinalizou que não consegue ouvir. Caso contrário, resposta escrita.
-      const voice = preferAudio
-        ? await synthesizeReplyAudio({ companyId, connectionId, text })
-        : null;
+      const voice =
+        preferAudio && !useButtons
+          ? await synthesizeReplyAudio({ companyId, connectionId, text })
+          : null;
       const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
       const asAudio = Boolean(voice && voiceUrl);
-      if (preferAudio && !asAudio)
+      if (preferAudio && !asAudio && !useButtons)
         log("cliente falou por áudio, mas a voz não ficou pronta; enviando texto");
 
       // Reservamos a mensagem ANTES do envio. A MEGA pode disparar o eco do
@@ -950,7 +970,7 @@ export async function respondWithAI(input: {
           _sender_id: null as unknown as string,
           _sender_type: "ai",
           _sender_name: "IA",
-          _content: text,
+          _content: bodyText,
           _message_type: asAudio ? "audio" : "text",
           ...(voice ? { _media_url: voice.path } : {}),
           _connection_id: connectionId,
@@ -961,22 +981,45 @@ export async function respondWithAI(input: {
         log("falha ao reservar resposta antes do envio", createMessageError.message);
       }
 
-      log("voz pronta; iniciando entrega no WhatsApp", { formato: asAudio ? "audio" : "text" });
-      let sent =
-        voice && voiceUrl
-          ? await MegaApiService.sendMedia(creds, {
+      log("voz pronta; iniciando entrega no WhatsApp", {
+        formato: asAudio ? "audio" : useButtons ? "lista" : "text",
+      });
+      let sent = asAudio
+        ? await MegaApiService.sendMedia(creds, {
+            to: recipient,
+            url: voiceUrl!,
+            mediaType: "audio",
+            mimeType: voice!.mimeType,
+            fileName: `resposta-${Date.now()}.mp3`,
+          })
+        : useButtons
+          ? await MegaApiService.sendList(creds, {
               to: recipient,
-              url: voiceUrl,
-              mediaType: "audio",
-              mimeType: voice.mimeType,
-              fileName: `resposta-${Date.now()}.mp3`,
+              title: "Escolha uma opção",
+              body: bodyText,
+              buttonText: "Opções",
+              rows: buttons.map((label, index) => ({
+                title: label,
+                rowId: String(index + 1),
+              })),
             })
-          : await MegaApiService.sendText(creds, recipient, text);
+          : await MegaApiService.sendText(creds, recipient, bodyText);
+
+      // Lista recusada (versão da MEGA sem listMessage): cai para texto com as
+      // opções numeradas — o cliente nunca fica sem responder.
+      if (useButtons && !sent.ok) {
+        log("lista recusada pela MEGA; enviando texto com opções", sent.error);
+        sent = await MegaApiService.sendText(
+          creds,
+          recipient,
+          [bodyText, "", ...buttons.map((label, index) => `${index + 1}) ${label}`)].join("\n"),
+        );
+      }
 
       // O lead nunca pode ficar sem resposta por causa do áudio.
       if (asAudio && !sent.ok) {
         log("áudio recusado pelo WhatsApp; enviando texto", sent.error);
-        sent = await MegaApiService.sendText(creds, recipient, text);
+        sent = await MegaApiService.sendText(creds, recipient, bodyText);
         if (messageId) {
           await supabaseAdmin
             .from("messages")
@@ -985,7 +1028,10 @@ export async function respondWithAI(input: {
         }
       }
 
-      log("entrega concluída", { ok: sent.ok, formato: asAudio ? "audio" : "text" });
+      log("entrega concluída", {
+        ok: sent.ok,
+        formato: asAudio ? "audio" : buttons.length >= 2 ? "lista" : "text",
+      });
 
       if (messageId) {
         await supabaseAdmin.rpc("finalize_outbound_message", {

@@ -88,7 +88,7 @@ async function request<T>(
       const rawMessage =
         payload && typeof payload === "object" && "message" in payload
           ? String((payload as { message?: unknown }).message ?? "")
-            : bodyError ?? "";
+          : (bodyError ?? "");
       const name =
         payload && typeof payload === "object" && "name" in payload
           ? String((payload as { name?: unknown }).name ?? "")
@@ -105,7 +105,6 @@ async function request<T>(
       });
       return { ok: false, error: message, status: response.status };
     }
-
 
     return { ok: true, data: payload as T };
   } catch (error) {
@@ -140,16 +139,57 @@ export const MegaApiService = {
     return MegaApiService.sendText(creds, input.to, text);
   },
 
+  /**
+   * Mensagem com lista de opções (listMessage) — endpoint da documentação
+   * pública da MEGA API (`/rest/sendMessage/{instance_key}/listMessage`).
+   * Usado pela IA para perguntas de resposta fechada; o clique do cliente
+   * volta pelo webhook como listResponseMessage (texto do item escolhido).
+   */
+  sendList(
+    creds: MegaCredentials,
+    input: {
+      to: string;
+      title: string;
+      body: string;
+      buttonText: string;
+      rows: { title: string; description?: string; rowId: string }[];
+    },
+  ) {
+    return request<{ key?: { id?: string }; messageId?: string }>(
+      creds,
+      `/rest/sendMessage/${creds.instanceKey}/listMessage`,
+      {
+        method: "POST",
+        body: {
+          messageData: {
+            to: input.to,
+            buttonText: input.buttonText,
+            text: input.body,
+            title: input.title,
+            description: input.title,
+            listType: 0,
+            sections: [
+              {
+                title: input.title,
+                rows: input.rows.map((row) => ({
+                  title: row.title,
+                  ...(row.description ? { description: row.description } : {}),
+                  rowId: row.rowId,
+                })),
+              },
+            ],
+          },
+        },
+      },
+    );
+  },
 
   /**
    * Encaminha uma mensagem recebida preservando o formato nativo.
    * É o único caminho correto para reenviar figurinhas (stickerMessage):
    * mantém WebP animado, transparência e o comportamento de figurinha.
    */
-  forwardMessage(
-    creds: MegaCredentials,
-    input: { to: string; key: unknown; message: unknown },
-  ) {
+  forwardMessage(creds: MegaCredentials, input: { to: string; key: unknown; message: unknown }) {
     return request<{ key?: { id?: string }; messageId?: string }>(
       creds,
       `/rest/sendMessage/${creds.instanceKey}/forwardMessage`,
@@ -243,10 +283,14 @@ export const MegaApiService = {
       error: "Não foi possível enviar a mídia pela MEGA API.",
     };
     for (const attempt of attempts) {
-      const result = await request<{ key?: { id?: string }; messageId?: string }>(creds, attempt.path, {
-        method: "POST",
-        body: attempt.body,
-      });
+      const result = await request<{ key?: { id?: string }; messageId?: string }>(
+        creds,
+        attempt.path,
+        {
+          method: "POST",
+          body: attempt.body,
+        },
+      );
       if (result.ok) {
         // Resposta 200 = a MEGA aceitou e vai entregar. Nunca tentamos outro
         // endpoint depois disso, senão o cliente recebe o mesmo áudio várias vezes.
@@ -256,16 +300,17 @@ export const MegaApiService = {
           tipo: input.mediaType,
           messageId: messageId ?? "sem-id",
         });
-        return { ok: true as const, data: { ...(result.data ?? {}), ...(messageId ? { messageId } : {}) } };
+        return {
+          ok: true as const,
+          data: { ...(result.data ?? {}), ...(messageId ? { messageId } : {}) },
+        };
       }
       last = result;
 
       if (result.status === 401 || result.status === 403) return result;
     }
     return last;
-
   },
-
 
   /**
    * Download de mídia recebida. A MEGA aceita formatos de corpo diferentes
@@ -306,15 +351,16 @@ export const MegaApiService = {
           currentObject["messageType"] ?? currentObject["mediaType"] ?? "",
         ).toLowerCase();
         const mime = String(currentObject["mimetype"] ?? currentObject["mimeType"] ?? "");
-        messageType = /audio/.test(declared) || mime.startsWith("audio/")
-          ? "audio"
-          : /video/.test(declared) || mime.startsWith("video/")
-            ? "video"
-            : /document/.test(declared) || (!mime.startsWith("image/") && Boolean(mime))
-              ? "document"
-              : /sticker/.test(declared)
-                ? "sticker"
-                : "image";
+        messageType =
+          /audio/.test(declared) || mime.startsWith("audio/")
+            ? "audio"
+            : /video/.test(declared) || mime.startsWith("video/")
+              ? "video"
+              : /document/.test(declared) || (!mime.startsWith("image/") && Boolean(mime))
+                ? "document"
+                : /sticker/.test(declared)
+                  ? "sticker"
+                  : "image";
         break;
       }
       for (const [name, value] of Object.entries(currentObject)) {
@@ -348,14 +394,12 @@ export const MegaApiService = {
         ? (messagePayload as Record<string, unknown>)
         : null;
     const fullMessage =
-      payloadObject && "key" in payloadObject
-        ? payloadObject
-        : { key, message: messagePayload };
+      payloadObject && "key" in payloadObject ? payloadObject : { key, message: messagePayload };
     const hasDescriptor = Boolean(
       mediaNode &&
-        typeof mediaNode["mediaKey"] === "string" &&
-        typeof mediaNode["directPath"] === "string" &&
-        typeof mediaNode["url"] === "string",
+      typeof mediaNode["mediaKey"] === "string" &&
+      typeof mediaNode["directPath"] === "string" &&
+      typeof mediaNode["url"] === "string",
     );
     const mediaDescriptor = hasDescriptor
       ? {
@@ -428,8 +472,6 @@ export const MegaApiService = {
     return last;
   },
 
-
-
   /**
    * Situação da instância.
    * ATENÇÃO: este endpoint NÃO existia no projeto de referência (YTech);
@@ -450,11 +492,9 @@ export const MegaApiService = {
 
   /** Logout do número (a instância continua pertencendo à empresa). */
   logout(creds: MegaCredentials) {
-    return request<Record<string, unknown>>(
-      creds,
-      `/rest/instance/${creds.instanceKey}/logout`,
-      { method: "DELETE" },
-    );
+    return request<Record<string, unknown>>(creds, `/rest/instance/${creds.instanceKey}/logout`, {
+      method: "DELETE",
+    });
   },
 
   /** Consulta o webhook configurado atualmente para a instância. */
@@ -491,7 +531,6 @@ export const MegaApiService = {
     }
     return last;
   },
-
 };
 
 /** Extrai a URL de webhook informada pela MEGA API em qualquer formato. */
@@ -501,7 +540,11 @@ export function extractWebhookUrl(payload: unknown): string | null {
     const node = stack.pop();
     if (!node || typeof node !== "object") continue;
     for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
-      if (typeof value === "string" && /webhook.*url|url/i.test(key) && /^https?:\/\//i.test(value)) {
+      if (
+        typeof value === "string" &&
+        /webhook.*url|url/i.test(key) &&
+        /^https?:\/\//i.test(value)
+      ) {
         return value;
       }
       if (value && typeof value === "object") stack.push(value);
@@ -545,8 +588,14 @@ export function extractQrCode(payload: unknown): string | null {
     const node = stack.pop();
     if (!node || typeof node !== "object") continue;
     for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
-      if (typeof value === "string" && /qrcode|qr_code|base64|code/i.test(key) && value.length > 40) {
-        return value.startsWith("data:") ? value : `data:image/png;base64,${value.replace(/^base64,?/, "")}`;
+      if (
+        typeof value === "string" &&
+        /qrcode|qr_code|base64|code/i.test(key) &&
+        value.length > 40
+      ) {
+        return value.startsWith("data:")
+          ? value
+          : `data:image/png;base64,${value.replace(/^base64,?/, "")}`;
       }
       if (value && typeof value === "object") stack.push(value);
     }
