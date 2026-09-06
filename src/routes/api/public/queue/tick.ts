@@ -14,15 +14,22 @@ export const Route = createFileRoute("/api/public/queue/tick")({
   },
 });
 
+type TickScope = "full" | "whatsapp";
+
 async function handle(request: Request): Promise<Response> {
+  const url = new URL(request.url);
   const secret = process.env["QUEUE_CRON_TOKEN"];
   if (secret) {
-    const url = new URL(request.url);
     const provided = request.headers.get("x-cron-token") ?? url.searchParams.get("token");
     if (provided !== secret) {
       return new Response(JSON.stringify({ error: "não autorizado" }), init(401));
     }
   }
+
+  // O trigger do banco chama este endpoint a cada evento recebido do WhatsApp
+  // só para escoar a fila de eventos; o restante (SLA, avisos, avaliações)
+  // continua no cron completo.
+  const scope: TickScope = url.searchParams.get("scope") === "whatsapp" ? "whatsapp" : "full";
 
   // O processamento de áudio pode levar mais que o limite de inatividade da
   // infraestrutura HTTP. Devolver um stream imediatamente e emitir batimentos
@@ -35,7 +42,7 @@ async function handle(request: Request): Promise<Response> {
         controller.enqueue(encoder.encode('{"status":"processing"}\n'));
       }, 2_000);
 
-      void runTick()
+      void runTick(scope)
         .then((result) => {
           controller.enqueue(encoder.encode(`${JSON.stringify({ ok: true, ...result })}\n`));
         })
@@ -61,9 +68,24 @@ async function handle(request: Request): Promise<Response> {
   });
 }
 
-async function runTick(): Promise<{ processed: number; whatsappProcessed: number }> {
-
+async function runTick(
+  scope: TickScope,
+): Promise<{ processed: number; whatsappProcessed: number }> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { processPendingWhatsappEvents } = await import("@/lib/whatsapp/event-worker.server");
+
+  // Escopo do trigger: só escoa a fila de eventos do WhatsApp. Reprocessa em
+  // lotes até esvaziar para uma rajada de mensagens não esperar o cron.
+  if (scope === "whatsapp") {
+    let whatsappProcessed = 0;
+    for (let round = 0; round < 5; round++) {
+      const batch = await processPendingWhatsappEvents(12);
+      whatsappProcessed += batch;
+      if (batch === 0) break;
+    }
+    return { processed: 0, whatsappProcessed };
+  }
+
   const { data, error } = await supabaseAdmin.rpc("queue_tick");
   if (error) {
     console.error("[fila] tick falhou", error.message);
@@ -73,7 +95,6 @@ async function runTick(): Promise<{ processed: number; whatsappProcessed: number
   // Processa eventos recebidos pelo WhatsApp fora da requisição do provedor.
   // A fila tem lease e retentativas, portanto uma execução interrompida volta
   // automaticamente no próximo tick sem perder o áudio do lead.
-  const { processPendingWhatsappEvents } = await import("@/lib/whatsapp/event-worker.server");
   const whatsappProcessed = await processPendingWhatsappEvents(12);
 
   // Avisa no WhatsApp os consultores com oferta pendente ou repassada.

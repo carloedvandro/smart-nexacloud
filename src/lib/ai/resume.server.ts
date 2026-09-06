@@ -45,22 +45,28 @@ export async function notifyAiResumedConversations(): Promise<number> {
     const reason = String((event.metadata as { reason?: string } | null)?.reason ?? "");
     if (!reason.includes(QUEUE_REASON)) continue;
 
+    // Um aviso por retomada. Se o cliente já foi avisado há pouco (outra
+    // retomada na mesma janela), este evento é marcado como suprimido em vez
+    // de ficar represado — antes ele disparava minutos depois, fora de
+    // contexto, quando o aviso anterior saía da janela.
     const { count: already } = await supabaseAdmin
       .from("conversation_events")
       .select("id", { count: "exact", head: true })
       .eq("conversation_id", event.conversation_id)
       .eq("event_type", NOTIFIED_EVENT)
       .gte("created_at", since);
-    if ((already ?? 0) > 0) continue;
+    const suppressed = (already ?? 0) > 0;
 
-    // Reserva antes de enviar: evita mensagem duplicada em ticks concorrentes.
+    // Reserva antes de enviar. O índice único
+    // (conversation_id, resume_event_id) garante no banco que só um tick
+    // consegue reservar — o outro recebe 23505 e desiste.
     const { error: claimError } = await supabaseAdmin.from("conversation_events").insert({
       company_id: event.company_id,
       conversation_id: event.conversation_id,
       event_type: NOTIFIED_EVENT,
-      metadata: { resume_event_id: event.id },
+      metadata: { resume_event_id: event.id, ...(suppressed ? { suppressed: true } : {}) },
     });
-    if (claimError) continue;
+    if (claimError || suppressed) continue;
 
     try {
       const settings = await loadAiSettings(event.company_id);

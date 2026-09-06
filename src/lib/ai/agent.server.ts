@@ -812,9 +812,11 @@ export async function respondWithAI(input: {
           {
             role: "system" as const,
             content: [
-              "PEDIDO HUMANO JÁ REGISTRADO: o cliente pediu atendimento humano, mas todos os consultores já foram acionados sem sucesso nesta conversa.",
-              "Informe com naturalidade que o pedido já está registrado e que um consultor o assumirá assim que liberar. NÃO prometa transferência imediata e NÃO inclua a expressão de transferência.",
-              "Continue ajudando o cliente normalmente por aqui.",
+              "PEDIDO HUMANO JÁ REGISTRADO: o cliente pediu atendimento humano, mas todos os consultores já foram acionados sem sucesso nesta conversa e o pedido JÁ ESTÁ na fila.",
+              "Responda que o pedido dele já está registrado e que, assim que um consultor liberar, ele assume automaticamente a conversa — o cliente não precisa fazer nada.",
+              'PROIBIDO: dizer "vou te transferir", "vou encaminhar", "vou direcionar", "aguardando liberação para transferir" ou qualquer frase que prometa uma ação futura sua. A transferência é automática e já está agendada; você não faz nada além de continuar ajudando.',
+              `PROIBIDO: usar o marcador ${HANDOFF_TOKEN} nesta resposta.`,
+              "Depois de confirmar o registro, ofereça continuar ajudando com a cotação por aqui.",
             ].join("\n"),
           },
         ]
@@ -886,7 +888,15 @@ export async function respondWithAI(input: {
   }
   const raw = generation.text;
 
-  const needsHuman = effectiveHumanRequest || (!isConsultantChat && raw.includes(HANDOFF_TOKEN));
+  // Com o pedido já registrado, o marcador emitido pelo modelo (apesar da
+  // instrução) não pode reabrir a fila: geraria outro esgotamento instantâneo
+  // e mais um aviso de "consultores ocupados" para o mesmo cliente.
+  const needsHuman =
+    effectiveHumanRequest ||
+    (!isConsultantChat && !humanRequestAlreadyRegistered && raw.includes(HANDOFF_TOKEN));
+  if (humanRequestAlreadyRegistered && raw.includes(HANDOFF_TOKEN)) {
+    log("marcador de transferência ignorado: pedido humano já registrado nesta conversa");
+  }
   const text = stripNarration(raw.replaceAll(HANDOFF_TOKEN, ""));
 
   // Outra mensagem pode ter detectado o loop enquanto esta geração ainda estava
