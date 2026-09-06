@@ -519,7 +519,19 @@ function CampaignsTab({
                   <Button
                     size="sm"
                     onClick={() =>
-                      run(startFn({ data: { campaignId: campaign.id } }), "Campanha iniciada.")
+                      run(
+                        startFn({ data: { campaignId: campaign.id } }).then((r) => {
+                          const n = (r as { enqueued?: number } | undefined)?.enqueued ?? 0;
+                          if (n === 0) {
+                            throw new Error(
+                              "Nenhum contato entrou na fila. Verifique se os contatos estão ativos e, se exigir consentimento, se deram opt-in.",
+                            );
+                          }
+                          return r;
+                        }),
+                        "Campanha iniciada.",
+                      )
+
                     }
                   >
                     <Play className="size-4" /> Iniciar
