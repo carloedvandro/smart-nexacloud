@@ -83,6 +83,10 @@ async function runTick(
       whatsappProcessed += batch;
       if (batch === 0) break;
     }
+    // O disparo do trigger também esfria conversas paradas: com movimento no
+    // WhatsApp, o painel volta a mostrar "Aguardando consultor" em ~10s após a
+    // última troca, sem depender do cron de 30s.
+    await coolDownIdleHumanRequests().catch((e) => console.error("[fila] esfriamento falhou", e));
     return { processed: 0, whatsappProcessed };
   }
 
@@ -131,7 +135,7 @@ async function runTick(
 }
 
 /** Sem mensagens por este tempo, a conversa "esfria" e o painel volta a mostrar "Aguardando consultor". */
-const COLD_AFTER_MS = 3 * 60_000;
+const COLD_AFTER_MS = 10_000;
 
 async function coolDownIdleHumanRequests(): Promise<void> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
