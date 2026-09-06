@@ -798,6 +798,61 @@ export const cancelBroadcastCampaign = createServerFn({ method: "POST" })
     });
   });
 
+/** Carrega uma campanha com os contatos escolhidos, para edição. */
+export const getBroadcastCampaign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { campaignId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const { companyId } = await requireAdmin(ctx);
+    const { data: campaign, error } = await ctx.supabase
+      .from("broadcast_campaigns")
+      .select("*")
+      .eq("id", data.campaignId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!campaign) throw new Error("Campanha inexistente.");
+    const { data: links } = await ctx.supabase
+      .from("broadcast_campaign_contacts")
+      .select("contact_id")
+      .eq("campaign_id", data.campaignId);
+    return {
+      ...(campaign as Record<string, any>),
+      contactIds: (links ?? []).map((l: { contact_id: string }) => l.contact_id),
+    };
+  });
+
+/** Exclui a campanha e todo o seu histórico de fila. Só rascunhos/encerradas. */
+export const deleteBroadcastCampaign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { campaignId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const { companyId, userName } = await requireAdmin(ctx);
+    const { data: campaign } = await ctx.supabase
+      .from("broadcast_campaigns")
+      .select("id, name, status")
+      .eq("id", data.campaignId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!campaign) throw new Error("Campanha inexistente.");
+    if (campaign.status === "RUNNING" || campaign.status === "SCHEDULED") {
+      throw new Error("Pause ou cancele a campanha antes de excluir.");
+    }
+
+    await log(ctx, companyId, userName, "CAMPAIGN_DELETED", null, { campanha: campaign.name });
+    await ctx.supabase.from("broadcast_queue").delete().eq("campaign_id", data.campaignId).eq("company_id", companyId);
+    await ctx.supabase.from("broadcast_campaign_contacts").delete().eq("campaign_id", data.campaignId);
+    const { error } = await ctx.supabase
+      .from("broadcast_campaigns")
+      .delete()
+      .eq("id", data.campaignId)
+      .eq("company_id", companyId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 export const duplicateBroadcastCampaign = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { campaignId: string }) => data)
