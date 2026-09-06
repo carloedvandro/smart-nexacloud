@@ -893,7 +893,7 @@ export const listBroadcastHistory = createServerFn({ method: "POST" })
     let query = ctx.supabase
       .from("broadcast_queue")
       .select(
-        "id, status, scheduled_at, sent_at, attempts, error_message, provider_message_id, created_at, campaign:broadcast_campaigns(id, name), contact:broadcast_contacts(id, name, whatsapp), instance:whatsapp_connections(id, name)",
+        "id, status, scheduled_at, sent_at, attempts, error_message, provider_message_id, rendered_content, created_at, campaign:broadcast_campaigns(id, name), contact:broadcast_contacts(id, name, whatsapp), instance:whatsapp_connections(id, name), message:broadcast_messages(id, name, media_url, media_type)",
       )
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
