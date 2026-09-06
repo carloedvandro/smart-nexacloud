@@ -97,7 +97,7 @@ export const listBroadcastInstances = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    await requireAdmin(ctx);
+    const { companyId } = await requireAdmin(ctx);
     const { data, error } = await ctx.supabase
       .from("whatsapp_connections")
       .select(
@@ -186,7 +186,7 @@ export const connectBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    await requireAdmin(ctx);
+    const { companyId } = await requireAdmin(ctx);
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id, connection_type")
@@ -204,7 +204,7 @@ export const refreshBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    await requireAdmin(ctx);
+    const { companyId } = await requireAdmin(ctx);
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id")
