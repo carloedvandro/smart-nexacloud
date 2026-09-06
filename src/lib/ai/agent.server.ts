@@ -654,17 +654,17 @@ export async function respondWithAI(input: {
   // um novo pedido de humano não pode virar outra promessa de transferência
   // que quebra instantaneamente. A IA confirma que o pedido já está registrado
   // e segue atendendo; após a janela, novo pedido volta a disparar handoff.
-  let humanRequestAlreadyRegistered = false;
-  if (explicitHumanRequest && (pendingOffers ?? 0) === 0) {
-    const since = new Date(Date.now() - HUMAN_REQUEST_WINDOW_MS).toISOString();
-    const { count: recentExhaustion } = await supabaseAdmin
-      .from("conversation_events")
-      .select("id", { count: "exact", head: true })
-      .eq("conversation_id", conversationId)
-      .eq("event_type", "QUEUE_NO_CONSULTANT")
-      .gte("created_at", since);
-    humanRequestAlreadyRegistered = (recentExhaustion ?? 0) > 0;
-  }
+  // Também decide o Kanban: enquanto o pedido de humano está em aberto (rodízio
+  // esgotado e ninguém assumiu), a IA só segura a conversa — o lead precisa
+  // continuar em "Aguardando consultor" para o administrador puxá-lo.
+  const { count: recentExhaustion } = await supabaseAdmin
+    .from("conversation_events")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("event_type", "QUEUE_NO_CONSULTANT")
+    .gte("created_at", new Date(Date.now() - HUMAN_REQUEST_WINDOW_MS).toISOString());
+  const humanRequestOpen = (recentExhaustion ?? 0) > 0 && (pendingOffers ?? 0) === 0;
+  const humanRequestAlreadyRegistered = explicitHumanRequest && humanRequestOpen;
   const effectiveHumanRequest = explicitHumanRequest && !humanRequestAlreadyRegistered;
 
   // Anti-loop: outro robô/IA do outro lado responderia para sempre. Paramos
@@ -1020,6 +1020,9 @@ export async function respondWithAI(input: {
     .eq("company_id", companyId);
 
   // O Kanban precisa refletir a realidade: quem está atendendo agora é a IA.
+  // Exceção: com o pedido de humano em aberto (rodízio esgotado), a IA apenas
+  // segura a conversa — o lead fica em "Aguardando consultor" para o
+  // administrador enxergar e puxar o atendimento.
   const leadId = input.leadId ?? (conversation as { lead_id?: string | null }).lead_id ?? null;
   if (leadId) {
     await supabaseAdmin
@@ -1027,7 +1030,12 @@ export async function respondWithAI(input: {
       .update({ status: "AI_QUALIFYING" })
       .eq("id", leadId)
       .eq("company_id", companyId)
-      .in("status", ["NEW", "WAITING_HUMAN", "WAITING_CUSTOMER", "IN_SERVICE"]);
+      .in(
+        "status",
+        humanRequestOpen
+          ? ["NEW", "WAITING_CUSTOMER"]
+          : ["NEW", "WAITING_HUMAN", "WAITING_CUSTOMER", "IN_SERVICE"],
+      );
   }
 
   log("respondido com sucesso");
