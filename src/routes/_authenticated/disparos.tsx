@@ -515,11 +515,23 @@ function CampaignsTab({
               ) : null}
 
               <div className="flex flex-wrap gap-2">
-                {(campaign.status === "DRAFT" || campaign.status === "COMPLETED") && (
+                {["DRAFT", "COMPLETED", "CANCELLED", "ERROR"].includes(campaign.status) && (
                   <Button
                     size="sm"
                     onClick={() =>
-                      run(startFn({ data: { campaignId: campaign.id } }), "Campanha iniciada.")
+                      run(
+                        startFn({ data: { campaignId: campaign.id } }).then((r) => {
+                          const n = (r as { enqueued?: number } | undefined)?.enqueued ?? 0;
+                          if (n === 0) {
+                            throw new Error(
+                              "Nenhum contato entrou na fila. Verifique se os contatos estão ativos e, se exigir consentimento, se deram opt-in.",
+                            );
+                          }
+                          return r;
+                        }),
+                        "Campanha iniciada.",
+                      )
+
                     }
                   >
                     <Play className="size-4" /> Iniciar
@@ -1234,6 +1246,17 @@ function MessagesTab({ messages }: { messages: Message[] }) {
     setRemoveImage(false);
   }
 
+  function startEdit(m: Message) {
+    setEditingId(m.id);
+    setName(m.name);
+    setContent(m.content ?? "");
+    setImage(null);
+    setRemoveImage(false);
+    setExistingImage(m.mediaPreviewUrl ?? null);
+  }
+
+
+
   async function pickImage(file: File) {
     if (file.size > 8 * 1024 * 1024) {
       toast.error("A imagem deve ter no máximo 8 MB.");
@@ -1285,13 +1308,20 @@ function MessagesTab({ messages }: { messages: Message[] }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Nome interno</Label>
           <Input placeholder="Nome interno" value={name} onChange={(e) => setName(e.target.value)} />
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Mensagem (clique aqui para escrever)
+          </Label>
           <Textarea
+            key={editingId ?? "novo"}
+            autoFocus={Boolean(editingId)}
             rows={7}
             placeholder="Olá {{primeiro_nome}}, tudo bem?"
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
+
           {unknownVars.length ? (
             <p className="text-xs text-destructive">
               Variáveis não suportadas: {[...new Set(unknownVars)].map((v) => `{{${v}}}`).join(", ")}
@@ -1331,11 +1361,17 @@ function MessagesTab({ messages }: { messages: Message[] }) {
             />
           </div>
 
-          <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
-            {content
-              .replace(/\{\{nome\}\}/g, "Maria Silva")
-              .replace(/\{\{primeiro_nome\}\}/g, "Maria") || "Prévia da mensagem"}
+          <div className="space-y-1">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Prévia (apenas visualização)
+            </Label>
+            <div className="pointer-events-none select-none rounded-lg border border-dashed border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap opacity-90">
+              {content
+                .replace(/\{\{nome\}\}/g, "Maria Silva")
+                .replace(/\{\{primeiro_nome\}\}/g, "Maria") || "Prévia da mensagem"}
+            </div>
           </div>
+
 
           <div className="flex gap-2">
             <Button className="flex-1" disabled={unknownVars.length > 0 || saving} onClick={save}>
@@ -1360,7 +1396,18 @@ function MessagesTab({ messages }: { messages: Message[] }) {
             <p className="py-8 text-center text-sm text-muted-foreground">Nenhum modelo cadastrado.</p>
           ) : (
             messages.map((m) => (
-              <div key={m.id} className="rounded-lg border border-border p-3">
+              <div
+                key={m.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => startEdit(m)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") startEdit(m);
+                }}
+                className={`cursor-pointer rounded-lg border p-3 transition-colors hover:border-primary/60 ${
+                  editingId === m.id ? "border-primary" : "border-border"
+                }`}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium">{m.name}</p>
                   <div className="flex items-center gap-2">
@@ -1368,29 +1415,28 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => {
-                        setEditingId(m.id);
-                        setName(m.name);
-                        setContent(m.content ?? "");
-                        setImage(null);
-                        setRemoveImage(false);
-                        setExistingImage(m.mediaPreviewUrl ?? null);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEdit(m);
                       }}
                     >
                       <Pencil className="size-4" />
                     </Button>
+
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() =>
-                        deleteFn({ data: { id: m.id } })
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void deleteFn({ data: { id: m.id } })
                           .then(() => {
                             toast.success("Mensagem excluída.");
                             if (editingId === m.id) reset();
                             void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
                           })
-                          .catch((error: Error) => toast.error(error.message))
-                      }
+                          .catch((error: Error) => toast.error(error.message));
+                      }}
+
                     >
                       <Trash2 className="size-4" />
                     </Button>
