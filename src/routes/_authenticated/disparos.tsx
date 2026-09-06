@@ -1204,8 +1204,15 @@ function MessagesTab({ messages }: { messages: Message[] }) {
   const queryClient = useQueryClient();
   const saveFn = useServerFn(saveBroadcastMessage);
   const deleteFn = useServerFn(deleteBroadcastMessage);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
+  const [image, setImage] = useState<{ base64: string; mime: string; filename: string; preview: string } | null>(
+    null,
+  );
+  const [existingImage, setExistingImage] = useState<string | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const unknownVars = useMemo(
     () =>
@@ -1215,12 +1222,64 @@ function MessagesTab({ messages }: { messages: Message[] }) {
     [content],
   );
 
+  function reset() {
+    setEditingId(null);
+    setName("");
+    setContent("");
+    setImage(null);
+    setExistingImage(null);
+    setRemoveImage(false);
+  }
+
+  async function pickImage(file: File) {
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 8 MB.");
+      return;
+    }
+    const buffer = await file.arrayBuffer();
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+    setImage({
+      base64: btoa(binary),
+      mime: file.type || "image/jpeg",
+      filename: file.name || "imagem.jpg",
+      preview: URL.createObjectURL(file),
+    });
+    setRemoveImage(false);
+  }
+
+  function save() {
+    setSaving(true);
+    saveFn({
+      data: {
+        ...(editingId ? { id: editingId } : {}),
+        name,
+        content,
+        ...(image
+          ? { mediaBase64: image.base64, mediaMimeType: image.mime, mediaFilename: image.filename }
+          : {}),
+        ...(removeImage && !image ? { removeMedia: true } : {}),
+      },
+    })
+      .then(() => {
+        toast.success(editingId ? "Modelo atualizado." : "Mensagem salva.");
+        reset();
+        void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+      })
+      .catch((error: Error) => toast.error(error.message))
+      .finally(() => setSaving(false));
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
       <Card className="h-fit">
         <CardHeader>
-          <CardTitle className="text-base">Novo modelo</CardTitle>
-          <CardDescription>Variáveis aceitas: {"{{nome}}"} e {"{{primeiro_nome}}"}.</CardDescription>
+          <CardTitle className="text-base">{editingId ? "Editar modelo" : "Novo modelo"}</CardTitle>
+          <CardDescription>
+            Variáveis aceitas: {"{{nome}}"} e {"{{primeiro_nome}}"}. Você pode anexar uma imagem — o texto vai
+            junto como legenda.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input placeholder="Nome interno" value={name} onChange={(e) => setName(e.target.value)} />
@@ -1235,27 +1294,57 @@ function MessagesTab({ messages }: { messages: Message[] }) {
               Variáveis não suportadas: {[...new Set(unknownVars)].map((v) => `{{${v}}}`).join(", ")}
             </p>
           ) : null}
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Imagem (opcional)</Label>
+            {image || (existingImage && !removeImage) ? (
+              <div className="flex items-start gap-3">
+                <img
+                  src={image?.preview ?? existingImage ?? ""}
+                  alt="Imagem anexada à mensagem"
+                  className="size-24 rounded-lg border border-border object-cover"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
+                  onClick={() => {
+                    setImage(null);
+                    setRemoveImage(true);
+                  }}
+                >
+                  <X className="size-4" /> Remover imagem
+                </Button>
+              </div>
+            ) : null}
+            <Input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void pickImage(file);
+                e.target.value = "";
+              }}
+            />
+          </div>
+
           <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
             {content
               .replace(/\{\{nome\}\}/g, "Maria Silva")
               .replace(/\{\{primeiro_nome\}\}/g, "Maria") || "Prévia da mensagem"}
           </div>
-          <Button
-            className="w-full"
-            disabled={unknownVars.length > 0}
-            onClick={() =>
-              saveFn({ data: { name, content } })
-                .then(() => {
-                  toast.success("Mensagem salva.");
-                  setName("");
-                  setContent("");
-                  void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
-                })
-                .catch((error: Error) => toast.error(error.message))
-            }
-          >
-            <Plus className="size-4" /> Salvar mensagem
-          </Button>
+
+          <div className="flex gap-2">
+            <Button className="flex-1" disabled={unknownVars.length > 0 || saving} onClick={save}>
+              {editingId ? <ImagePlus className="size-4" /> : <Plus className="size-4" />}
+              {editingId ? "Salvar alterações" : "Salvar mensagem"}
+            </Button>
+            {editingId ? (
+              <Button variant="outline" onClick={reset}>
+                Cancelar
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -1276,10 +1365,25 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     <Button
                       size="icon"
                       variant="ghost"
+                      onClick={() => {
+                        setEditingId(m.id);
+                        setName(m.name);
+                        setContent(m.content ?? "");
+                        setImage(null);
+                        setRemoveImage(false);
+                        setExistingImage(m.mediaPreviewUrl ?? null);
+                      }}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
                       onClick={() =>
                         deleteFn({ data: { id: m.id } })
                           .then(() => {
                             toast.success("Mensagem excluída.");
+                            if (editingId === m.id) reset();
                             void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
                           })
                           .catch((error: Error) => toast.error(error.message))
@@ -1289,6 +1393,13 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     </Button>
                   </div>
                 </div>
+                {m.mediaPreviewUrl ? (
+                  <img
+                    src={m.mediaPreviewUrl}
+                    alt={`Imagem do modelo ${m.name}`}
+                    className="mt-2 size-28 rounded-lg border border-border object-cover"
+                  />
+                ) : null}
                 <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{m.content}</p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   Criada em {formatDate(m.created_at)} · atualizada em {formatDate(m.updated_at)}
