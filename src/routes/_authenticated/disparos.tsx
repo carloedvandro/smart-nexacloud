@@ -1338,11 +1338,17 @@ function MessagesTab({ messages }: { messages: Message[] }) {
             />
           </div>
 
-          <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
-            {content
-              .replace(/\{\{nome\}\}/g, "Maria Silva")
-              .replace(/\{\{primeiro_nome\}\}/g, "Maria") || "Prévia da mensagem"}
+          <div className="space-y-1">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Prévia (apenas visualização)
+            </Label>
+            <div className="pointer-events-none select-none rounded-lg border border-dashed border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap opacity-90">
+              {content
+                .replace(/\{\{nome\}\}/g, "Maria Silva")
+                .replace(/\{\{primeiro_nome\}\}/g, "Maria") || "Prévia da mensagem"}
+            </div>
           </div>
+
 
           <div className="flex gap-2">
             <Button className="flex-1" disabled={unknownVars.length > 0 || saving} onClick={save}>
