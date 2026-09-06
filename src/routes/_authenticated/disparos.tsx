@@ -1416,16 +1416,15 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                       variant="ghost"
                       onClick={(e) => {
                         e.stopPropagation();
-                        void
-
-                        deleteFn({ data: { id: m.id } })
+                        void deleteFn({ data: { id: m.id } })
                           .then(() => {
                             toast.success("Mensagem excluída.");
                             if (editingId === m.id) reset();
                             void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
                           })
-                          .catch((error: Error) => toast.error(error.message))
-                      }
+                          .catch((error: Error) => toast.error(error.message));
+                      }}
+
                     >
                       <Trash2 className="size-4" />
                     </Button>
