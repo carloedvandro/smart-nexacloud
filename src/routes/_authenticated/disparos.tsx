@@ -7,8 +7,10 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  ImagePlus,
   Megaphone,
   OctagonX,
+  Pencil,
   Pause,
   Play,
   Plus,
@@ -51,10 +53,12 @@ import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
   cancelBroadcastCampaign,
   connectBroadcastInstance,
+  deleteBroadcastCampaign,
   deleteBroadcastContacts,
   deleteBroadcastMessage,
   disconnectBroadcastInstance,
   duplicateBroadcastCampaign,
+  getBroadcastCampaign,
   getBroadcastOverview,
   getBroadcastSettings,
   importBroadcastContacts,
@@ -167,6 +171,7 @@ function GuardedDisparosPage() {
 function DisparosPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("visao");
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
 
   const overviewFn = useServerFn(getBroadcastOverview);
   const campaignsFn = useServerFn(listBroadcastCampaigns);
@@ -247,7 +252,7 @@ function DisparosPage() {
         <TabsList className="flex w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="visao">Visão geral</TabsTrigger>
           <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
-          <TabsTrigger value="nova">Nova campanha</TabsTrigger>
+          <TabsTrigger value="nova">{editingCampaignId ? "Editar campanha" : "Nova campanha"}</TabsTrigger>
           <TabsTrigger value="contatos">Contatos</TabsTrigger>
           <TabsTrigger value="mensagens">Mensagens</TabsTrigger>
           <TabsTrigger value="instancias">Instâncias de disparo</TabsTrigger>
@@ -260,7 +265,14 @@ function DisparosPage() {
         </TabsContent>
 
         <TabsContent value="campanhas">
-          <CampaignsTab campaigns={campaigns.data ?? []} loading={campaigns.isLoading} />
+          <CampaignsTab
+            campaigns={campaigns.data ?? []}
+            loading={campaigns.isLoading}
+            onEdit={(id) => {
+              setEditingCampaignId(id);
+              setTab("nova");
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="nova">
@@ -269,7 +281,11 @@ function DisparosPage() {
             messages={messages.data ?? []}
             contacts={contacts.data ?? []}
             settings={overview.data?.settings}
-            onCreated={() => setTab("campanhas")}
+            editingId={editingCampaignId}
+            onCreated={() => {
+              setEditingCampaignId(null);
+              setTab("campanhas");
+            }}
           />
         </TabsContent>
 
@@ -406,8 +422,17 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
 
 type Campaign = Awaited<ReturnType<typeof listBroadcastCampaigns>>[number];
 
-function CampaignsTab({ campaigns, loading }: { campaigns: Campaign[]; loading: boolean }) {
+function CampaignsTab({
+  campaigns,
+  loading,
+  onEdit,
+}: {
+  campaigns: Campaign[];
+  loading: boolean;
+  onEdit: (id: string) => void;
+}) {
   const queryClient = useQueryClient();
+  const deleteFn = useServerFn(deleteBroadcastCampaign);
   const startFn = useServerFn(startBroadcastCampaign);
   const pauseFn = useServerFn(pauseBroadcastCampaign);
   const resumeFn = useServerFn(resumeBroadcastCampaign);
@@ -526,6 +551,9 @@ function CampaignsTab({ campaigns, loading }: { campaigns: Campaign[]; loading: 
                     <X className="size-4" /> Cancelar
                   </Button>
                 ) : null}
+                <Button size="sm" variant="outline" onClick={() => onEdit(campaign.id)}>
+                  <Pencil className="size-4" /> Editar
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -533,6 +561,30 @@ function CampaignsTab({ campaigns, loading }: { campaigns: Campaign[]; loading: 
                 >
                   Duplicar
                 </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="ghost" className="text-destructive">
+                      <Trash2 className="size-4" /> Excluir
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Excluir “{campaign.name}”?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        A campanha sai da lista junto com o histórico de envios dela. Essa ação não pode ser
+                        desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Voltar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => run(deleteFn({ data: { campaignId: campaign.id } }), "Campanha excluída.")}
+                      >
+                        Excluir
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </CardContent>
           </Card>
