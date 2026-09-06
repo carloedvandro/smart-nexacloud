@@ -32,7 +32,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -124,7 +130,12 @@ const QUEUE_LABEL: Record<string, string> = {
   CANCELLED: "Cancelada",
 };
 
-type OverviewInstance = { id: string; name: string | null; status: string; phoneNumber: string | null };
+type OverviewInstance = {
+  id: string;
+  name: string | null;
+  status: string;
+  phoneNumber: string | null;
+};
 type HistoryRow = {
   id: string;
   status: string;
@@ -183,8 +194,14 @@ function DisparosPage() {
   const stopAllFn = useServerFn(stopAllBroadcasts);
 
   const overview = useQuery({ queryKey: ["broadcast", "overview"], queryFn: () => overviewFn({}) });
-  const campaigns = useQuery({ queryKey: ["broadcast", "campaigns"], queryFn: () => campaignsFn({}) });
-  const instances = useQuery({ queryKey: ["broadcast", "instances"], queryFn: () => instancesFn({}) });
+  const campaigns = useQuery({
+    queryKey: ["broadcast", "campaigns"],
+    queryFn: () => campaignsFn({}),
+  });
+  const instances = useQuery({
+    queryKey: ["broadcast", "instances"],
+    queryFn: () => instancesFn({}),
+  });
   const messages = useQuery({ queryKey: ["broadcast", "messages"], queryFn: () => messagesFn({}) });
   const contacts = useQuery({
     queryKey: ["broadcast", "contacts"],
@@ -195,9 +212,13 @@ function DisparosPage() {
   useEffect(() => {
     const channel = supabase
       .channel("broadcast-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "broadcast_campaigns" }, () => {
-        void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "broadcast_campaigns" },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+        },
+      )
       .on("postgres_changes", { event: "*", schema: "public", table: "broadcast_queue" }, () => {
         void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
       })
@@ -215,13 +236,17 @@ function DisparosPage() {
   const stopAll = useMutation({
     mutationFn: () => stopAllFn({}),
     onSuccess: (result) => {
-      toast.success(`Disparos interrompidos. ${result.cancelled} envio(s) pendente(s) cancelado(s).`);
+      toast.success(
+        `Disparos interrompidos. ${result.cancelled} envio(s) pendente(s) cancelado(s).`,
+      );
       void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const broadcastInstances = (instances.data ?? []).filter((i: Instance) => i.connectionType === "BROADCAST");
+  const broadcastInstances = (instances.data ?? []).filter(
+    (i: Instance) => i.connectionType === "BROADCAST",
+  );
 
   return (
     <AppShell
@@ -238,8 +263,9 @@ function DisparosPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Parar todos os disparos?</AlertDialogTitle>
               <AlertDialogDescription>
-                Todos os envios pendentes serão cancelados, as campanhas em andamento ficarão pausadas e
-                nenhum novo envio acontecerá até você liberar em Configurações. O histórico é preservado.
+                Todos os envios pendentes serão cancelados, as campanhas em andamento ficarão
+                pausadas e nenhum novo envio acontecerá até você liberar em Configurações. O
+                histórico é preservado.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -254,7 +280,9 @@ function DisparosPage() {
         <TabsList className="flex w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="visao">Visão geral</TabsTrigger>
           <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
-          <TabsTrigger value="nova">{editingCampaignId ? "Editar campanha" : "Nova campanha"}</TabsTrigger>
+          <TabsTrigger value="nova">
+            {editingCampaignId ? "Editar campanha" : "Nova campanha"}
+          </TabsTrigger>
           <TabsTrigger value="contatos">Contatos</TabsTrigger>
           <TabsTrigger value="mensagens">Mensagens</TabsTrigger>
           <TabsTrigger value="instancias">Instâncias de disparo</TabsTrigger>
@@ -344,8 +372,8 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
           <CardContent className="flex items-center gap-3 py-4">
             <OctagonX className="size-5 text-destructive" />
             <p className="text-sm">
-              <strong>Disparos bloqueados</strong> pela parada de emergência. Libere em Configurações para
-              iniciar novas campanhas.
+              <strong>Disparos bloqueados</strong> pela parada de emergência. Libere em
+              Configurações para iniciar novas campanhas.
             </p>
           </CardContent>
         </Card>
@@ -355,9 +383,10 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
             <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
             <p className="text-sm font-medium">Proteção de envio ativa</p>
             <p className="text-xs text-muted-foreground">
-              {s.messages_per_minute} msg/min · intervalo {s.min_interval_seconds}–{s.max_interval_seconds}s ·
-              limite {s.hourly_limit}/hora e {s.daily_limit}/dia · janela {String(s.window_start).slice(0, 5)} às{" "}
-              {String(s.window_end).slice(0, 5)} · pausa após {s.max_consecutive_failures} falhas seguidas
+              {s.messages_per_minute} msg/min · intervalo {s.min_interval_seconds}–
+              {s.max_interval_seconds}s · limite {s.hourly_limit}/hora e {s.daily_limit}/dia ·
+              janela {String(s.window_start).slice(0, 5)} às {String(s.window_end).slice(0, 5)} ·
+              pausa após {s.max_consecutive_failures} falhas seguidas
             </p>
           </CardContent>
         </Card>
@@ -388,8 +417,8 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
         <CardContent className="space-y-2">
           {overview.instances.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Nenhuma instância marcada como disparo. Marque uma conexão já provisionada na aba “Instâncias de
-              disparo”.
+              Nenhuma instância marcada como disparo. Marque uma conexão já provisionada na aba
+              “Instâncias de disparo”.
             </p>
           ) : (
             overview.instances.map((instance: OverviewInstance) => (
@@ -399,7 +428,9 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
               >
                 <span className="font-medium">{instance.name ?? "Instância de disparo"}</span>
                 <span className="text-muted-foreground">
-                  {instance.phoneNumber ? PhoneNormalizationService.format(instance.phoneNumber) : "sem número"}
+                  {instance.phoneNumber
+                    ? PhoneNormalizationService.format(instance.phoneNumber)
+                    : "sem número"}
                 </span>
                 <Badge variant={instance.status === "CONNECTED" ? "default" : "secondary"}>
                   {instance.status}
@@ -411,8 +442,9 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Os limites são controles operacionais do NexaAtende. Eles reduzem o volume e a cadência dos envios, mas
-        não constituem garantia contra bloqueios ou contra as políticas do WhatsApp e do provedor.
+        Os limites são controles operacionais do NexaAtende. Eles reduzem o volume e a cadência dos
+        envios, mas não constituem garantia contra bloqueios ou contra as políticas do WhatsApp e do
+        provedor.
       </p>
     </div>
   );
@@ -458,8 +490,8 @@ function CampaignsTab({
           <Megaphone className="size-8 text-muted-foreground" />
           <p className="text-base font-medium">Nenhuma campanha ainda</p>
           <p className="max-w-md text-sm text-muted-foreground">
-            Crie a primeira campanha na aba “Nova campanha”. Ela só poderá usar uma instância marcada como
-            disparo.
+            Crie a primeira campanha na aba “Nova campanha”. Ela só poderá usar uma instância
+            marcada como disparo.
           </p>
         </CardContent>
       </Card>
@@ -470,15 +502,17 @@ function CampaignsTab({
     <div className="space-y-4">
       {campaigns.map((campaign) => {
         const stats = campaign.stats;
-        const progress = stats.total ? Math.round(((stats.sent + stats.failed) / stats.total) * 100) : 0;
+        const progress = stats.total
+          ? Math.round(((stats.sent + stats.failed) / stats.total) * 100)
+          : 0;
         return (
           <Card key={campaign.id}>
             <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
               <div>
                 <CardTitle className="text-base">{campaign.name}</CardTitle>
                 <CardDescription>
-                  {campaign.instance?.name ?? "sem instância"} · {campaign.message?.name ?? "sem mensagem"} ·{" "}
-                  {campaign.audience} contatos
+                  {campaign.instance?.name ?? "sem instância"} ·{" "}
+                  {campaign.message?.name ?? "sem mensagem"} · {campaign.audience} contatos
                 </CardDescription>
               </div>
               <Badge className={campaignTone(campaign.status)} variant="secondary">
@@ -489,7 +523,8 @@ function CampaignsTab({
               <div className="space-y-1">
                 <Progress value={progress} />
                 <p className="text-xs text-muted-foreground">
-                  {stats.sent} enviadas · {stats.pending} pendentes · {stats.failed} falhas · {progress}%
+                  {stats.sent} enviadas · {stats.pending} pendentes · {stats.failed} falhas ·{" "}
+                  {progress}%
                 </p>
               </div>
 
@@ -500,12 +535,15 @@ function CampaignsTab({
                 </span>
                 <span>Limite diário: {campaign.daily_limit}</span>
                 <span>
-                  Janela: {String(campaign.window_start).slice(0, 5)}–{String(campaign.window_end).slice(0, 5)}
+                  Janela: {String(campaign.window_start).slice(0, 5)}–
+                  {String(campaign.window_end).slice(0, 5)}
                 </span>
                 <span>Criada: {formatDate(campaign.created_at)}</span>
                 <span>Início: {formatDate(campaign.started_at)}</span>
                 <span>Última atividade: {formatDate(campaign.last_activity_at)}</span>
-                {campaign.scheduled_at ? <span>Agendada: {formatDate(campaign.scheduled_at)}</span> : null}
+                {campaign.scheduled_at ? (
+                  <span>Agendada: {formatDate(campaign.scheduled_at)}</span>
+                ) : null}
               </div>
 
               {campaign.pause_reason ? (
@@ -521,8 +559,13 @@ function CampaignsTab({
                     onClick={() =>
                       run(
                         startFn({ data: { campaignId: campaign.id } }).then((r) => {
-                          const n = (r as { enqueued?: number } | undefined)?.enqueued ?? 0;
-                          if (n === 0) {
+                          const res = r as { enqueued?: number; reason?: string } | undefined;
+                          if ((res?.enqueued ?? 0) === 0) {
+                            if (res?.reason === "already_sent") {
+                              throw new Error(
+                                "Todos os contatos desta campanha já receberam a mensagem. Use Duplicar para reenviar a todos.",
+                              );
+                            }
                             throw new Error(
                               "Nenhum contato entrou na fila. Verifique se os contatos estão ativos e, se exigir consentimento, se deram opt-in.",
                             );
@@ -531,7 +574,6 @@ function CampaignsTab({
                         }),
                         "Campanha iniciada.",
                       )
-
                     }
                   >
                     <Play className="size-4" /> Iniciar
@@ -541,7 +583,9 @@ function CampaignsTab({
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => run(pauseFn({ data: { campaignId: campaign.id } }), "Campanha pausada.")}
+                    onClick={() =>
+                      run(pauseFn({ data: { campaignId: campaign.id } }), "Campanha pausada.")
+                    }
                   >
                     <Pause className="size-4" /> Pausar
                   </Button>
@@ -549,7 +593,9 @@ function CampaignsTab({
                 {campaign.status === "PAUSED" ? (
                   <Button
                     size="sm"
-                    onClick={() => run(resumeFn({ data: { campaignId: campaign.id } }), "Campanha retomada.")}
+                    onClick={() =>
+                      run(resumeFn({ data: { campaignId: campaign.id } }), "Campanha retomada.")
+                    }
                   >
                     <Play className="size-4" /> Retomar
                   </Button>
@@ -571,7 +617,9 @@ function CampaignsTab({
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => run(duplicateFn({ data: { campaignId: campaign.id } }), "Campanha duplicada.")}
+                  onClick={() =>
+                    run(duplicateFn({ data: { campaignId: campaign.id } }), "Campanha duplicada.")
+                  }
                 >
                   Duplicar
                 </Button>
@@ -585,14 +633,16 @@ function CampaignsTab({
                     <AlertDialogHeader>
                       <AlertDialogTitle>Excluir “{campaign.name}”?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        A campanha sai da lista junto com o histórico de envios dela. Essa ação não pode ser
-                        desfeita.
+                        A campanha sai da lista junto com o histórico de envios dela. Essa ação não
+                        pode ser desfeita.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Voltar</AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => run(deleteFn({ data: { campaignId: campaign.id } }), "Campanha excluída.")}
+                        onClick={() =>
+                          run(deleteFn({ data: { campaignId: campaign.id } }), "Campanha excluída.")
+                        }
                       >
                         Excluir
                       </AlertDialogAction>
@@ -645,7 +695,9 @@ function NewCampaignTab({
   const [minInterval, setMinInterval] = useState(settings?.min_interval_seconds ?? 10);
   const [maxInterval, setMaxInterval] = useState(settings?.max_interval_seconds ?? 25);
   const [dailyLimit, setDailyLimit] = useState(settings?.daily_limit ?? 200);
-  const [windowStart, setWindowStart] = useState(String(settings?.window_start ?? "08:00").slice(0, 5));
+  const [windowStart, setWindowStart] = useState(
+    String(settings?.window_start ?? "08:00").slice(0, 5),
+  );
   const [windowEnd, setWindowEnd] = useState(String(settings?.window_end ?? "20:00").slice(0, 5));
   const [scheduledAt, setScheduledAt] = useState("");
   const [saving, setSaving] = useState(false);
@@ -684,9 +736,11 @@ function NewCampaignTab({
   const preview = message
     ? (message.content ?? "")
         .replace(/\{\{nome\}\}/g, audience[0]?.name?.trim() || "cliente")
-        .replace(/\{\{primeiro_nome\}\}/g, (audience[0]?.name?.trim() || "cliente").split(" ")[0] ?? "cliente")
+        .replace(
+          /\{\{primeiro_nome\}\}/g,
+          (audience[0]?.name?.trim() || "cliente").split(" ")[0] ?? "cliente",
+        )
     : "";
-
 
   async function submit(startNow: boolean) {
     if (!name.trim()) {
@@ -750,7 +804,9 @@ function NewCampaignTab({
     }
   }
 
-  const estimatedMinutes = audience.length ? Math.ceil(audience.length / Math.max(perMinute, 1)) : 0;
+  const estimatedMinutes = audience.length
+    ? Math.ceil(audience.length / Math.max(perMinute, 1))
+    : 0;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
@@ -763,13 +819,19 @@ function NewCampaignTab({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Nome da campanha</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Novembro — planos" />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex.: Novembro — planos"
+              />
             </div>
             <div className="space-y-2">
               <Label>Instância de disparo</Label>
               <Select value={instanceId} onValueChange={setInstanceId}>
                 <SelectTrigger>
-                  <SelectValue placeholder={instances.length ? "Selecione" : "Nenhuma instância de disparo"} />
+                  <SelectValue
+                    placeholder={instances.length ? "Selecione" : "Nenhuma instância de disparo"}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {instances.map((i) => (
@@ -826,7 +888,9 @@ function NewCampaignTab({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setSelected(contacts.filter((c) => c.status === "ATIVO").map((c) => c.id))}
+                onClick={() =>
+                  setSelected(contacts.filter((c) => c.status === "ATIVO").map((c) => c.id))
+                }
               >
                 Selecionar todos os ativos
               </Button>
@@ -836,7 +900,9 @@ function NewCampaignTab({
             </div>
             <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
               {contacts.length === 0 ? (
-                <p className="p-3 text-sm text-muted-foreground">Cadastre contatos na aba “Contatos”.</p>
+                <p className="p-3 text-sm text-muted-foreground">
+                  Cadastre contatos na aba “Contatos”.
+                </p>
               ) : (
                 contacts.map((contact) => (
                   <label
@@ -870,23 +936,47 @@ function NewCampaignTab({
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Mensagens por minuto</Label>
-              <Input type="number" min={1} value={perMinute} onChange={(e) => setPerMinute(Number(e.target.value))} />
+              <Input
+                type="number"
+                min={1}
+                value={perMinute}
+                onChange={(e) => setPerMinute(Number(e.target.value))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Limite diário</Label>
-              <Input type="number" min={1} value={dailyLimit} onChange={(e) => setDailyLimit(Number(e.target.value))} />
+              <Input
+                type="number"
+                min={1}
+                value={dailyLimit}
+                onChange={(e) => setDailyLimit(Number(e.target.value))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Intervalo mínimo (s)</Label>
-              <Input type="number" min={1} value={minInterval} onChange={(e) => setMinInterval(Number(e.target.value))} />
+              <Input
+                type="number"
+                min={1}
+                value={minInterval}
+                onChange={(e) => setMinInterval(Number(e.target.value))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Intervalo máximo (s)</Label>
-              <Input type="number" min={1} value={maxInterval} onChange={(e) => setMaxInterval(Number(e.target.value))} />
+              <Input
+                type="number"
+                min={1}
+                value={maxInterval}
+                onChange={(e) => setMaxInterval(Number(e.target.value))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Horário inicial</Label>
-              <Input type="time" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} />
+              <Input
+                type="time"
+                value={windowStart}
+                onChange={(e) => setWindowStart(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Horário final</Label>
@@ -894,7 +984,11 @@ function NewCampaignTab({
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Início agendado (opcional)</Label>
-              <Input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+              <Input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+              />
             </div>
           </CardContent>
         </Card>
@@ -908,15 +1002,34 @@ function NewCampaignTab({
           <CardDescription>Confira o resumo antes de autorizar o envio.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <p><strong>Campanha:</strong> {name || "—"}</p>
-          <p><strong>Instância:</strong> {instances.find((i) => i.id === instanceId)?.name ?? "—"}</p>
-          <p><strong>Mensagem:</strong> {message?.name ?? "—"}</p>
-          <p><strong>Contatos:</strong> {audience.length}</p>
-          <p><strong>Mensagens estimadas:</strong> {audience.length}</p>
-          <p><strong>Velocidade:</strong> {perMinute} por minuto (~{estimatedMinutes} min)</p>
-          <p><strong>Janela:</strong> {windowStart} às {windowEnd}</p>
-          <p><strong>Limite diário:</strong> {dailyLimit}</p>
-          <p><strong>Início:</strong> {scheduledAt ? formatDate(new Date(scheduledAt).toISOString()) : "Imediato"}</p>
+          <p>
+            <strong>Campanha:</strong> {name || "—"}
+          </p>
+          <p>
+            <strong>Instância:</strong> {instances.find((i) => i.id === instanceId)?.name ?? "—"}
+          </p>
+          <p>
+            <strong>Mensagem:</strong> {message?.name ?? "—"}
+          </p>
+          <p>
+            <strong>Contatos:</strong> {audience.length}
+          </p>
+          <p>
+            <strong>Mensagens estimadas:</strong> {audience.length}
+          </p>
+          <p>
+            <strong>Velocidade:</strong> {perMinute} por minuto (~{estimatedMinutes} min)
+          </p>
+          <p>
+            <strong>Janela:</strong> {windowStart} às {windowEnd}
+          </p>
+          <p>
+            <strong>Limite diário:</strong> {dailyLimit}
+          </p>
+          <p>
+            <strong>Início:</strong>{" "}
+            {scheduledAt ? formatDate(new Date(scheduledAt).toISOString()) : "Imediato"}
+          </p>
 
           {audience.length >= 500 ? (
             <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
@@ -933,7 +1046,11 @@ function NewCampaignTab({
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button disabled={saving}>
-                  {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                  {saving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="size-4" />
+                  )}
                   Confirmar e iniciar
                 </Button>
               </AlertDialogTrigger>
@@ -941,14 +1058,16 @@ function NewCampaignTab({
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirmar o início da campanha?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {audience.length} mensagens serão enfileiradas e enviadas pela instância de disparo,
-                    respeitando os limites configurados. Os limites são controles operacionais e não garantem
-                    proteção contra bloqueios do WhatsApp.
+                    {audience.length} mensagens serão enfileiradas e enviadas pela instância de
+                    disparo, respeitando os limites configurados. Os limites são controles
+                    operacionais e não garantem proteção contra bloqueios do WhatsApp.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Voltar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => void submit(true)}>Confirmar e iniciar</AlertDialogAction>
+                  <AlertDialogAction onClick={() => void submit(true)}>
+                    Confirmar e iniciar
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -988,8 +1107,7 @@ function ContactsTab() {
 
   const contacts = useQuery({
     queryKey: ["broadcast", "contacts", search, status],
-    queryFn: () =>
-      listFn({ data: { search, ...(status !== "todos" ? { status } : {}) } }),
+    queryFn: () => listFn({ data: { search, ...(status !== "todos" ? { status } : {}) } }),
   });
 
   async function handleCsv(file: File) {
@@ -1053,7 +1171,12 @@ function ContactsTab() {
           name: form.name || null,
           phone: form.phone,
           companyName: form.companyName || null,
-          tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+          tags: form.tags
+            ? form.tags
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean)
+            : [],
           source: form.source || "manual",
           note: form.note || null,
           optIn: form.optIn,
@@ -1062,7 +1185,16 @@ function ContactsTab() {
       }),
     onSuccess: () => {
       toast.success("Contato salvo.");
-      setForm({ name: "", phone: "", companyName: "", tags: "", source: "", note: "", optIn: false, optInSource: "" });
+      setForm({
+        name: "",
+        phone: "",
+        companyName: "",
+        tags: "",
+        source: "",
+        note: "",
+        optIn: false,
+        optInSource: "",
+      });
       void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -1073,10 +1205,16 @@ function ContactsTab() {
       <Card className="h-fit">
         <CardHeader>
           <CardTitle className="text-base">Novo contato</CardTitle>
-          <CardDescription>O telefone é normalizado pelo mesmo padrão do atendimento.</CardDescription>
+          <CardDescription>
+            O telefone é normalizado pelo mesmo padrão do atendimento.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Input placeholder="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input
+            placeholder="Nome"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
           <Input
             placeholder="Telefone com DDD"
             value={form.phone}
@@ -1092,14 +1230,22 @@ function ContactsTab() {
             value={form.tags}
             onChange={(e) => setForm({ ...form, tags: e.target.value })}
           />
-          <Input placeholder="Origem" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} />
+          <Input
+            placeholder="Origem"
+            value={form.source}
+            onChange={(e) => setForm({ ...form, source: e.target.value })}
+          />
           <Textarea
             placeholder="Observação"
             value={form.note}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
           />
           <div className="flex items-center gap-3">
-            <Switch checked={form.optIn} onCheckedChange={(v) => setForm({ ...form, optIn: v })} id="c-optin" />
+            <Switch
+              checked={form.optIn}
+              onCheckedChange={(v) => setForm({ ...form, optIn: v })}
+              id="c-optin"
+            />
             <Label htmlFor="c-optin" className="text-sm font-normal">
               Consentimento registrado
             </Label>
@@ -1165,7 +1311,9 @@ function ContactsTab() {
           {contacts.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (contacts.data ?? []).length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Nenhum contato encontrado.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum contato encontrado.
+            </p>
           ) : (
             (contacts.data ?? []).map((contact: Contact) => (
               <div
@@ -1185,7 +1333,9 @@ function ContactsTab() {
                       {tag}
                     </Badge>
                   ))}
-                  <Badge variant={contact.status === "ATIVO" ? "secondary" : "outline"}>{contact.status}</Badge>
+                  <Badge variant={contact.status === "ATIVO" ? "secondary" : "outline"}>
+                    {contact.status}
+                  </Badge>
                   {contact.opt_in ? <Badge>opt-in</Badge> : null}
                   <Button
                     size="icon"
@@ -1222,9 +1372,12 @@ function MessagesTab({ messages }: { messages: Message[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
-  const [image, setImage] = useState<{ base64: string; mime: string; filename: string; preview: string } | null>(
-    null,
-  );
+  const [image, setImage] = useState<{
+    base64: string;
+    mime: string;
+    filename: string;
+    preview: string;
+  } | null>(null);
   const [existingImage, setExistingImage] = useState<string | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1254,8 +1407,6 @@ function MessagesTab({ messages }: { messages: Message[] }) {
     setRemoveImage(false);
     setExistingImage(m.mediaPreviewUrl ?? null);
   }
-
-
 
   async function pickImage(file: File) {
     if (file.size > 8 * 1024 * 1024) {
@@ -1303,13 +1454,19 @@ function MessagesTab({ messages }: { messages: Message[] }) {
         <CardHeader>
           <CardTitle className="text-base">{editingId ? "Editar modelo" : "Novo modelo"}</CardTitle>
           <CardDescription>
-            Variáveis aceitas: {"{{nome}}"} e {"{{primeiro_nome}}"}. Você pode anexar uma imagem — o texto vai
-            junto como legenda.
+            Variáveis aceitas: {"{{nome}}"} e {"{{primeiro_nome}}"}. Você pode anexar uma imagem — o
+            texto vai junto como legenda.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Nome interno</Label>
-          <Input placeholder="Nome interno" value={name} onChange={(e) => setName(e.target.value)} />
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Nome interno
+          </Label>
+          <Input
+            placeholder="Nome interno"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
           <Label className="text-xs uppercase tracking-wide text-muted-foreground">
             Mensagem (clique aqui para escrever)
           </Label>
@@ -1324,12 +1481,15 @@ function MessagesTab({ messages }: { messages: Message[] }) {
 
           {unknownVars.length ? (
             <p className="text-xs text-destructive">
-              Variáveis não suportadas: {[...new Set(unknownVars)].map((v) => `{{${v}}}`).join(", ")}
+              Variáveis não suportadas:{" "}
+              {[...new Set(unknownVars)].map((v) => `{{${v}}}`).join(", ")}
             </p>
           ) : null}
 
           <div className="space-y-2">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Imagem (opcional)</Label>
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Imagem (opcional)
+            </Label>
             {image || (existingImage && !removeImage) ? (
               <div className="flex items-start gap-3">
                 <img
@@ -1372,7 +1532,6 @@ function MessagesTab({ messages }: { messages: Message[] }) {
             </div>
           </div>
 
-
           <div className="flex gap-2">
             <Button className="flex-1" disabled={unknownVars.length > 0 || saving} onClick={save}>
               {editingId ? <ImagePlus className="size-4" /> : <Plus className="size-4" />}
@@ -1393,7 +1552,9 @@ function MessagesTab({ messages }: { messages: Message[] }) {
         </CardHeader>
         <CardContent className="space-y-3">
           {messages.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Nenhum modelo cadastrado.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum modelo cadastrado.
+            </p>
           ) : (
             messages.map((m) => (
               <div
@@ -1436,7 +1597,6 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                           })
                           .catch((error: Error) => toast.error(error.message));
                       }}
-
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -1449,7 +1609,9 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     className="mt-2 size-28 rounded-lg border border-border object-cover"
                   />
                 ) : null}
-                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{m.content}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                  {m.content}
+                </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   Criada em {formatDate(m.created_at)} · atualizada em {formatDate(m.updated_at)}
                 </p>
@@ -1488,8 +1650,8 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Marque uma conexão já provisionada como instância de disparo. O NexaAtende não cria instâncias novas
-        automaticamente.
+        Marque uma conexão já provisionada como instância de disparo. O NexaAtende não cria
+        instâncias novas automaticamente.
       </p>
       {instances.map((instance) => (
         <Card key={instance.id}>
@@ -1551,7 +1713,10 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
                       size="sm"
                       variant="secondary"
                       onClick={() =>
-                        run(refreshFn({ data: { connectionId: instance.id } }), "Situação atualizada.")
+                        run(
+                          refreshFn({ data: { connectionId: instance.id } }),
+                          "Situação atualizada.",
+                        )
                       }
                     >
                       <RefreshCw className="size-4" /> Atualizar
@@ -1560,7 +1725,10 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        run(disconnectFn({ data: { connectionId: instance.id } }), "Instância desconectada.")
+                        run(
+                          disconnectFn({ data: { connectionId: instance.id } }),
+                          "Instância desconectada.",
+                        )
                       }
                     >
                       Desconectar
@@ -1639,7 +1807,8 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
   const totals = {
     total: rows.length,
     sent: rows.filter((r: HistoryRow) => r.status === "SENT").length,
-    pending: rows.filter((r: HistoryRow) => r.status === "PENDING" || r.status === "PROCESSING").length,
+    pending: rows.filter((r: HistoryRow) => r.status === "PENDING" || r.status === "PROCESSING")
+      .length,
     failed: rows.filter((r: HistoryRow) => r.status === "FAILED").length,
   };
   const errorRate = totals.total ? Math.round((totals.failed / totals.total) * 100) : 0;
@@ -1659,34 +1828,48 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
           <CardTitle className="text-base">Histórico de envios</CardTitle>
           <div className="flex flex-wrap gap-2">
             <Select value={campaignId} onValueChange={setCampaignId}>
-              <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todas">Todas as campanhas</SelectItem>
                 {campaigns.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos os status</SelectItem>
                 {Object.entries(QUEUE_LABEL).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={instanceId} onValueChange={setInstanceId}>
-              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todas">Todas as instâncias</SelectItem>
                 {instances.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>{i.name ?? "Instância"}</SelectItem>
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.name ?? "Instância"}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={days} onValueChange={setDays}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="1">Hoje</SelectItem>
                 <SelectItem value="7">7 dias</SelectItem>
@@ -1700,7 +1883,9 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
           {history.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : rows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Nenhum envio no período.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum envio no período.
+            </p>
           ) : (
             rows.map((row: HistoryRow) => (
               <div key={row.id} className="rounded-lg border border-border px-3 py-2 text-sm">
@@ -1715,8 +1900,8 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {row.campaign?.name ?? "—"} · {row.instance?.name ?? "—"} ·{" "}
-                  {formatDate(row.sent_at ?? row.created_at)} · tentativas: {row.attempts} · id provedor:{" "}
-                  {row.provider_message_id ?? "—"}
+                  {formatDate(row.sent_at ?? row.created_at)} · tentativas: {row.attempts} · id
+                  provedor: {row.provider_message_id ?? "—"}
                 </p>
                 {row.rendered_content?.trim() ? (
                   <p className="mt-2 whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-sm">
@@ -1744,12 +1929,15 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
         </CardHeader>
         <CardContent className="space-y-2">
           {(logs.data ?? []).length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma ação registrada.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nenhuma ação registrada.
+            </p>
           ) : (
             (logs.data ?? []).map((entry: LogRow) => (
               <div key={entry.id} className="flex items-center justify-between gap-2 text-sm">
                 <span>
-                  <strong>{entry.action}</strong> {entry.campaign?.name ? `· ${entry.campaign.name}` : ""}
+                  <strong>{entry.action}</strong>{" "}
+                  {entry.campaign?.name ? `· ${entry.campaign.name}` : ""}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {entry.user_name ?? "sistema"} · {formatDate(entry.created_at)}
@@ -1784,7 +1972,10 @@ function SettingsTab() {
   const field = (key: string) => ({
     value: String(draft[key] ?? ""),
     onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-      setDraft({ ...draft, [key]: e.target.type === "number" ? Number(e.target.value) : e.target.value }),
+      setDraft({
+        ...draft,
+        [key]: e.target.type === "number" ? Number(e.target.value) : e.target.value,
+      }),
   });
 
   return (
@@ -1793,8 +1984,8 @@ function SettingsTab() {
         <CardHeader>
           <CardTitle className="text-base">Proteção de envio</CardTitle>
           <CardDescription>
-            Limites aplicados a todas as campanhas da empresa. São controles operacionais e não garantem
-            proteção contra bloqueios do WhatsApp.
+            Limites aplicados a todas as campanhas da empresa. São controles operacionais e não
+            garantem proteção contra bloqueios do WhatsApp.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -1824,11 +2015,19 @@ function SettingsTab() {
           </div>
           <div className="space-y-2">
             <Label>Horário inicial</Label>
-            <Input type="time" value={String(draft["window_start"] ?? "08:00").slice(0, 5)} onChange={(e) => setDraft({ ...draft, window_start: e.target.value })} />
+            <Input
+              type="time"
+              value={String(draft["window_start"] ?? "08:00").slice(0, 5)}
+              onChange={(e) => setDraft({ ...draft, window_start: e.target.value })}
+            />
           </div>
           <div className="space-y-2">
             <Label>Horário final</Label>
-            <Input type="time" value={String(draft["window_end"] ?? "20:00").slice(0, 5)} onChange={(e) => setDraft({ ...draft, window_end: e.target.value })} />
+            <Input
+              type="time"
+              value={String(draft["window_end"] ?? "20:00").slice(0, 5)}
+              onChange={(e) => setDraft({ ...draft, window_end: e.target.value })}
+            />
           </div>
           <div className="flex items-center gap-3 sm:col-span-2">
             <Switch

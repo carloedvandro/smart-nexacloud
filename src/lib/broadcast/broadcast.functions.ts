@@ -24,7 +24,10 @@ async function requireAdmin(context: Ctx): Promise<{ companyId: string; userName
     .eq("id", context.userId)
     .maybeSingle();
   if (!profile?.company_id) throw new Error("Usuário sem empresa.");
-  return { companyId: profile.company_id as string, userName: profile.full_name ?? profile.email ?? null };
+  return {
+    companyId: profile.company_id as string,
+    userName: profile.full_name ?? profile.email ?? null,
+  };
 }
 
 async function log(
@@ -83,7 +86,10 @@ export const saveBroadcastSettings = createServerFn({ method: "POST" })
     const { companyId, userName } = await requireAdmin(ctx);
     const { error } = await ctx.supabase
       .from("broadcast_settings")
-      .upsert({ ...DEFAULT_SETTINGS, ...data, company_id: companyId }, { onConflict: "company_id" });
+      .upsert(
+        { ...DEFAULT_SETTINGS, ...data, company_id: companyId },
+        { onConflict: "company_id" },
+      );
     if (error) throw new Error(error.message);
     await log(ctx, companyId, userName, "SETTINGS_UPDATED", null, data as Record<string, unknown>);
     return { ok: true };
@@ -232,7 +238,9 @@ export const disconnectBroadcastInstance = createServerFn({ method: "POST" })
     if (conn.connection_type !== "BROADCAST") throw new Error("Esta instância não é de disparo.");
     const { logoutInstance } = await import("@/lib/whatsapp/actions.server");
     const result = await logoutInstance(data.connectionId);
-    await log(ctx, companyId, userName, "INSTANCE_DISCONNECTED", null, { instancia: data.connectionId });
+    await log(ctx, companyId, userName, "INSTANCE_DISCONNECTED", null, {
+      instancia: data.connectionId,
+    });
     return { ok: result.ok, error: result.error ?? null };
   });
 
@@ -255,7 +263,9 @@ export type BroadcastContactInput = {
 
 export const listBroadcastContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { search?: string; status?: string; tag?: string; optIn?: boolean }) => data ?? {})
+  .inputValidator(
+    (data: { search?: string; status?: string; tag?: string; optIn?: boolean }) => data ?? {},
+  )
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
     const { companyId } = await requireAdmin(ctx);
@@ -367,7 +377,10 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
       .upsert(payload, { onConflict: "company_id,whatsapp" });
     if (error) throw new Error(error.message);
 
-    await log(ctx, companyId, userName, "CONTACTS_IMPORTED", null, { total: payload.length, invalidos: invalid });
+    await log(ctx, companyId, userName, "CONTACTS_IMPORTED", null, {
+      total: payload.length,
+      invalidos: invalid,
+    });
     return { imported: payload.length, invalid };
   });
 
@@ -429,7 +442,9 @@ export const listBroadcastMessages = createServerFn({ method: "GET" })
 const ALLOWED_VARIABLES = ["nome", "primeiro_nome"];
 
 export function validateTemplate(content: string): string[] {
-  const found = [...content.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/gi)].map((m) => m[1]?.toLowerCase() ?? "");
+  const found = [...content.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/gi)].map(
+    (m) => m[1]?.toLowerCase() ?? "",
+  );
   return [...new Set(found.filter((name) => !ALLOWED_VARIABLES.includes(name)))];
 }
 
@@ -512,7 +527,6 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
     return { ok: true, id: row?.id as string };
   });
 
-
 export const deleteBroadcastMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { id: string }) => data)
@@ -558,13 +572,16 @@ export const listBroadcastCampaigns = createServerFn({ method: "GET" })
     const { companyId } = await requireAdmin(ctx);
     const { data: campaigns, error } = await ctx.supabase
       .from("broadcast_campaigns")
-      .select("*, instance:whatsapp_connections(id, name, status), message:broadcast_messages(id, name)")
+      .select(
+        "*, instance:whatsapp_connections(id, name, status), message:broadcast_messages(id, name)",
+      )
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
 
     const ids = (campaigns ?? []).map((c: { id: string }) => c.id);
-    const totals: Record<string, { total: number; sent: number; pending: number; failed: number }> = {};
+    const totals: Record<string, { total: number; sent: number; pending: number; failed: number }> =
+      {};
     if (ids.length) {
       const { data: queue } = await ctx.supabase
         .from("broadcast_queue")
@@ -589,7 +606,10 @@ export const listBroadcastCampaigns = createServerFn({ method: "GET" })
     }
 
     const { data: audienceRows } = ids.length
-      ? await ctx.supabase.from("broadcast_campaign_contacts").select("campaign_id").in("campaign_id", ids)
+      ? await ctx.supabase
+          .from("broadcast_campaign_contacts")
+          .select("campaign_id")
+          .in("campaign_id", ids)
       : { data: [] as { campaign_id: string }[] };
     const audienceCount: Record<string, number> = {};
     for (const row of audienceRows ?? []) {
@@ -623,10 +643,14 @@ export const saveBroadcastCampaign = createServerFn({ method: "POST" })
       .eq("id", data.instanceId)
       .maybeSingle();
     if (!conn || conn.company_id !== companyId) {
-      throw new Error("Esta instância pertence a outra empresa e não pode ser usada nesta campanha.");
+      throw new Error(
+        "Esta instância pertence a outra empresa e não pode ser usada nesta campanha.",
+      );
     }
     if (conn.is_trunk || conn.connection_type !== "BROADCAST") {
-      throw new Error("A instância tronco é exclusiva do atendimento e não pode ser usada em disparos.");
+      throw new Error(
+        "A instância tronco é exclusiva do atendimento e não pode ser usada em disparos.",
+      );
     }
 
     const payload = {
@@ -677,9 +701,16 @@ export const saveBroadcastCampaign = createServerFn({ method: "POST" })
       .upsert(links, { onConflict: "campaign_id,contact_id" });
     if (linkError) throw new Error(linkError.message);
 
-    await log(ctx, companyId, userName, data.id ? "CAMPAIGN_UPDATED" : "CAMPAIGN_CREATED", campaignId, {
-      contatos: data.contactIds.length,
-    });
+    await log(
+      ctx,
+      companyId,
+      userName,
+      data.id ? "CAMPAIGN_UPDATED" : "CAMPAIGN_CREATED",
+      campaignId,
+      {
+        contatos: data.contactIds.length,
+      },
+    );
     return { ok: true, id: campaignId as string };
   });
 
@@ -727,14 +758,34 @@ export const startBroadcastCampaign = createServerFn({ method: "POST" })
       .eq("company_id", companyId)
       .maybeSingle();
     if (settings?.emergency_stop) {
-      throw new Error("Os disparos estão bloqueados pela parada de emergência. Libere em Configurações.");
+      throw new Error(
+        "Os disparos estão bloqueados pela parada de emergência. Libere em Configurações.",
+      );
     }
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: enqueued, error: enqueueError } = await supabaseAdmin.rpc("broadcast_enqueue_campaign", {
-      _campaign_id: data.campaignId,
-    });
+    const { data: enqueued, error: enqueueError } = await supabaseAdmin.rpc(
+      "broadcast_enqueue_campaign",
+      {
+        _campaign_id: data.campaignId,
+      },
+    );
     if (enqueueError) throw new Error(enqueueError.message);
+
+    // Nada a enviar: a campanha não entra em execução e o motivo é explicado.
+    // Com a fila preservada, o caso comum é a campanha já ter sido entregue.
+    if (Number(enqueued ?? 0) === 0) {
+      const { count: alreadySent } = await ctx.supabase
+        .from("broadcast_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", data.campaignId)
+        .in("status", ["SENT", "SKIPPED"]);
+      const reason = (alreadySent ?? 0) > 0 ? "already_sent" : "no_contacts";
+      await log(ctx, companyId, userName, "CAMPAIGN_START_EMPTY", data.campaignId, {
+        motivo: reason,
+      });
+      return { ok: false, enqueued: 0, reason };
+    }
 
     const scheduled = data.scheduledAt ?? null;
     await setCampaignStatus(
@@ -763,9 +814,17 @@ export const pauseBroadcastCampaign = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
     const { companyId, userName } = await requireAdmin(ctx);
-    return setCampaignStatus(ctx, companyId, userName, data.campaignId, "PAUSED", "CAMPAIGN_PAUSED", {
-      pause_reason: "A campanha foi pausada pelo administrador.",
-    });
+    return setCampaignStatus(
+      ctx,
+      companyId,
+      userName,
+      data.campaignId,
+      "PAUSED",
+      "CAMPAIGN_PAUSED",
+      {
+        pause_reason: "A campanha foi pausada pelo administrador.",
+      },
+    );
   });
 
 export const resumeBroadcastCampaign = createServerFn({ method: "POST" })
@@ -774,11 +833,19 @@ export const resumeBroadcastCampaign = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
     const { companyId, userName } = await requireAdmin(ctx);
-    return setCampaignStatus(ctx, companyId, userName, data.campaignId, "RUNNING", "CAMPAIGN_RESUMED", {
-      pause_reason: null,
-      consecutive_failures: 0,
-      next_send_at: null,
-    });
+    return setCampaignStatus(
+      ctx,
+      companyId,
+      userName,
+      data.campaignId,
+      "RUNNING",
+      "CAMPAIGN_RESUMED",
+      {
+        pause_reason: null,
+        consecutive_failures: 0,
+        next_send_at: null,
+      },
+    );
   });
 
 export const cancelBroadcastCampaign = createServerFn({ method: "POST" })
@@ -793,9 +860,17 @@ export const cancelBroadcastCampaign = createServerFn({ method: "POST" })
       .eq("campaign_id", data.campaignId)
       .eq("company_id", companyId)
       .in("status", ["PENDING", "PROCESSING"]);
-    return setCampaignStatus(ctx, companyId, userName, data.campaignId, "CANCELLED", "CAMPAIGN_CANCELLED", {
-      finished_at: new Date().toISOString(),
-    });
+    return setCampaignStatus(
+      ctx,
+      companyId,
+      userName,
+      data.campaignId,
+      "CANCELLED",
+      "CAMPAIGN_CANCELLED",
+      {
+        finished_at: new Date().toISOString(),
+      },
+    );
   });
 
 /** Carrega uma campanha com os contatos escolhidos, para edição. */
@@ -842,8 +917,15 @@ export const deleteBroadcastCampaign = createServerFn({ method: "POST" })
     }
 
     await log(ctx, companyId, userName, "CAMPAIGN_DELETED", null, { campanha: campaign.name });
-    await ctx.supabase.from("broadcast_queue").delete().eq("campaign_id", data.campaignId).eq("company_id", companyId);
-    await ctx.supabase.from("broadcast_campaign_contacts").delete().eq("campaign_id", data.campaignId);
+    await ctx.supabase
+      .from("broadcast_queue")
+      .delete()
+      .eq("campaign_id", data.campaignId)
+      .eq("company_id", companyId);
+    await ctx.supabase
+      .from("broadcast_campaign_contacts")
+      .delete()
+      .eq("campaign_id", data.campaignId);
     const { error } = await ctx.supabase
       .from("broadcast_campaigns")
       .delete()
@@ -926,7 +1008,10 @@ export const releaseEmergencyStop = createServerFn({ method: "POST" })
     const { companyId, userName } = await requireAdmin(ctx);
     const { error } = await ctx.supabase
       .from("broadcast_settings")
-      .upsert({ ...DEFAULT_SETTINGS, company_id: companyId, emergency_stop: false }, { onConflict: "company_id" });
+      .upsert(
+        { ...DEFAULT_SETTINGS, company_id: companyId, emergency_stop: false },
+        { onConflict: "company_id" },
+      );
     if (error) throw new Error(error.message);
     await log(ctx, companyId, userName, "EMERGENCY_STOP_RELEASED", null);
     return { ok: true };
@@ -939,8 +1024,13 @@ export const releaseEmergencyStop = createServerFn({ method: "POST" })
 export const listBroadcastHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (data: { campaignId?: string; status?: string; instanceId?: string; days?: number; search?: string }) =>
-      data ?? {},
+    (data: {
+      campaignId?: string;
+      status?: string;
+      instanceId?: string;
+      days?: number;
+      search?: string;
+    }) => data ?? {},
   )
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
@@ -972,18 +1062,30 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
     const ctx = context as unknown as Ctx;
     const { companyId } = await requireAdmin(ctx);
 
-    const [{ data: campaigns }, { data: queue }, { data: contacts }, { data: settings }, { data: instances }] =
-      await Promise.all([
-        ctx.supabase.from("broadcast_campaigns").select("id, name, status, last_activity_at, instance_id").eq("company_id", companyId),
-        ctx.supabase.from("broadcast_queue").select("status, sent_at, created_at").eq("company_id", companyId).limit(20000),
-        ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
-        ctx.supabase.from("broadcast_settings").select("*").eq("company_id", companyId).maybeSingle(),
-        ctx.supabase
-          .from("whatsapp_connections")
-          .select("id, name, status, connection_type, phone_number")
-          .eq("company_id", companyId)
-          .eq("connection_type", "BROADCAST"),
-      ]);
+    const [
+      { data: campaigns },
+      { data: queue },
+      { data: contacts },
+      { data: settings },
+      { data: instances },
+    ] = await Promise.all([
+      ctx.supabase
+        .from("broadcast_campaigns")
+        .select("id, name, status, last_activity_at, instance_id")
+        .eq("company_id", companyId),
+      ctx.supabase
+        .from("broadcast_queue")
+        .select("status, sent_at, created_at")
+        .eq("company_id", companyId)
+        .limit(20000),
+      ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+      ctx.supabase.from("broadcast_settings").select("*").eq("company_id", companyId).maybeSingle(),
+      ctx.supabase
+        .from("whatsapp_connections")
+        .select("id, name, status, connection_type, phone_number")
+        .eq("company_id", companyId)
+        .eq("connection_type", "BROADCAST"),
+    ]);
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -999,7 +1101,8 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
       .sort()
       .pop();
 
-    const byStatus = (status: string) => (campaigns ?? []).filter((c: { status: string }) => c.status === status).length;
+    const byStatus = (status: string) =>
+      (campaigns ?? []).filter((c: { status: string }) => c.status === status).length;
 
     return {
       campaigns: {
@@ -1014,7 +1117,9 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
       },
       messages: {
         sentToday,
-        pending: rows.filter((r: { status: string }) => r.status === "PENDING" || r.status === "PROCESSING").length,
+        pending: rows.filter(
+          (r: { status: string }) => r.status === "PENDING" || r.status === "PROCESSING",
+        ).length,
         failed: rows.filter((r: { status: string }) => r.status === "FAILED").length,
         sentTotal: rows.filter((r: { status: string }) => r.status === "SENT").length,
         total: rows.length,
