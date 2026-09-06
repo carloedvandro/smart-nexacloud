@@ -105,6 +105,13 @@ async function runTick(
   const { notifyAiResumedConversations } = await import("@/lib/ai/resume.server");
   await notifyAiResumedConversations().catch((e) => console.error("[ia] retomada falhou", e));
 
+  // Pedido de humano em aberto: enquanto a IA troca mensagens com o lead, o
+  // painel mostra "IA atendendo". Quando a conversa esfria (sem mensagens por
+  // alguns minutos), volta a mostrar "Aguardando consultor" — é o sinal para o
+  // administrador puxar o atendimento. A IA continua pronta para retomar assim
+  // que o cliente mandar a próxima mensagem.
+  await coolDownIdleHumanRequests().catch((e) => console.error("[fila] esfriamento falhou", e));
+
   // Pede avaliação nos leads que ficaram abandonados após o rodízio.
   const { data: companies } = await supabaseAdmin
     .from("conversations")
@@ -121,6 +128,60 @@ async function runTick(
   }
 
   return { processed: Number(data ?? 0), whatsappProcessed };
+}
+
+/** Sem mensagens por este tempo, a conversa "esfria" e o painel volta a mostrar "Aguardando consultor". */
+const COLD_AFTER_MS = 3 * 60_000;
+
+async function coolDownIdleHumanRequests(): Promise<void> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+  const { data: activeConvs } = await supabaseAdmin
+    .from("conversations")
+    .select("id, lead_id")
+    .eq("status", "AI_ACTIVE")
+    .is("assigned_user_id", null)
+    .not("lead_id", "is", null)
+    .lt("last_message_at", new Date(Date.now() - COLD_AFTER_MS).toISOString())
+    .limit(100);
+
+  const conversations = activeConvs ?? [];
+  if (conversations.length === 0) return;
+
+  const { data: exhausted } = await supabaseAdmin
+    .from("conversation_events")
+    .select("conversation_id")
+    .eq("event_type", "QUEUE_NO_CONSULTANT")
+    .in(
+      "conversation_id",
+      conversations.map((c) => c.id),
+    )
+    .gte("created_at", new Date(Date.now() - 24 * 60 * 60_000).toISOString());
+
+  const exhaustedSet = new Set((exhausted ?? []).map((e) => e.conversation_id));
+  const leadIds = conversations
+    .filter((c) => exhaustedSet.has(c.id))
+    .map((c) => c.lead_id as string);
+  if (leadIds.length === 0) return;
+
+  const { data: qualifying } = await supabaseAdmin
+    .from("leads")
+    .select("id")
+    .in("id", leadIds)
+    .eq("status", "AI_QUALIFYING");
+
+  const coldLeadIds = (qualifying ?? []).map((l) => l.id);
+  if (coldLeadIds.length === 0) return;
+
+  const coldConvIds = conversations
+    .filter((c) => coldLeadIds.includes(c.lead_id as string))
+    .map((c) => c.id);
+
+  await supabaseAdmin.from("leads").update({ status: "WAITING_HUMAN" }).in("id", coldLeadIds);
+  await supabaseAdmin
+    .from("conversations")
+    .update({ status: "WAITING_HUMAN" })
+    .in("id", coldConvIds);
 }
 
 function init(status = 200): ResponseInit {

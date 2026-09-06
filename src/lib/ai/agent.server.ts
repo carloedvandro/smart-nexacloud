@@ -1020,9 +1020,9 @@ export async function respondWithAI(input: {
     .eq("company_id", companyId);
 
   // O Kanban precisa refletir a realidade: quem está atendendo agora é a IA.
-  // Exceção: com o pedido de humano em aberto (rodízio esgotado), a IA apenas
-  // segura a conversa — o lead fica em "Aguardando consultor" para o
-  // administrador enxergar e puxar o atendimento.
+  // Com o pedido de humano em aberto, o card volta para "Aguardando consultor"
+  // quando a conversa esfria (rotina de esfriamento no tick da fila) — aqui a
+  // resposta da IA marca a troca ativa: lead volta para "Em qualificação (IA)".
   const leadId = input.leadId ?? (conversation as { lead_id?: string | null }).lead_id ?? null;
   if (leadId) {
     await supabaseAdmin
@@ -1030,12 +1030,7 @@ export async function respondWithAI(input: {
       .update({ status: "AI_QUALIFYING" })
       .eq("id", leadId)
       .eq("company_id", companyId)
-      .in(
-        "status",
-        humanRequestOpen
-          ? ["NEW", "WAITING_CUSTOMER"]
-          : ["NEW", "WAITING_HUMAN", "WAITING_CUSTOMER", "IN_SERVICE"],
-      );
+      .in("status", ["NEW", "WAITING_HUMAN", "WAITING_CUSTOMER", "IN_SERVICE"]);
   }
 
   log("respondido com sucesso");
