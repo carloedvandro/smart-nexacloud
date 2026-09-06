@@ -133,6 +133,8 @@ type HistoryRow = {
   attempts: number;
   error_message: string | null;
   provider_message_id: string | null;
+  rendered_content: string | null;
+  message: { id: string; name: string; media_url: string | null; media_type: string | null } | null;
   campaign: { id: string; name: string } | null;
   contact: { id: string; name: string | null; whatsapp: string } | null;
   instance: { id: string; name: string | null } | null;
@@ -1669,6 +1671,16 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
                   {formatDate(row.sent_at ?? row.created_at)} · tentativas: {row.attempts} · id provedor:{" "}
                   {row.provider_message_id ?? "—"}
                 </p>
+                {row.rendered_content?.trim() ? (
+                  <p className="mt-2 whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-sm">
+                    {row.rendered_content}
+                  </p>
+                ) : null}
+                {row.message?.media_url ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Enviada com a imagem do modelo “{row.message.name}”.
+                  </p>
+                ) : null}
                 {row.error_message ? (
                   <p className="mt-1 text-xs text-destructive">{row.error_message}</p>
                 ) : null}
