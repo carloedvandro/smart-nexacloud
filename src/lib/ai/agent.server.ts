@@ -606,13 +606,41 @@ export async function respondWithAI(input: {
   // Anti-loop: outro robô/IA do outro lado responderia para sempre. Paramos
   // assim que o interlocutor se identifica como automático, ou quando a troca
   // fica longa demais para um atendimento humano real.
-  const counterpartIsBot = customerTexts.some((t) =>
+  const counterpartSaysBot = customerTexts.some((t) =>
     /(sou\s+(uma\s+)?(ia|intelig(ê|e)ncia\s+artificial|assistente\s+virtual|bot|rob(ô|o)|chatbot|assistente\s+automátic))|(atendente\s+virtual)|(mensagem\s+autom(á|a)tica)|(resposta\s+autom(á|a)tica)|(sistema\s+autom(a|á)tico)|(este\s+(número|canal)\s+n(ã|a)o\s+recebe)|(as\s+an\s+ai|i am an ai|as an ai language model)/i.test(
       t,
     ),
   );
-  // Trocas muito rápidas e ininterruptas indicam robô do outro lado: um humano
-  // não mantém dezenas de idas e vindas em segundos.
+
+  // Sinais de robô mesmo quando ele não se identifica:
+  // 1) responde quase instantaneamente às nossas mensagens, várias vezes seguidas;
+  // 2) repete praticamente o mesmo texto;
+  // 3) volume alto de respostas automáticas em poucos minutos.
+  const cycleMessages = ordered.filter(
+    (m) => !resumedAt || new Date(m.created_at).getTime() > resumedAt,
+  );
+  let instantReplies = 0;
+  for (let i = 1; i < cycleMessages.length; i++) {
+    const prev = cycleMessages[i - 1]!;
+    const curr = cycleMessages[i]!;
+    if (prev.sender_type === "ai" && curr.sender_type === "customer") {
+      const gap = new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime();
+      if (gap >= 0 && gap <= 8_000) instantReplies++;
+    }
+  }
+  const normalizedCustomerTexts = customerTexts
+    .map((t) => normalizeText(t).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim())
+    .filter((t) => t.length > 12);
+  const lastThree = normalizedCustomerTexts.slice(-3);
+  const repeatsItself = lastThree.length === 3 && new Set(lastThree).size === 1;
+
+  const FIVE_MINUTES = 5 * 60 * 1000;
+  const recentAiReplies = cycleMessages.filter(
+    (m) => m.sender_type === "ai" && Date.now() - new Date(m.created_at).getTime() <= FIVE_MINUTES,
+  ).length;
+
+  const counterpartIsBot = counterpartSaysBot || instantReplies >= 3 || repeatsItself;
+
   let aiReplyCountQuery = supabaseAdmin
     .from("messages")
     .select("id", { count: "exact", head: true })
@@ -622,12 +650,17 @@ export async function respondWithAI(input: {
     aiReplyCountQuery = aiReplyCountQuery.gt("created_at", lastResume.created_at);
   }
   const { count: totalAiReplies } = await aiReplyCountQuery;
-  const LOOP_LIMIT = 25;
-  if (counterpartIsBot || (totalAiReplies ?? 0) >= LOOP_LIMIT) {
-
+  // Limites conservadores: protegem os créditos mesmo diante de uma IA de
+  // terceiros, que responderia indefinidamente.
+  const LOOP_LIMIT = 12;
+  const BURST_LIMIT = 8;
+  const burstExceeded = recentAiReplies >= BURST_LIMIT;
+  if (counterpartIsBot || burstExceeded || (totalAiReplies ?? 0) >= LOOP_LIMIT) {
     const reason = counterpartIsBot
       ? "interlocutor automatizado (outra IA/robô)"
-      : "limite de mensagens automáticas atingido";
+      : burstExceeded
+        ? "muitas respostas automáticas em poucos minutos"
+        : "limite de mensagens automáticas atingido";
     log("skip: parando respostas automáticas —", reason);
     await supabaseAdmin
       .from("ai_sessions")
@@ -641,6 +674,7 @@ export async function respondWithAI(input: {
       .eq("company_id", companyId);
     return { status: "skipped", reason };
   }
+
 
 
   // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
