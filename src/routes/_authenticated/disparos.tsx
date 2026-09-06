@@ -643,12 +643,13 @@ function NewCampaignTab({
     if (!editingId) return;
     let active = true;
     getCampaignFn({ data: { campaignId: editingId } })
-      .then((campaign) => {
+      .then((raw) => {
         if (!active) return;
+        const campaign = raw as Record<string, any>;
         setName(String(campaign["name"] ?? ""));
         setInstanceId(String(campaign["instance_id"] ?? ""));
         setMessageId(String(campaign["message_id"] ?? ""));
-        setSelected(campaign.contactIds ?? []);
+        setSelected((campaign["contactIds"] as string[] | undefined) ?? []);
         setRequireOptIn(Boolean(campaign["require_opt_in"]));
         setPerMinute(Number(campaign["messages_per_minute"] ?? 5));
         setMinInterval(Number(campaign["min_interval_seconds"] ?? 10));
