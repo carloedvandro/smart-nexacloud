@@ -695,6 +695,7 @@ function NewCampaignTab({
     try {
       const created = await saveFn({
         data: {
+          ...(editingId ? { id: editingId } : {}),
           name,
           instanceId,
           messageId,
@@ -716,7 +717,13 @@ function NewCampaignTab({
           },
         });
       }
-      toast.success(startNow ? "Campanha confirmada e iniciada." : "Campanha salva como rascunho.");
+      toast.success(
+        startNow
+          ? "Campanha confirmada e iniciada."
+          : editingId
+            ? "Alterações salvas."
+            : "Campanha salva como rascunho.",
+      );
       setName("");
       setSelected([]);
       void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
@@ -880,7 +887,9 @@ function NewCampaignTab({
 
       <Card className="h-fit lg:sticky lg:top-24">
         <CardHeader>
-          <CardTitle className="text-base">5. Revisar e confirmar</CardTitle>
+          <CardTitle className="text-base">
+            5. {editingId ? "Revisar alterações" : "Revisar e confirmar"}
+          </CardTitle>
           <CardDescription>Confira o resumo antes de autorizar o envio.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
@@ -929,7 +938,7 @@ function NewCampaignTab({
               </AlertDialogContent>
             </AlertDialog>
             <Button variant="outline" disabled={saving} onClick={() => void submit(false)}>
-              Salvar como rascunho
+              {editingId ? "Salvar alterações" : "Salvar como rascunho"}
             </Button>
           </div>
         </CardContent>
