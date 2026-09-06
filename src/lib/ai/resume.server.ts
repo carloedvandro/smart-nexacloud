@@ -20,9 +20,10 @@ const WINDOW_MS = 30 * 60_000;
 function buildText(agentName: string, leadName: string | null): string {
   const hello = leadName ? `${leadName.split(/\s+/)[0]}, ` : "";
   return (
-    `${hello}desculpe a demora! Nossos consultores estão todos em atendimento agora, ` +
-    `então eu, ${agentName}, sigo com você por aqui. ` +
-    "Posso te ajudar com a sua dúvida ou prefere que eu direcione para um atendente humano assim que liberar?"
+    `${hello}todos os nossos consultores estão em atendimento neste momento. ` +
+    "Assim que um deles liberar, já te encaminho automaticamente. " +
+    `Enquanto isso, eu, ${agentName}, sigo com você por aqui. ` +
+    "Posso te ajudar com mais alguma dúvida?"
   );
 }
 
@@ -72,7 +73,11 @@ export async function notifyAiResumedConversations(): Promise<number> {
         .maybeSingle();
       if (!conversation || conversation.status !== "AI_ACTIVE") continue;
 
-      const lead = conversation.lead as { name?: string | null; whatsapp?: string | null; phone?: string | null } | null;
+      const lead = conversation.lead as {
+        name?: string | null;
+        whatsapp?: string | null;
+        phone?: string | null;
+      } | null;
       const recipient = WhatsAppIdentifierService.toRecipient(
         lead?.whatsapp ?? conversation.channel_id ?? lead?.phone ?? null,
       );

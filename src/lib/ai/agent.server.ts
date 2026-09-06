@@ -16,6 +16,9 @@ const HANDOFF_TOKEN = "[TRANSFERIR_HUMANO]";
 // Contexto longo: o atendimento costuma passar de 14 mensagens (qualificação,
 // transferência, retomada). Com pouco histórico a IA repetia perguntas já feitas.
 const HISTORY_LIMIT = 60;
+// Janela em que um pedido repetido de humano é tratado como "já registrado":
+// igual à janela do aviso de retomada (resume.server.ts).
+const HUMAN_REQUEST_WINDOW_MS = 30 * 60_000;
 
 export type AiSettings = {
   enabled: boolean;
@@ -61,7 +64,10 @@ async function loadKnowledge(companyId: string) {
 
 const SAO_PAULO_TZ = "America/Sao_Paulo";
 
-function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; category: string; content: string }[]) {
+function buildSystemPrompt(
+  settings: AiSettings,
+  knowledge: { title: string; category: string; content: string }[],
+) {
   const base = knowledge.length
     ? knowledge.map((k) => `### ${k.title} (${k.category})\n${k.content}`).join("\n\n")
     : "(base de conhecimento vazia)";
@@ -86,9 +92,9 @@ function buildSystemPrompt(settings: AiSettings, knowledge: { title: string; cat
     `Você é ${settings.agentName}, atendente virtual de ${settings.companyName}, uma corretora especializada na venda de planos de saúde e odontológicos para empresas (planos empresariais/PME), famílias e pessoa física, além de planos coletivos por adesão.`,
     `CONTEXTO TEMPORAL: agora é ${dateTime} no horário de Brasília (São Paulo). A saudação correta neste momento é "${greeting}". Nunca use outra saudação de período do dia e nunca cite datas/horários diferentes deste.`,
     "Fale português do Brasil, em tom humano, acolhedor e objetivo. Responda com no máximo 240 caracteres e até 3 frases curtas, estilo WhatsApp, sem markdown pesado.",
-    "ÁUDIO: você ouve e entende áudios do cliente (eles chegam transcritos, marcados como \"(áudio enviado pelo cliente)\"). Você responde em áudio APENAS quando o cliente falou por áudio; se ele escreveu, responda por escrito. Se ele disser que não consegue ouvir/abrir áudios, que prefere texto, ou se for outro robô/IA que só lê texto, responda sempre por escrito e de forma completa e clara, sem depender de voz. NUNCA diga que é uma inteligência artificial que não consegue ouvir ou enviar áudios.",
-    "FORMATO DA RESPOSTA: escreva SOMENTE a fala natural, como uma pessoa falaria no WhatsApp. É proibido começar (ou incluir) qualquer rótulo, narração ou anotação como \"(resposta em áudio)\", \"[áudio]\", \"Áudio:\", asteriscos de ação ou descrição do que você está fazendo. Comece direto pela saudação ou pela resposta.",
-    "Se a mensagem do cliente for confusa, vazia ou só um sinal como \"?\", peça gentilmente que ele repita ou explique melhor a dúvida — nunca invente que houve um problema técnico.",
+    'ÁUDIO: você ouve e entende áudios do cliente (eles chegam transcritos, marcados como "(áudio enviado pelo cliente)"). Você responde em áudio APENAS quando o cliente falou por áudio; se ele escreveu, responda por escrito. Se ele disser que não consegue ouvir/abrir áudios, que prefere texto, ou se for outro robô/IA que só lê texto, responda sempre por escrito e de forma completa e clara, sem depender de voz. NUNCA diga que é uma inteligência artificial que não consegue ouvir ou enviar áudios.',
+    'FORMATO DA RESPOSTA: escreva SOMENTE a fala natural, como uma pessoa falaria no WhatsApp. É proibido começar (ou incluir) qualquer rótulo, narração ou anotação como "(resposta em áudio)", "[áudio]", "Áudio:", asteriscos de ação ou descrição do que você está fazendo. Comece direto pela saudação ou pela resposta.',
+    'Se a mensagem do cliente for confusa, vazia ou só um sinal como "?", peça gentilmente que ele repita ou explique melhor a dúvida — nunca invente que houve um problema técnico.',
     "Objetivo: qualificar o interessado (plano para pessoa física/família, empresa com CNPJ ou por adesão; quantas vidas; idades; cidade/estado; se já tem plano hoje; acomodação e preferência de operadora/hospital) e agendar a cotação com um consultor humano.",
     "- Depois de responder à dúvida ou concluir a qualificação, pergunte de forma natural se a pessoa ainda tem alguma dúvida ou se deseja falar com um consultor humano. Não repita essa pergunta em todas as mensagens.",
     "REGRAS ABSOLUTAS:",
@@ -198,7 +204,10 @@ function isConsultantLead(leadName: string | null | undefined, markers: string[]
 
 /** Nome de tratamento do consultor: remove o marcador da empresa ("Cacá APSP" -> "Cacá"). */
 function consultantFirstName(registeredName: string, markers: string[]): string {
-  const parts = registeredName.trim().split(/\s+/).filter((p) => !markers.includes(normalizeText(p)));
+  const parts = registeredName
+    .trim()
+    .split(/\s+/)
+    .filter((p) => !markers.includes(normalizeText(p)));
   return (parts[0] ?? registeredName.trim().split(/\s+/)[0] ?? "colega").trim();
 }
 
@@ -233,9 +242,7 @@ function buildConsultantPrompt(
 }
 
 type GatewayResult =
-  | { kind: "ok"; text: string }
-  | { kind: "retryable" | "terminal"; message: string };
-
+  { kind: "ok"; text: string } | { kind: "retryable" | "terminal"; message: string };
 
 function retryDelay(response: Response, attempt: number): number {
   const retryAfter = response.headers.get("retry-after");
@@ -269,7 +276,8 @@ async function readStreamText(response: Response): Promise<string> {
           const payload = JSON.parse(data) as {
             choices?: { delta?: { content?: string }; message?: { content?: string } }[];
           };
-          text += payload.choices?.[0]?.delta?.content ?? payload.choices?.[0]?.message?.content ?? "";
+          text +=
+            payload.choices?.[0]?.delta?.content ?? payload.choices?.[0]?.message?.content ?? "";
         } catch {
           // Eventos auxiliares do stream não contêm texto e podem ser ignorados.
         }
@@ -335,7 +343,11 @@ async function callGateway(messages: ChatMessage[]): Promise<GatewayResult> {
   return { kind: "retryable", message: "Falha temporária na geração" };
 }
 
-async function handoff(companyId: string, conversationId: string, reason: string): Promise<boolean> {
+async function handoff(
+  companyId: string,
+  conversationId: string,
+  reason: string,
+): Promise<boolean> {
   // O Kanban precisa mostrar imediatamente que o lead saiu da IA.
   const { data: convRow } = await supabaseAdmin
     .from("conversations")
@@ -358,7 +370,8 @@ async function handoff(companyId: string, conversationId: string, reason: string
     .eq("conversation_id", conversationId)
     .eq("status", "ACTIVE")
     .select("id");
-  if (sessionError) console.error("[ia] falha ao encerrar sessão na transferência", sessionError.message);
+  if (sessionError)
+    console.error("[ia] falha ao encerrar sessão na transferência", sessionError.message);
 
   // Algumas regras determinísticas (como detectar outra IA) são avaliadas antes
   // da primeira sessão ser criada. Grave mesmo assim um bloqueio durável: sem
@@ -374,7 +387,8 @@ async function handoff(companyId: string, conversationId: string, reason: string
       handoff_reason: reason,
       metadata: { automatic_block: true },
     });
-    if (blockError) console.error("[ia] falha ao gravar bloqueio da transferência", blockError.message);
+    if (blockError)
+      console.error("[ia] falha ao gravar bloqueio da transferência", blockError.message);
   }
 
   // Entra na fila: o motor escolhe o consultor e inicia a contagem do SLA.
@@ -433,19 +447,25 @@ export async function respondWithAI(input: {
   // OU pelo telefone cadastrado na equipe (perfis e números conectados da empresa).
   // Nesse caso a IA vira assistente interna: não qualifica, não transfere e nunca
   // manda a conversa para o rodízio da fila.
-  const [{ data: company }, { data: staffProfiles }, { data: staffConnections }] = await Promise.all([
-    supabaseAdmin.from("companies").select("name").eq("id", companyId).maybeSingle(),
-    supabaseAdmin.from("profiles").select("full_name, phone").eq("company_id", companyId),
-    supabaseAdmin.from("whatsapp_connections").select("phone_number").eq("company_id", companyId),
-  ]);
+  const [{ data: company }, { data: staffProfiles }, { data: staffConnections }] =
+    await Promise.all([
+      supabaseAdmin.from("companies").select("name").eq("id", companyId).maybeSingle(),
+      supabaseAdmin.from("profiles").select("full_name, phone").eq("company_id", companyId),
+      supabaseAdmin.from("whatsapp_connections").select("phone_number").eq("company_id", companyId),
+    ]);
   const markers = companyMarkers(company?.name, settings.companyName);
-  const leadRegisteredName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
-  const leadWhatsapp = ((conversation.lead as { whatsapp?: string | null } | null)?.whatsapp ?? "").trim();
+  const leadRegisteredName = (
+    (conversation.lead as { name?: string | null } | null)?.name ?? ""
+  ).trim();
+  const leadWhatsapp = (
+    (conversation.lead as { whatsapp?: string | null } | null)?.whatsapp ?? ""
+  ).trim();
   const leadPhone = ((conversation.lead as { phone?: string | null } | null)?.phone ?? "").trim();
   const digits = (value: string | null | undefined) => (value ?? "").replace(/\D/g, "");
-  const leadDigits = [digits(leadPhone), leadWhatsapp.includes("@lid") ? "" : digits(leadWhatsapp)].filter(
-    (d) => d.length >= 10,
-  );
+  const leadDigits = [
+    digits(leadPhone),
+    leadWhatsapp.includes("@lid") ? "" : digits(leadWhatsapp),
+  ].filter((d) => d.length >= 10);
   const staffNumbers = new Set(
     [
       ...(staffProfiles ?? []).map((p) => digits(p.phone)),
@@ -461,8 +481,10 @@ export async function respondWithAI(input: {
     leadRegisteredName || (matchedProfile?.full_name ?? ""),
     markers,
   );
-  const consultantPhone = leadWhatsapp && !leadWhatsapp.includes("@lid") ? leadWhatsapp : leadPhone || null;
-  if (isConsultantChat) log("modo consultor interno", leadRegisteredName, { porTelefone: isStaffPhone });
+  const consultantPhone =
+    leadWhatsapp && !leadWhatsapp.includes("@lid") ? leadWhatsapp : leadPhone || null;
+  if (isConsultantChat)
+    log("modo consultor interno", leadRegisteredName, { porTelefone: isStaffPhone });
 
   // Conversa encerrada volta a atender o consultor interno (suporte contínuo);
   // pausada continua respeitando a pausa manual.
@@ -471,8 +493,6 @@ export async function respondWithAI(input: {
     log("skip: status", conversation.status);
     return { status: "skipped", reason: `status ${conversation.status}` };
   }
-
-
 
   // Quando a conversa é devolvida para a IA (arrastar para "Em qualificação (IA)"
   // no Kanban ou rodízio esgotado), tudo que aconteceu antes desse momento
@@ -522,10 +542,13 @@ export async function respondWithAI(input: {
     // o eco da IA podia chegar primeiro e ser gravado como consultor do aparelho.
     // Se existe a resposta da IA do mesmo formato no mesmo instante, é eco.
     return !(aiReplies ?? []).some((ai) => {
-      const closeInTime = Math.abs(new Date(ai.created_at).getTime() - new Date(message.created_at).getTime()) <= 120_000;
+      const closeInTime =
+        Math.abs(new Date(ai.created_at).getTime() - new Date(message.created_at).getTime()) <=
+        120_000;
       const samePayload =
         ai.message_type === message.message_type &&
-        (message.message_type !== "text" || (ai.content ?? "").trim() === (message.content ?? "").trim());
+        (message.message_type !== "text" ||
+          (ai.content ?? "").trim() === (message.content ?? "").trim());
       return closeInTime && samePayload;
     });
   });
@@ -533,11 +556,14 @@ export async function respondWithAI(input: {
     (latest, message) => Math.max(latest, new Date(message.created_at).getTime()),
     0,
   );
-  if (!isConsultantChat && lastHumanReplyAt && Date.now() - lastHumanReplyAt < HUMAN_TAKEOVER_TTL_MS) {
+  if (
+    !isConsultantChat &&
+    lastHumanReplyAt &&
+    Date.now() - lastHumanReplyAt < HUMAN_TAKEOVER_TTL_MS
+  ) {
     log("skip: consultor já respondeu nesta conversa");
     return { status: "skipped", reason: "conversa com consultor" };
   }
-
 
   const { count: pendingOffers } = await supabaseAdmin
     .from("assignment_attempts")
@@ -550,7 +576,6 @@ export async function respondWithAI(input: {
     log("skip: oferta de fila aguardando consultor");
     return { status: "skipped", reason: "conversa com consultor" };
   }
-
 
   const { data: history } = await supabaseAdmin
     .from("messages")
@@ -591,7 +616,9 @@ export async function respondWithAI(input: {
   // ele mandou áudio e nada indica que do outro lado não é possível ouvir
   // (pessoa sem fone, ambiente, ou outro robô/IA que só lê texto).
   const AUDIO_TYPES = ["audio", "ptt", "voice"];
-  const lastCustomerIsAudio = AUDIO_TYPES.includes(String(lastCustomer.message_type ?? "").toLowerCase());
+  const lastCustomerIsAudio = AUDIO_TYPES.includes(
+    String(lastCustomer.message_type ?? "").toLowerCase(),
+  );
   // A retomada manual inicia um novo ciclo de atendimento. Textos antigos que
   // pareciam vir de outro robô não podem bloquear novamente esta nova conversa.
   const customerTexts = ordered
@@ -619,14 +646,35 @@ export async function respondWithAI(input: {
     /\b(quero|gostaria|preciso|pode|poderia|posso)\b[^.?!]{0,30}\b(consultor(?:a)?|atendente|corretor(?:a)?|atendimento\s+humano|humano|humana)\b/i;
   // Mesmo em conversa interna, se a pessoa pede um humano de forma explícita
   // nós transferimos: quem pede atendimento humano não pode ficar com a IA.
-  const explicitHumanRequest = humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText);
+  const explicitHumanRequest =
+    humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText);
 
+  // "Registrar e seguir": se o rodízio esgotou há pouco nesta conversa (todos
+  // os consultores já foram acionados sem sucesso) e não há oferta em aberto,
+  // um novo pedido de humano não pode virar outra promessa de transferência
+  // que quebra instantaneamente. A IA confirma que o pedido já está registrado
+  // e segue atendendo; após a janela, novo pedido volta a disparar handoff.
+  let humanRequestAlreadyRegistered = false;
+  if (explicitHumanRequest && (pendingOffers ?? 0) === 0) {
+    const since = new Date(Date.now() - HUMAN_REQUEST_WINDOW_MS).toISOString();
+    const { count: recentExhaustion } = await supabaseAdmin
+      .from("conversation_events")
+      .select("id", { count: "exact", head: true })
+      .eq("conversation_id", conversationId)
+      .eq("event_type", "QUEUE_NO_CONSULTANT")
+      .gte("created_at", since);
+    humanRequestAlreadyRegistered = (recentExhaustion ?? 0) > 0;
+  }
+  const effectiveHumanRequest = explicitHumanRequest && !humanRequestAlreadyRegistered;
 
   // Anti-loop: outro robô/IA do outro lado responderia para sempre. Paramos
   // assim que o interlocutor se identifica como automático, ou quando a troca
   // fica longa demais para um atendimento humano real.
   const counterpartSaysBot = customerTexts.some((t) => {
-    const normalized = normalizeText(t).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+    const normalized = normalizeText(t)
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     return [
       /\bsou (?:um |uma )?(?:ia|inteligencia artificial|bot|robo|chatbot)\b/,
       /\bsou (?:um |uma )?assistente(?: de suporte)? (?:inteligente|virtual|automatic[oa])\b/,
@@ -658,7 +706,12 @@ export async function respondWithAI(input: {
     }
   }
   const normalizedCustomerTexts = customerTexts
-    .map((t) => normalizeText(t).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim())
+    .map((t) =>
+      normalizeText(t)
+        .replace(/[^a-z0-9 ]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
     .filter((t) => t.length > 12);
   const lastThree = normalizedCustomerTexts.slice(-3);
   const repeatsItself = lastThree.length === 3 && new Set(lastThree).size === 1;
@@ -697,8 +750,6 @@ export async function respondWithAI(input: {
     return { status: "handoff", reason };
   }
 
-
-
   // Áudio/imagem/documento sem texto: a IA não interpreta, vai direto para humano.
   const unreadableMedia =
     lastCustomer.message_type !== "text" && !lastCustomer.content && !lastCustomer.transcription;
@@ -718,8 +769,7 @@ export async function respondWithAI(input: {
   // WhatsApp serve para conferência quando divergir (número pode ter trocado de dono).
   const crmName = ((conversation.lead as { name?: string | null } | null)?.name ?? "").trim();
   const whatsappName = (lastCustomer.sender_name ?? "").trim();
-  const sameName =
-    crmName && whatsappName && crmName.toLowerCase() === whatsappName.toLowerCase();
+  const sameName = crmName && whatsappName && crmName.toLowerCase() === whatsappName.toLowerCase();
   const nameContext = crmName
     ? sameName || !whatsappName
       ? `CONTATO: o lead se chama ${crmName}. Cumprimente-o pelo nome de forma natural (ex.: "Olá, ${crmName}!") sem repetir o nome em todas as mensagens.`
@@ -731,7 +781,8 @@ export async function respondWithAI(input: {
   // Fatos já confirmados pelo lead (cidade, idades, plano atual, etc.).
   // Evita que a IA volte a perguntar algo que já foi respondido antes.
 
-  const leadIdForMemory = (conversation as { lead_id?: string | null }).lead_id ?? input.leadId ?? null;
+  const leadIdForMemory =
+    (conversation as { lead_id?: string | null }).lead_id ?? input.leadId ?? null;
   const { data: leadFacts } = leadIdForMemory
     ? await supabaseAdmin
         .from("lead_memory")
@@ -756,6 +807,18 @@ export async function respondWithAI(input: {
         : buildSystemPrompt(settings, knowledge),
     },
     ...(isConsultantChat ? [] : [{ role: "system" as const, content: nameContext }]),
+    ...(humanRequestAlreadyRegistered
+      ? [
+          {
+            role: "system" as const,
+            content: [
+              "PEDIDO HUMANO JÁ REGISTRADO: o cliente pediu atendimento humano, mas todos os consultores já foram acionados sem sucesso nesta conversa.",
+              "Informe com naturalidade que o pedido já está registrado e que um consultor o assumirá assim que liberar. NÃO prometa transferência imediata e NÃO inclua a expressão de transferência.",
+              "Continue ajudando o cliente normalmente por aqui.",
+            ].join("\n"),
+          },
+        ]
+      : []),
     {
       role: "system" as const,
       content: [
@@ -771,7 +834,9 @@ export async function respondWithAI(input: {
       .filter((m) => ((m.transcription || m.content) ?? "").trim())
       .map<ChatMessage>((m) => {
         const body = ((m.transcription || m.content) ?? "").trim();
-        const isAudio = ["audio", "ptt", "voice"].includes(String(m.message_type ?? "").toLowerCase());
+        const isAudio = ["audio", "ptt", "voice"].includes(
+          String(m.message_type ?? "").toLowerCase(),
+        );
         return {
           role: m.sender_type === "customer" ? "user" : "assistant",
           content:
@@ -797,16 +862,22 @@ export async function respondWithAI(input: {
     });
   }
 
-
   log("chamando o modelo", { mensagens: messages.length, conhecimento: knowledge.length });
   // Pedido inequívoco de humano não fica sujeito à interpretação do modelo.
-  const generation: GatewayResult = explicitHumanRequest
-    ? { kind: "ok", text: `Claro! Vou transferir você agora para um consultor humano. ${HANDOFF_TOKEN}` }
+  const generation: GatewayResult = effectiveHumanRequest
+    ? {
+        kind: "ok",
+        text: `Claro! Vou transferir você agora para um consultor humano. ${HANDOFF_TOKEN}`,
+      }
     : await callGateway(messages);
   if (generation.kind !== "ok") {
     log("geração não concluída", { tipo: generation.kind, erro: generation.message.slice(0, 300) });
     if (generation.kind === "terminal" && !isConsultantChat) {
-      await handoff(companyId, conversationId, `falha permanente da IA: ${generation.message.slice(0, 300)}`);
+      await handoff(
+        companyId,
+        conversationId,
+        `falha permanente da IA: ${generation.message.slice(0, 300)}`,
+      );
       return { status: "handoff", reason: "gateway" };
     }
     // Uma indisponibilidade transitória jamais encerra a sessão: a próxima
@@ -815,7 +886,7 @@ export async function respondWithAI(input: {
   }
   const raw = generation.text;
 
-  const needsHuman = explicitHumanRequest || (!isConsultantChat && raw.includes(HANDOFF_TOKEN));
+  const needsHuman = effectiveHumanRequest || (!isConsultantChat && raw.includes(HANDOFF_TOKEN));
   const text = stripNarration(raw.replaceAll(HANDOFF_TOKEN, ""));
 
   // Outra mensagem pode ter detectado o loop enquanto esta geração ainda estava
@@ -841,7 +912,8 @@ export async function respondWithAI(input: {
 
   if (text) {
     const destination =
-      (conversation.lead as { whatsapp: string | null } | null)?.whatsapp ?? conversation.channel_id;
+      (conversation.lead as { whatsapp: string | null } | null)?.whatsapp ??
+      conversation.channel_id;
     const recipient = WhatsAppIdentifierService.toRecipient(destination);
     const creds = recipient ? await loadMegaCredentials(connectionId) : null;
 
@@ -854,39 +926,42 @@ export async function respondWithAI(input: {
         : null;
       const voiceUrl = voice ? await signedMediaUrl(voice.path) : null;
       const asAudio = Boolean(voice && voiceUrl);
-      if (preferAudio && !asAudio) log("cliente falou por áudio, mas a voz não ficou pronta; enviando texto");
-
-
+      if (preferAudio && !asAudio)
+        log("cliente falou por áudio, mas a voz não ficou pronta; enviando texto");
 
       // Reservamos a mensagem ANTES do envio. A MEGA pode disparar o eco do
       // WhatsApp ainda durante a chamada de envio; sem esta reserva, esse eco
       // era gravado como resposta de consultor e bloqueava a IA para sempre.
-      const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc("create_outbound_message", {
-        _conversation_id: conversationId,
-        _company_id: companyId,
-        _sender_id: null as unknown as string,
-        _sender_type: "ai",
-        _sender_name: "IA",
-        _content: text,
-        _message_type: asAudio ? "audio" : "text",
-        ...(voice ? { _media_url: voice.path } : {}),
-        _connection_id: connectionId,
-      });
+      const { data: messageId, error: createMessageError } = await supabaseAdmin.rpc(
+        "create_outbound_message",
+        {
+          _conversation_id: conversationId,
+          _company_id: companyId,
+          _sender_id: null as unknown as string,
+          _sender_type: "ai",
+          _sender_name: "IA",
+          _content: text,
+          _message_type: asAudio ? "audio" : "text",
+          ...(voice ? { _media_url: voice.path } : {}),
+          _connection_id: connectionId,
+        },
+      );
 
       if (createMessageError) {
         log("falha ao reservar resposta antes do envio", createMessageError.message);
       }
 
       log("voz pronta; iniciando entrega no WhatsApp", { formato: asAudio ? "audio" : "text" });
-      let sent = voice && voiceUrl
-        ? await MegaApiService.sendMedia(creds, {
-            to: recipient,
-            url: voiceUrl,
-            mediaType: "audio",
-            mimeType: voice.mimeType,
-            fileName: `resposta-${Date.now()}.mp3`,
-          })
-        : await MegaApiService.sendText(creds, recipient, text);
+      let sent =
+        voice && voiceUrl
+          ? await MegaApiService.sendMedia(creds, {
+              to: recipient,
+              url: voiceUrl,
+              mediaType: "audio",
+              mimeType: voice.mimeType,
+              fileName: `resposta-${Date.now()}.mp3`,
+            })
+          : await MegaApiService.sendText(creds, recipient, text);
 
       // O lead nunca pode ficar sem resposta por causa do áudio.
       if (asAudio && !sent.ok) {
