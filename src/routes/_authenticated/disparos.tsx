@@ -1373,7 +1373,18 @@ function MessagesTab({ messages }: { messages: Message[] }) {
             <p className="py-8 text-center text-sm text-muted-foreground">Nenhum modelo cadastrado.</p>
           ) : (
             messages.map((m) => (
-              <div key={m.id} className="rounded-lg border border-border p-3">
+              <div
+                key={m.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => startEdit(m)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") startEdit(m);
+                }}
+                className={`cursor-pointer rounded-lg border p-3 transition-colors hover:border-primary/60 ${
+                  editingId === m.id ? "border-primary" : "border-border"
+                }`}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium">{m.name}</p>
                   <div className="flex items-center gap-2">
@@ -1381,17 +1392,14 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => {
-                        setEditingId(m.id);
-                        setName(m.name);
-                        setContent(m.content ?? "");
-                        setImage(null);
-                        setRemoveImage(false);
-                        setExistingImage(m.mediaPreviewUrl ?? null);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEdit(m);
                       }}
                     >
                       <Pencil className="size-4" />
                     </Button>
+
                     <Button
                       size="icon"
                       variant="ghost"
