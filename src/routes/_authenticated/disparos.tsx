@@ -555,17 +555,20 @@ function NewCampaignTab({
   messages,
   contacts,
   settings,
+  editingId,
   onCreated,
 }: {
   instances: Instance[];
   messages: Message[];
   contacts: Contact[];
   settings: Overview["settings"] | undefined;
+  editingId: string | null;
   onCreated: () => void;
 }) {
   const queryClient = useQueryClient();
   const saveFn = useServerFn(saveBroadcastCampaign);
   const startFn = useServerFn(startBroadcastCampaign);
+  const getCampaignFn = useServerFn(getBroadcastCampaign);
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
@@ -581,15 +584,42 @@ function NewCampaignTab({
   const [scheduledAt, setScheduledAt] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Ao editar, os campos são preenchidos com o que já estava salvo na campanha.
+  useEffect(() => {
+    if (!editingId) return;
+    let active = true;
+    getCampaignFn({ data: { campaignId: editingId } })
+      .then((campaign) => {
+        if (!active) return;
+        setName(String(campaign["name"] ?? ""));
+        setInstanceId(String(campaign["instance_id"] ?? ""));
+        setMessageId(String(campaign["message_id"] ?? ""));
+        setSelected(campaign.contactIds ?? []);
+        setRequireOptIn(Boolean(campaign["require_opt_in"]));
+        setPerMinute(Number(campaign["messages_per_minute"] ?? 5));
+        setMinInterval(Number(campaign["min_interval_seconds"] ?? 10));
+        setMaxInterval(Number(campaign["max_interval_seconds"] ?? 25));
+        setDailyLimit(Number(campaign["daily_limit"] ?? 200));
+        setWindowStart(String(campaign["window_start"] ?? "08:00").slice(0, 5));
+        setWindowEnd(String(campaign["window_end"] ?? "20:00").slice(0, 5));
+        setScheduledAt("");
+      })
+      .catch((error: Error) => toast.error(error.message));
+    return () => {
+      active = false;
+    };
+  }, [editingId, getCampaignFn]);
+
   const message = messages.find((m) => m.id === messageId);
   const audience = contacts.filter(
     (c) => selected.includes(c.id) && c.status === "ATIVO" && (!requireOptIn || c.opt_in),
   );
   const preview = message
-    ? message.content
+    ? (message.content ?? "")
         .replace(/\{\{nome\}\}/g, audience[0]?.name?.trim() || "cliente")
         .replace(/\{\{primeiro_nome\}\}/g, (audience[0]?.name?.trim() || "cliente").split(" ")[0] ?? "cliente")
     : "";
+
 
   async function submit(startNow: boolean) {
     if (!name.trim()) {
