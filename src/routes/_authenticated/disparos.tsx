@@ -1414,7 +1414,10 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() =>
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void
+
                         deleteFn({ data: { id: m.id } })
                           .then(() => {
                             toast.success("Mensagem excluída.");
