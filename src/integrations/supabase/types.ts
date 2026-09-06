@@ -623,30 +623,39 @@ export type Database = {
       broadcast_messages: {
         Row: {
           company_id: string
-          content: string
+          content: string | null
           created_at: string
           created_by: string | null
           id: string
+          media_filename: string | null
+          media_type: string | null
+          media_url: string | null
           name: string
           status: Database["public"]["Enums"]["content_status"]
           updated_at: string
         }
         Insert: {
           company_id: string
-          content: string
+          content?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          media_filename?: string | null
+          media_type?: string | null
+          media_url?: string | null
           name: string
           status?: Database["public"]["Enums"]["content_status"]
           updated_at?: string
         }
         Update: {
           company_id?: string
-          content?: string
+          content?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          media_filename?: string | null
+          media_type?: string | null
+          media_url?: string | null
           name?: string
           status?: Database["public"]["Enums"]["content_status"]
           updated_at?: string

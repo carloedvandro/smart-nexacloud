@@ -44,7 +44,17 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
     await finalize(item.queue_id, false, null, "Número inválido para WhatsApp.");
     return false;
   }
-  if (!item.content.trim()) {
+
+  // Modelo com imagem: a mídia vai junto e o texto vira legenda.
+  const { data: queueRow } = await supabaseAdmin
+    .from("broadcast_queue")
+    .select("message:broadcast_messages(media_url, media_type, media_filename)")
+    .eq("id", item.queue_id)
+    .maybeSingle();
+  const media = (queueRow as { message?: { media_url: string | null; media_type: string | null; media_filename: string | null } | null } | null)
+    ?.message ?? null;
+
+  if (!item.content.trim() && !media?.media_url) {
     await finalize(item.queue_id, false, null, "Mensagem vazia.");
     return false;
   }
@@ -55,16 +65,36 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
     return false;
   }
 
-  const sent = await MegaApiService.sendText(creds, recipient, item.content);
+  let sent;
+  if (media?.media_url) {
+    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+    const url = await signedMediaUrl(media.media_url, 60 * 60);
+    if (!url) {
+      await finalize(item.queue_id, false, null, "Não consegui gerar o link da imagem.");
+      return false;
+    }
+    sent = await MegaApiService.sendMedia(creds, {
+      to: recipient,
+      url,
+      mediaType: "image",
+      mimeType: media.media_type ?? "image/jpeg",
+      fileName: media.media_filename ?? "imagem.jpg",
+      caption: item.content,
+    });
+  } else {
+    sent = await MegaApiService.sendText(creds, recipient, item.content);
+  }
+
   if (!sent.ok) {
     await finalize(item.queue_id, false, null, sent.error);
     return false;
   }
 
-  const providerId = sent.data?.key?.id ?? sent.data?.messageId ?? null;
+  const providerId = sent.data?.key?.id ?? (sent.data as { messageId?: string } | undefined)?.messageId ?? null;
   await finalize(item.queue_id, true, providerId, null);
   return true;
 }
+
 
 /**
  * Executa uma janela de processamento. O ritmo real é definido pelo banco

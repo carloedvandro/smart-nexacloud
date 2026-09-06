@@ -401,7 +401,29 @@ export const listBroadcastMessages = createServerFn({ method: "GET" })
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return data ?? [];
+
+    const rows = (data ?? []) as Record<string, any>[];
+    const withMedia = rows.filter((row) => row["media_url"]);
+    if (withMedia.length) {
+      const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+      await Promise.all(
+        withMedia.map(async (row) => {
+          row["mediaPreviewUrl"] = await signedMediaUrl(row["media_url"] as string, 60 * 60);
+        }),
+      );
+    }
+    return rows as (Record<string, any> & {
+      id: string;
+      name: string;
+      content: string | null;
+      status: string;
+      media_url: string | null;
+      media_type: string | null;
+      media_filename: string | null;
+      mediaPreviewUrl?: string | null;
+      created_at: string;
+      updated_at: string;
+    })[];
   });
 
 const ALLOWED_VARIABLES = ["nome", "primeiro_nome"];
@@ -411,12 +433,27 @@ export function validateTemplate(content: string): string[] {
   return [...new Set(found.filter((name) => !ALLOWED_VARIABLES.includes(name)))];
 }
 
+export type BroadcastMessageInput = {
+  id?: string;
+  name: string;
+  content: string;
+  status?: string;
+  /** Imagem opcional em base64 (sem prefixo data:). */
+  mediaBase64?: string | null;
+  mediaMimeType?: string | null;
+  mediaFilename?: string | null;
+  /** Remove a imagem atual do modelo. */
+  removeMedia?: boolean;
+};
+
 export const saveBroadcastMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id?: string; name: string; content: string; status?: string }) => {
+  .inputValidator((data: BroadcastMessageInput) => {
     if (!data.name?.trim()) throw new Error("Informe o nome interno da mensagem.");
-    if (!data.content?.trim()) throw new Error("Informe o texto da mensagem.");
-    const unknown = validateTemplate(data.content);
+    if (!data.content?.trim() && !data.mediaBase64) {
+      throw new Error("Escreva o texto da mensagem ou anexe uma imagem.");
+    }
+    const unknown = validateTemplate(data.content ?? "");
     if (unknown.length) {
       throw new Error(
         `Variáveis não suportadas: ${unknown.map((v) => `{{${v}}}`).join(", ")}. Use apenas {{nome}} e {{primeiro_nome}}.`,
@@ -427,13 +464,36 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
     const { companyId } = await requireAdmin(ctx);
-    const payload = {
+    const payload: Record<string, unknown> = {
       company_id: companyId,
       name: data.name.trim(),
-      content: data.content,
+      content: data.content ?? "",
       status: data.status ?? "ACTIVE",
       created_by: ctx.userId,
     };
+
+    if (data.mediaBase64) {
+      const { base64ToBytes, storeMedia } = await import("@/lib/whatsapp/media.server");
+      const bytes = base64ToBytes(data.mediaBase64);
+      if (bytes.byteLength > 8 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 8 MB.");
+      const path = await storeMedia({
+        companyId,
+        connectionId: "broadcast",
+        bytes,
+        mimeType: data.mediaMimeType ?? "image/jpeg",
+        kind: "image",
+        fileName: data.mediaFilename ?? null,
+      });
+      if (!path) throw new Error("Não consegui salvar a imagem. Tente novamente.");
+      payload["media_url"] = path;
+      payload["media_type"] = data.mediaMimeType ?? "image/jpeg";
+      payload["media_filename"] = data.mediaFilename ?? "imagem.jpg";
+    } else if (data.removeMedia) {
+      payload["media_url"] = null;
+      payload["media_type"] = null;
+      payload["media_filename"] = null;
+    }
+
     if (data.id) {
       const { error } = await ctx.supabase
         .from("broadcast_messages")
@@ -451,6 +511,7 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true, id: row?.id as string };
   });
+
 
 export const deleteBroadcastMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -737,6 +798,61 @@ export const cancelBroadcastCampaign = createServerFn({ method: "POST" })
     });
   });
 
+/** Carrega uma campanha com os contatos escolhidos, para edição. */
+export const getBroadcastCampaign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { campaignId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const { companyId } = await requireAdmin(ctx);
+    const { data: campaign, error } = await ctx.supabase
+      .from("broadcast_campaigns")
+      .select("*")
+      .eq("id", data.campaignId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!campaign) throw new Error("Campanha inexistente.");
+    const { data: links } = await ctx.supabase
+      .from("broadcast_campaign_contacts")
+      .select("contact_id")
+      .eq("campaign_id", data.campaignId);
+    return {
+      ...(campaign as Record<string, any>),
+      contactIds: (links ?? []).map((l: { contact_id: string }) => l.contact_id),
+    };
+  });
+
+/** Exclui a campanha e todo o seu histórico de fila. Só rascunhos/encerradas. */
+export const deleteBroadcastCampaign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { campaignId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const { companyId, userName } = await requireAdmin(ctx);
+    const { data: campaign } = await ctx.supabase
+      .from("broadcast_campaigns")
+      .select("id, name, status")
+      .eq("id", data.campaignId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!campaign) throw new Error("Campanha inexistente.");
+    if (campaign.status === "RUNNING" || campaign.status === "SCHEDULED") {
+      throw new Error("Pause ou cancele a campanha antes de excluir.");
+    }
+
+    await log(ctx, companyId, userName, "CAMPAIGN_DELETED", null, { campanha: campaign.name });
+    await ctx.supabase.from("broadcast_queue").delete().eq("campaign_id", data.campaignId).eq("company_id", companyId);
+    await ctx.supabase.from("broadcast_campaign_contacts").delete().eq("campaign_id", data.campaignId);
+    const { error } = await ctx.supabase
+      .from("broadcast_campaigns")
+      .delete()
+      .eq("id", data.campaignId)
+      .eq("company_id", companyId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 export const duplicateBroadcastCampaign = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { campaignId: string }) => data)
@@ -832,7 +948,7 @@ export const listBroadcastHistory = createServerFn({ method: "POST" })
     let query = ctx.supabase
       .from("broadcast_queue")
       .select(
-        "id, status, scheduled_at, sent_at, attempts, error_message, provider_message_id, created_at, campaign:broadcast_campaigns(id, name), contact:broadcast_contacts(id, name, whatsapp), instance:whatsapp_connections(id, name)",
+        "id, status, scheduled_at, sent_at, attempts, error_message, provider_message_id, rendered_content, created_at, campaign:broadcast_campaigns(id, name), contact:broadcast_contacts(id, name, whatsapp), instance:whatsapp_connections(id, name), message:broadcast_messages(id, name, media_url, media_type)",
       )
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })

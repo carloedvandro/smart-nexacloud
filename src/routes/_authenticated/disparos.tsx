@@ -7,8 +7,10 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  ImagePlus,
   Megaphone,
   OctagonX,
+  Pencil,
   Pause,
   Play,
   Plus,
@@ -51,10 +53,12 @@ import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
   cancelBroadcastCampaign,
   connectBroadcastInstance,
+  deleteBroadcastCampaign,
   deleteBroadcastContacts,
   deleteBroadcastMessage,
   disconnectBroadcastInstance,
   duplicateBroadcastCampaign,
+  getBroadcastCampaign,
   getBroadcastOverview,
   getBroadcastSettings,
   importBroadcastContacts,
@@ -129,6 +133,8 @@ type HistoryRow = {
   attempts: number;
   error_message: string | null;
   provider_message_id: string | null;
+  rendered_content: string | null;
+  message: { id: string; name: string; media_url: string | null; media_type: string | null } | null;
   campaign: { id: string; name: string } | null;
   contact: { id: string; name: string | null; whatsapp: string } | null;
   instance: { id: string; name: string | null } | null;
@@ -167,6 +173,7 @@ function GuardedDisparosPage() {
 function DisparosPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("visao");
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
 
   const overviewFn = useServerFn(getBroadcastOverview);
   const campaignsFn = useServerFn(listBroadcastCampaigns);
@@ -247,7 +254,7 @@ function DisparosPage() {
         <TabsList className="flex w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="visao">Visão geral</TabsTrigger>
           <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
-          <TabsTrigger value="nova">Nova campanha</TabsTrigger>
+          <TabsTrigger value="nova">{editingCampaignId ? "Editar campanha" : "Nova campanha"}</TabsTrigger>
           <TabsTrigger value="contatos">Contatos</TabsTrigger>
           <TabsTrigger value="mensagens">Mensagens</TabsTrigger>
           <TabsTrigger value="instancias">Instâncias de disparo</TabsTrigger>
@@ -260,7 +267,14 @@ function DisparosPage() {
         </TabsContent>
 
         <TabsContent value="campanhas">
-          <CampaignsTab campaigns={campaigns.data ?? []} loading={campaigns.isLoading} />
+          <CampaignsTab
+            campaigns={campaigns.data ?? []}
+            loading={campaigns.isLoading}
+            onEdit={(id) => {
+              setEditingCampaignId(id);
+              setTab("nova");
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="nova">
@@ -269,7 +283,11 @@ function DisparosPage() {
             messages={messages.data ?? []}
             contacts={contacts.data ?? []}
             settings={overview.data?.settings}
-            onCreated={() => setTab("campanhas")}
+            editingId={editingCampaignId}
+            onCreated={() => {
+              setEditingCampaignId(null);
+              setTab("campanhas");
+            }}
           />
         </TabsContent>
 
@@ -406,8 +424,17 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
 
 type Campaign = Awaited<ReturnType<typeof listBroadcastCampaigns>>[number];
 
-function CampaignsTab({ campaigns, loading }: { campaigns: Campaign[]; loading: boolean }) {
+function CampaignsTab({
+  campaigns,
+  loading,
+  onEdit,
+}: {
+  campaigns: Campaign[];
+  loading: boolean;
+  onEdit: (id: string) => void;
+}) {
   const queryClient = useQueryClient();
+  const deleteFn = useServerFn(deleteBroadcastCampaign);
   const startFn = useServerFn(startBroadcastCampaign);
   const pauseFn = useServerFn(pauseBroadcastCampaign);
   const resumeFn = useServerFn(resumeBroadcastCampaign);
@@ -526,6 +553,9 @@ function CampaignsTab({ campaigns, loading }: { campaigns: Campaign[]; loading: 
                     <X className="size-4" /> Cancelar
                   </Button>
                 ) : null}
+                <Button size="sm" variant="outline" onClick={() => onEdit(campaign.id)}>
+                  <Pencil className="size-4" /> Editar
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -533,6 +563,30 @@ function CampaignsTab({ campaigns, loading }: { campaigns: Campaign[]; loading: 
                 >
                   Duplicar
                 </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="ghost" className="text-destructive">
+                      <Trash2 className="size-4" /> Excluir
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Excluir “{campaign.name}”?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        A campanha sai da lista junto com o histórico de envios dela. Essa ação não pode ser
+                        desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Voltar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => run(deleteFn({ data: { campaignId: campaign.id } }), "Campanha excluída.")}
+                      >
+                        Excluir
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </CardContent>
           </Card>
@@ -555,17 +609,20 @@ function NewCampaignTab({
   messages,
   contacts,
   settings,
+  editingId,
   onCreated,
 }: {
   instances: Instance[];
   messages: Message[];
   contacts: Contact[];
   settings: Overview["settings"] | undefined;
+  editingId: string | null;
   onCreated: () => void;
 }) {
   const queryClient = useQueryClient();
   const saveFn = useServerFn(saveBroadcastCampaign);
   const startFn = useServerFn(startBroadcastCampaign);
+  const getCampaignFn = useServerFn(getBroadcastCampaign);
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
@@ -581,15 +638,43 @@ function NewCampaignTab({
   const [scheduledAt, setScheduledAt] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Ao editar, os campos são preenchidos com o que já estava salvo na campanha.
+  useEffect(() => {
+    if (!editingId) return;
+    let active = true;
+    getCampaignFn({ data: { campaignId: editingId } })
+      .then((raw) => {
+        if (!active) return;
+        const campaign = raw as Record<string, any>;
+        setName(String(campaign["name"] ?? ""));
+        setInstanceId(String(campaign["instance_id"] ?? ""));
+        setMessageId(String(campaign["message_id"] ?? ""));
+        setSelected((campaign["contactIds"] as string[] | undefined) ?? []);
+        setRequireOptIn(Boolean(campaign["require_opt_in"]));
+        setPerMinute(Number(campaign["messages_per_minute"] ?? 5));
+        setMinInterval(Number(campaign["min_interval_seconds"] ?? 10));
+        setMaxInterval(Number(campaign["max_interval_seconds"] ?? 25));
+        setDailyLimit(Number(campaign["daily_limit"] ?? 200));
+        setWindowStart(String(campaign["window_start"] ?? "08:00").slice(0, 5));
+        setWindowEnd(String(campaign["window_end"] ?? "20:00").slice(0, 5));
+        setScheduledAt("");
+      })
+      .catch((error: Error) => toast.error(error.message));
+    return () => {
+      active = false;
+    };
+  }, [editingId, getCampaignFn]);
+
   const message = messages.find((m) => m.id === messageId);
   const audience = contacts.filter(
     (c) => selected.includes(c.id) && c.status === "ATIVO" && (!requireOptIn || c.opt_in),
   );
   const preview = message
-    ? message.content
+    ? (message.content ?? "")
         .replace(/\{\{nome\}\}/g, audience[0]?.name?.trim() || "cliente")
         .replace(/\{\{primeiro_nome\}\}/g, (audience[0]?.name?.trim() || "cliente").split(" ")[0] ?? "cliente")
     : "";
+
 
   async function submit(startNow: boolean) {
     if (!name.trim()) {
@@ -613,6 +698,7 @@ function NewCampaignTab({
     try {
       const created = await saveFn({
         data: {
+          ...(editingId ? { id: editingId } : {}),
           name,
           instanceId,
           messageId,
@@ -634,7 +720,13 @@ function NewCampaignTab({
           },
         });
       }
-      toast.success(startNow ? "Campanha confirmada e iniciada." : "Campanha salva como rascunho.");
+      toast.success(
+        startNow
+          ? "Campanha confirmada e iniciada."
+          : editingId
+            ? "Alterações salvas."
+            : "Campanha salva como rascunho.",
+      );
       setName("");
       setSelected([]);
       void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
@@ -798,7 +890,9 @@ function NewCampaignTab({
 
       <Card className="h-fit lg:sticky lg:top-24">
         <CardHeader>
-          <CardTitle className="text-base">5. Revisar e confirmar</CardTitle>
+          <CardTitle className="text-base">
+            5. {editingId ? "Revisar alterações" : "Revisar e confirmar"}
+          </CardTitle>
           <CardDescription>Confira o resumo antes de autorizar o envio.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
@@ -847,7 +941,7 @@ function NewCampaignTab({
               </AlertDialogContent>
             </AlertDialog>
             <Button variant="outline" disabled={saving} onClick={() => void submit(false)}>
-              Salvar como rascunho
+              {editingId ? "Salvar alterações" : "Salvar como rascunho"}
             </Button>
           </div>
         </CardContent>
@@ -1113,8 +1207,15 @@ function MessagesTab({ messages }: { messages: Message[] }) {
   const queryClient = useQueryClient();
   const saveFn = useServerFn(saveBroadcastMessage);
   const deleteFn = useServerFn(deleteBroadcastMessage);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
+  const [image, setImage] = useState<{ base64: string; mime: string; filename: string; preview: string } | null>(
+    null,
+  );
+  const [existingImage, setExistingImage] = useState<string | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const unknownVars = useMemo(
     () =>
@@ -1124,12 +1225,64 @@ function MessagesTab({ messages }: { messages: Message[] }) {
     [content],
   );
 
+  function reset() {
+    setEditingId(null);
+    setName("");
+    setContent("");
+    setImage(null);
+    setExistingImage(null);
+    setRemoveImage(false);
+  }
+
+  async function pickImage(file: File) {
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 8 MB.");
+      return;
+    }
+    const buffer = await file.arrayBuffer();
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+    setImage({
+      base64: btoa(binary),
+      mime: file.type || "image/jpeg",
+      filename: file.name || "imagem.jpg",
+      preview: URL.createObjectURL(file),
+    });
+    setRemoveImage(false);
+  }
+
+  function save() {
+    setSaving(true);
+    saveFn({
+      data: {
+        ...(editingId ? { id: editingId } : {}),
+        name,
+        content,
+        ...(image
+          ? { mediaBase64: image.base64, mediaMimeType: image.mime, mediaFilename: image.filename }
+          : {}),
+        ...(removeImage && !image ? { removeMedia: true } : {}),
+      },
+    })
+      .then(() => {
+        toast.success(editingId ? "Modelo atualizado." : "Mensagem salva.");
+        reset();
+        void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+      })
+      .catch((error: Error) => toast.error(error.message))
+      .finally(() => setSaving(false));
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
       <Card className="h-fit">
         <CardHeader>
-          <CardTitle className="text-base">Novo modelo</CardTitle>
-          <CardDescription>Variáveis aceitas: {"{{nome}}"} e {"{{primeiro_nome}}"}.</CardDescription>
+          <CardTitle className="text-base">{editingId ? "Editar modelo" : "Novo modelo"}</CardTitle>
+          <CardDescription>
+            Variáveis aceitas: {"{{nome}}"} e {"{{primeiro_nome}}"}. Você pode anexar uma imagem — o texto vai
+            junto como legenda.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input placeholder="Nome interno" value={name} onChange={(e) => setName(e.target.value)} />
@@ -1144,27 +1297,57 @@ function MessagesTab({ messages }: { messages: Message[] }) {
               Variáveis não suportadas: {[...new Set(unknownVars)].map((v) => `{{${v}}}`).join(", ")}
             </p>
           ) : null}
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Imagem (opcional)</Label>
+            {image || (existingImage && !removeImage) ? (
+              <div className="flex items-start gap-3">
+                <img
+                  src={image?.preview ?? existingImage ?? ""}
+                  alt="Imagem anexada à mensagem"
+                  className="size-24 rounded-lg border border-border object-cover"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
+                  onClick={() => {
+                    setImage(null);
+                    setRemoveImage(true);
+                  }}
+                >
+                  <X className="size-4" /> Remover imagem
+                </Button>
+              </div>
+            ) : null}
+            <Input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void pickImage(file);
+                e.target.value = "";
+              }}
+            />
+          </div>
+
           <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
             {content
               .replace(/\{\{nome\}\}/g, "Maria Silva")
               .replace(/\{\{primeiro_nome\}\}/g, "Maria") || "Prévia da mensagem"}
           </div>
-          <Button
-            className="w-full"
-            disabled={unknownVars.length > 0}
-            onClick={() =>
-              saveFn({ data: { name, content } })
-                .then(() => {
-                  toast.success("Mensagem salva.");
-                  setName("");
-                  setContent("");
-                  void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
-                })
-                .catch((error: Error) => toast.error(error.message))
-            }
-          >
-            <Plus className="size-4" /> Salvar mensagem
-          </Button>
+
+          <div className="flex gap-2">
+            <Button className="flex-1" disabled={unknownVars.length > 0 || saving} onClick={save}>
+              {editingId ? <ImagePlus className="size-4" /> : <Plus className="size-4" />}
+              {editingId ? "Salvar alterações" : "Salvar mensagem"}
+            </Button>
+            {editingId ? (
+              <Button variant="outline" onClick={reset}>
+                Cancelar
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -1185,10 +1368,25 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     <Button
                       size="icon"
                       variant="ghost"
+                      onClick={() => {
+                        setEditingId(m.id);
+                        setName(m.name);
+                        setContent(m.content ?? "");
+                        setImage(null);
+                        setRemoveImage(false);
+                        setExistingImage(m.mediaPreviewUrl ?? null);
+                      }}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
                       onClick={() =>
                         deleteFn({ data: { id: m.id } })
                           .then(() => {
                             toast.success("Mensagem excluída.");
+                            if (editingId === m.id) reset();
                             void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
                           })
                           .catch((error: Error) => toast.error(error.message))
@@ -1198,6 +1396,13 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     </Button>
                   </div>
                 </div>
+                {m.mediaPreviewUrl ? (
+                  <img
+                    src={m.mediaPreviewUrl}
+                    alt={`Imagem do modelo ${m.name}`}
+                    className="mt-2 size-28 rounded-lg border border-border object-cover"
+                  />
+                ) : null}
                 <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{m.content}</p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   Criada em {formatDate(m.created_at)} · atualizada em {formatDate(m.updated_at)}
@@ -1467,6 +1672,16 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
                   {formatDate(row.sent_at ?? row.created_at)} · tentativas: {row.attempts} · id provedor:{" "}
                   {row.provider_message_id ?? "—"}
                 </p>
+                {row.rendered_content?.trim() ? (
+                  <p className="mt-2 whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-sm">
+                    {row.rendered_content}
+                  </p>
+                ) : null}
+                {row.message?.media_url ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Enviada com a imagem do modelo “{row.message.name}”.
+                  </p>
+                ) : null}
                 {row.error_message ? (
                   <p className="mt-1 text-xs text-destructive">{row.error_message}</p>
                 ) : null}
