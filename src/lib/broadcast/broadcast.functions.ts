@@ -97,12 +97,13 @@ export const listBroadcastInstances = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    await requireAdmin(ctx);
+    const { companyId } = await requireAdmin(ctx);
     const { data, error } = await ctx.supabase
       .from("whatsapp_connections")
       .select(
         "id, name, instance_number, is_trunk, connection_type, status, phone_number, qr_code, last_connected_at",
       )
+      .eq("company_id", companyId)
       .order("is_trunk", { ascending: false })
       .order("instance_number", { ascending: true });
     if (error) throw new Error(error.message);
@@ -159,6 +160,7 @@ export const setInstanceConnectionType = createServerFn({ method: "POST" })
       .from("whatsapp_connections")
       .select("id, is_trunk")
       .eq("id", data.connectionId)
+      .eq("company_id", companyId)
       .maybeSingle();
     if (!conn) throw new Error("Instância inexistente.");
     if (conn.is_trunk && data.type === "BROADCAST") {
@@ -168,7 +170,8 @@ export const setInstanceConnectionType = createServerFn({ method: "POST" })
     const { error } = await ctx.supabase
       .from("whatsapp_connections")
       .update({ connection_type: data.type })
-      .eq("id", data.connectionId);
+      .eq("id", data.connectionId)
+      .eq("company_id", companyId);
     if (error) throw new Error(error.message);
 
     await log(ctx, companyId, userName, "INSTANCE_TYPE_CHANGED", null, {
@@ -183,11 +186,12 @@ export const connectBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    await requireAdmin(ctx);
+    const { companyId } = await requireAdmin(ctx);
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id, connection_type")
       .eq("id", data.connectionId)
+      .eq("company_id", companyId)
       .maybeSingle();
     if (!conn) throw new Error("Instância inexistente.");
     if (conn.connection_type !== "BROADCAST") throw new Error("Esta instância não é de disparo.");
@@ -200,11 +204,12 @@ export const refreshBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    await requireAdmin(ctx);
+    const { companyId } = await requireAdmin(ctx);
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id")
       .eq("id", data.connectionId)
+      .eq("company_id", companyId)
       .maybeSingle();
     if (!conn) throw new Error("Instância inexistente.");
     const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
@@ -221,6 +226,7 @@ export const disconnectBroadcastInstance = createServerFn({ method: "POST" })
       .from("whatsapp_connections")
       .select("id, connection_type")
       .eq("id", data.connectionId)
+      .eq("company_id", companyId)
       .maybeSingle();
     if (!conn) throw new Error("Instância inexistente.");
     if (conn.connection_type !== "BROADCAST") throw new Error("Esta instância não é de disparo.");
@@ -555,7 +561,9 @@ export const saveBroadcastCampaign = createServerFn({ method: "POST" })
       .select("id, is_trunk, connection_type, company_id")
       .eq("id", data.instanceId)
       .maybeSingle();
-    if (!conn || conn.company_id !== companyId) throw new Error("Instância inválida.");
+    if (!conn || conn.company_id !== companyId) {
+      throw new Error("Esta instância pertence a outra empresa e não pode ser usada nesta campanha.");
+    }
     if (conn.is_trunk || conn.connection_type !== "BROADCAST") {
       throw new Error("A instância tronco é exclusiva do atendimento e não pode ser usada em disparos.");
     }
@@ -857,6 +865,7 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
         ctx.supabase
           .from("whatsapp_connections")
           .select("id, name, status, connection_type, phone_number")
+          .eq("company_id", companyId)
           .eq("connection_type", "BROADCAST"),
       ]);
 
