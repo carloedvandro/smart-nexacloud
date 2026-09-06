@@ -1234,6 +1234,17 @@ function MessagesTab({ messages }: { messages: Message[] }) {
     setRemoveImage(false);
   }
 
+  function startEdit(m: Message) {
+    setEditingId(m.id);
+    setName(m.name);
+    setContent(m.content ?? "");
+    setImage(null);
+    setRemoveImage(false);
+    setExistingImage(m.mediaPreviewUrl ?? null);
+  }
+
+
+
   async function pickImage(file: File) {
     if (file.size > 8 * 1024 * 1024) {
       toast.error("A imagem deve ter no máximo 8 MB.");
