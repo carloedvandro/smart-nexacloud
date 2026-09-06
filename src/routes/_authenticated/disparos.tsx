@@ -515,7 +515,7 @@ function CampaignsTab({
               ) : null}
 
               <div className="flex flex-wrap gap-2">
-                {(campaign.status === "DRAFT" || campaign.status === "COMPLETED") && (
+                {["DRAFT", "COMPLETED", "CANCELLED", "ERROR"].includes(campaign.status) && (
                   <Button
                     size="sm"
                     onClick={() =>
