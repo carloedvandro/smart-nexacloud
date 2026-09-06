@@ -1285,13 +1285,20 @@ function MessagesTab({ messages }: { messages: Message[] }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Nome interno</Label>
           <Input placeholder="Nome interno" value={name} onChange={(e) => setName(e.target.value)} />
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Mensagem (clique aqui para escrever)
+          </Label>
           <Textarea
+            key={editingId ?? "novo"}
+            autoFocus={Boolean(editingId)}
             rows={7}
             placeholder="Olá {{primeiro_nome}}, tudo bem?"
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
+
           {unknownVars.length ? (
             <p className="text-xs text-destructive">
               Variáveis não suportadas: {[...new Set(unknownVars)].map((v) => `{{${v}}}`).join(", ")}
