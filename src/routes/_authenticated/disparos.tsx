@@ -1173,6 +1173,18 @@ function ContactsTab() {
     try {
       const result = await importFn({ data: { rows } });
       toast.success(`${result.imported} contato(s) importado(s). ${result.invalid} inválido(s).`);
+      const dups = result.duplicates ?? [];
+      if (dups.length) {
+        const detalhe = dups
+          .slice(0, 5)
+          .map((d) => `${d.whatsapp} — ${d.owner}`)
+          .join("\n");
+        toast.warning(
+          `${dups.length} contato(s) já cadastrado(s) e não importado(s):\n${detalhe}` +
+            (dups.length > 5 ? `\n… e mais ${dups.length - 5}.` : ""),
+          { duration: 10000 },
+        );
+      }
       void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao importar.");
