@@ -597,11 +597,11 @@ export const listBroadcastMessages = createServerFn({ method: "GET" })
     const ctx = context as unknown as Ctx;
     const access = await requireAccess(ctx);
     const { companyId } = access;
-    const { data, error } = await ctx.supabase
-      .from("broadcast_messages")
-      .select("*")
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+    const { data, error } = await own(
+      ctx.supabase.from("broadcast_messages").select("*").eq("company_id", companyId),
+      access,
+      ctx,
+    ).order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
 
     const rows = (data ?? []) as Record<string, any>[];
@@ -700,11 +700,15 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
     }
 
     if (data.id) {
-      const { error } = await ctx.supabase
-        .from("broadcast_messages")
-        .update(payload)
-        .eq("id", data.id)
-        .eq("company_id", companyId);
+      const { error } = await own(
+        ctx.supabase
+          .from("broadcast_messages")
+          .update(payload)
+          .eq("id", data.id)
+          .eq("company_id", companyId),
+        access,
+        ctx,
+      );
       if (error) throw new Error(error.message);
       return { ok: true, id: data.id };
     }
@@ -724,11 +728,15 @@ export const deleteBroadcastMessage = createServerFn({ method: "POST" })
     const ctx = context as unknown as Ctx;
     const access = await requireAccess(ctx);
     const { companyId } = access;
-    const { error } = await ctx.supabase
-      .from("broadcast_messages")
-      .delete()
-      .eq("id", data.id)
-      .eq("company_id", companyId);
+    const { error } = await own(
+      ctx.supabase
+        .from("broadcast_messages")
+        .delete()
+        .eq("id", data.id)
+        .eq("company_id", companyId),
+      access,
+      ctx,
+    );
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -1388,7 +1396,11 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
         if (!access.isAdmin) q = q.in("instance_id", access.instanceIds);
         return q;
       })(),
-      ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+      own(
+        ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+        access,
+        ctx,
+      ),
       ctx.supabase.from("broadcast_settings").select("*").eq("company_id", companyId).maybeSingle(),
       (() => {
         let q = ctx.supabase
