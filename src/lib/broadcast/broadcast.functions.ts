@@ -59,6 +59,24 @@ async function requireAdmin(context: Ctx): Promise<BroadcastAccess> {
   return access;
 }
 
+/** Operador enxerga só o que ele mesmo criou; administrador vê tudo da empresa. */
+function own(query: any, access: BroadcastAccess, ctx: Ctx) {
+  return access.isAdmin ? query : query.eq("created_by", ctx.userId);
+}
+
+/** Garante que a campanha é da empresa e, para operadores, criada por eles. */
+async function assertOwnCampaign(ctx: Ctx, access: BroadcastAccess, campaignId: string) {
+  let q = ctx.supabase
+    .from("broadcast_campaigns")
+    .select("id, instance_id")
+    .eq("id", campaignId)
+    .eq("company_id", access.companyId);
+  if (!access.isAdmin) q = q.eq("created_by", ctx.userId);
+  const { data: row } = await q.maybeSingle();
+  if (!row) throw new Error("Campanha inexistente ou fora do seu acesso.");
+  if (row.instance_id) assertInstance(access, row.instance_id as string);
+}
+
 function assertInstance(access: BroadcastAccess, instanceId: string) {
   if (!access.isAdmin && !access.instanceIds.includes(instanceId)) {
     throw new Error("Você não tem acesso a esta instância de disparo.");
@@ -313,13 +331,15 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
     let query = ctx.supabase
       .from("broadcast_contacts")
       .select("*")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(1000);
+    query = own(query, access, ctx);
 
     if (data.status) query = query.eq("status", data.status);
     if (typeof data.optIn === "boolean") query = query.eq("opt_in", data.optIn);
@@ -434,12 +454,15 @@ export const deleteBroadcastContacts = createServerFn({ method: "POST" })
   .inputValidator((data: { ids: string[] }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
-    const { error } = await ctx.supabase
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    let del = ctx.supabase
       .from("broadcast_contacts")
       .delete()
       .eq("company_id", companyId)
       .in("id", data.ids);
+    del = own(del, access, ctx);
+    const { error } = await del;
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -452,12 +475,17 @@ export const listBroadcastMessages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
-    const { data, error } = await ctx.supabase
-      .from("broadcast_messages")
-      .select("*")
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    const { data, error } = await own(
+      ctx.supabase
+        .from("broadcast_messages")
+        .select("*")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false }),
+      access,
+      ctx,
+    );
     if (error) throw new Error(error.message);
 
     const rows = (data ?? []) as Record<string, any>[];
@@ -523,7 +551,8 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
     const payload: Record<string, unknown> = {
       company_id: companyId,
       name: data.name.trim(),
@@ -555,11 +584,15 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
     }
 
     if (data.id) {
-      const { error } = await ctx.supabase
-        .from("broadcast_messages")
-        .update(payload)
-        .eq("id", data.id)
-        .eq("company_id", companyId);
+      const { error } = await own(
+        ctx.supabase
+          .from("broadcast_messages")
+          .update(payload)
+          .eq("id", data.id)
+          .eq("company_id", companyId),
+        access,
+        ctx,
+      );
       if (error) throw new Error(error.message);
       return { ok: true, id: data.id };
     }
@@ -577,12 +610,17 @@ export const deleteBroadcastMessage = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
-    const { error } = await ctx.supabase
-      .from("broadcast_messages")
-      .delete()
-      .eq("id", data.id)
-      .eq("company_id", companyId);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    const { error } = await own(
+      ctx.supabase
+        .from("broadcast_messages")
+        .delete()
+        .eq("id", data.id)
+        .eq("company_id", companyId),
+      access,
+      ctx,
+    );
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -614,9 +652,10 @@ export const listBroadcastCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
-    const { data: campaigns, error } = await ctx.supabase
-      .from("broadcast_campaigns")
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    const { data: campaigns, error } = await own(
+      ctx.supabase.from("broadcast_campaigns")
       .select(
         "*, instance:whatsapp_connections(id, name, status), message:broadcast_messages(id, name)",
       )
