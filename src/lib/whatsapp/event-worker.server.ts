@@ -29,6 +29,47 @@ function eventTimestampMs(payload: Record<string, unknown>): number | null {
   return null;
 }
 
+/**
+ * Chave da conversa dentro do lote. Mensagens da MESMA conversa continuam em
+ * ordem (uma após a outra); conversas diferentes correm em paralelo, para que
+ * um áudio demorado (transcrição + IA + voz) não segure as outras mensagens.
+ */
+function conversationKey(event: ClaimedEvent): string {
+  return `${event.connection_id ?? "-"}:${extractRemoteJid(event.payload) ?? event.id}`;
+}
+
+async function runEvent(event: ClaimedEvent): Promise<boolean> {
+  if (!event.company_id || !event.connection_id) {
+    await finishEvent(event, "evento sem empresa ou conexão");
+    return false;
+  }
+
+  const sentAt = eventTimestampMs(event.payload);
+  if (sentAt && Date.now() - sentAt > STALE_EVENT_MS) {
+    await finishEvent(event, "evento expirado (mensagem antiga, não reprocessada)");
+    return false;
+  }
+
+  try {
+    const outcome = await processWebhookEvent({
+      companyId: event.company_id,
+      connectionId: event.connection_id,
+      payload: event.payload,
+    });
+    if (outcome.status === "error") {
+      await retryEvent(event, outcome.reason ?? "erro no processamento");
+      return false;
+    }
+    await finishEvent(event, null);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[whatsapp-worker] evento falhou", { id: event.id, message });
+    await retryEvent(event, message);
+    return false;
+  }
+}
+
 /** Processa a fila persistente sem depender da conexão HTTP do webhook. */
 export async function processPendingWhatsappEvents(limit = 10): Promise<number> {
   const { data, error } = await supabaseAdmin.rpc("claim_whatsapp_events", { _limit: limit });
@@ -37,39 +78,27 @@ export async function processPendingWhatsappEvents(limit = 10): Promise<number> 
     return 0;
   }
 
-  let completed = 0;
-  for (const event of (data ?? []) as ClaimedEvent[]) {
-    if (!event.company_id || !event.connection_id) {
-      await finishEvent(event, "evento sem empresa ou conexão");
-      continue;
-    }
+  const events = (data ?? []) as ClaimedEvent[];
+  if (!events.length) return 0;
 
-    const sentAt = eventTimestampMs(event.payload);
-    if (sentAt && Date.now() - sentAt > STALE_EVENT_MS) {
-      await finishEvent(event, "evento expirado (mensagem antiga, não reprocessada)");
-      continue;
-    }
-
-
-    try {
-      const outcome = await processWebhookEvent({
-        companyId: event.company_id,
-        connectionId: event.connection_id,
-        payload: event.payload,
-      });
-      if (outcome.status === "error") {
-        await retryEvent(event, outcome.reason ?? "erro no processamento");
-        continue;
-      }
-      await finishEvent(event, null);
-      completed += 1;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("[whatsapp-worker] evento falhou", { id: event.id, message });
-      await retryEvent(event, message);
-    }
+  const groups = new Map<string, ClaimedEvent[]>();
+  for (const event of events) {
+    const key = conversationKey(event);
+    const list = groups.get(key);
+    if (list) list.push(event);
+    else groups.set(key, [event]);
   }
-  return completed;
+
+  const results = await Promise.all(
+    [...groups.values()].map(async (group) => {
+      let done = 0;
+      for (const event of group) {
+        if (await runEvent(event)) done += 1;
+      }
+      return done;
+    }),
+  );
+  return results.reduce((total, value) => total + value, 0);
 }
 
 async function finishEvent(event: ClaimedEvent, error: string | null): Promise<void> {
