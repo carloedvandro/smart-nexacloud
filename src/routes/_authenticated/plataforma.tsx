@@ -42,6 +42,7 @@ import {
   provisionInstanceForCompany,
   removeCompanyMember,
   setCompanyMemberRole,
+  setPlatformCompanyStatus,
   transferInstanceCompany,
   updateInstanceCredentials,
 
@@ -81,6 +82,7 @@ function PlatformPage() {
   const configureWebhookFn = useServerFn(configurePlatformWebhook);
   const updateCredentialsFn = useServerFn(updateInstanceCredentials);
   const transferFn = useServerFn(transferInstanceCompany);
+  const setCompanyStatusFn = useServerFn(setPlatformCompanyStatus);
 
   const [companyOpen, setCompanyOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
