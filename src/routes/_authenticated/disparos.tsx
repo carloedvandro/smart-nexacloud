@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Loader2,
   ImagePlus,
@@ -1780,6 +1782,46 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
 /* Histórico                                                         */
 /* ---------------------------------------------------------------- */
 
+const PAGE_SIZE = 10;
+
+function Pager({
+  page,
+  total,
+  onChange,
+}: {
+  page: number;
+  total: number;
+  onChange: (page: number) => void;
+}) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total <= PAGE_SIZE) return null;
+  return (
+    <div className="flex items-center justify-center gap-3 pt-2">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page <= 1}
+        onClick={() => onChange(page - 1)}
+        aria-label="Página anterior"
+      >
+        <ChevronLeft className="size-4" />
+      </Button>
+      <span className="text-xs text-muted-foreground">
+        Página {page} de {pages}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page >= pages}
+        onClick={() => onChange(page + 1)}
+        aria-label="Próxima página"
+      >
+        <ChevronRight className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
 function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances: Instance[] }) {
   const historyFn = useServerFn(listBroadcastHistory);
   const logsFn = useServerFn(listBroadcastLogs);
@@ -1787,6 +1829,9 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
   const [status, setStatus] = useState("todos");
   const [instanceId, setInstanceId] = useState("todas");
   const [days, setDays] = useState("30");
+  const [phone, setPhone] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
+  const [logsPage, setLogsPage] = useState(1);
 
   const history = useQuery({
     queryKey: ["broadcast", "history", campaignId, status, instanceId, days],
@@ -1803,7 +1848,23 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
 
   const logs = useQuery({ queryKey: ["broadcast", "logs"], queryFn: () => logsFn({}) });
 
-  const rows: HistoryRow[] = history.data ?? [];
+  const allRows: HistoryRow[] = history.data ?? [];
+  const digits = phone.replace(/\D/g, "");
+  const rows = useMemo(
+    () =>
+      digits
+        ? allRows.filter((r) => (r.contact?.whatsapp ?? "").replace(/\D/g, "").includes(digits))
+        : allRows,
+    [allRows, digits],
+  );
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [campaignId, status, instanceId, days, digits]);
+
+  const pageRows = rows.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
+  const logRows: LogRow[] = (logs.data ?? []) as LogRow[];
+  const logPageRows = logRows.slice((logsPage - 1) * PAGE_SIZE, logsPage * PAGE_SIZE);
   const totals = {
     total: rows.length,
     sent: rows.filter((r: HistoryRow) => r.status === "SENT").length,
@@ -1877,6 +1938,13 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
                 <SelectItem value="90">90 dias</SelectItem>
               </SelectContent>
             </Select>
+            <Input
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="Buscar por número"
+              className="w-48"
+              inputMode="tel"
+            />
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -1884,10 +1952,10 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
             <Skeleton className="h-40 w-full" />
           ) : rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum envio no período.
+              {digits ? "Nenhum envio para esse número." : "Nenhum envio no período."}
             </p>
           ) : (
-            rows.map((row: HistoryRow) => (
+            pageRows.map((row: HistoryRow) => (
               <div key={row.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
@@ -1919,6 +1987,7 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
               </div>
             ))
           )}
+          <Pager page={historyPage} total={rows.length} onChange={setHistoryPage} />
         </CardContent>
       </Card>
 
@@ -1928,12 +1997,12 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
           <CardDescription>Ações administrativas do módulo de disparos.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          {(logs.data ?? []).length === 0 ? (
+          {logRows.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               Nenhuma ação registrada.
             </p>
           ) : (
-            (logs.data ?? []).map((entry: LogRow) => (
+            logPageRows.map((entry: LogRow) => (
               <div key={entry.id} className="flex items-center justify-between gap-2 text-sm">
                 <span>
                   <strong>{entry.action}</strong>{" "}
@@ -1945,6 +2014,7 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
               </div>
             ))
           )}
+          <Pager page={logsPage} total={logRows.length} onChange={setLogsPage} />
         </CardContent>
       </Card>
     </div>
