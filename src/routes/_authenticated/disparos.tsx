@@ -1555,8 +1555,19 @@ function AudioRecorderField({ onRecorded }: { onRecorded: (file: File) => void }
         stream.getTracks().forEach((track) => track.stop());
         const type = recorder.mimeType || "audio/ogg";
         const blob = new Blob(chunksRef.current, { type });
-        const ext = type.includes("ogg") ? "ogg" : type.includes("webm") ? "webm" : "m4a";
-        onRecorded(new File([blob], `audio-${Date.now()}.${ext}`, { type }));
+        void (async () => {
+          try {
+            const { prepareRecordingForWhatsApp } = await import("@/lib/whatsapp/audio-encoding");
+            const prepared = await prepareRecordingForWhatsApp(blob);
+            onRecorded(
+              new File([prepared.blob], `audio-${Date.now()}.${prepared.extension}`, {
+                type: prepared.blob.type,
+              }),
+            );
+          } catch {
+            toast.error("Não consegui preparar o áudio. Grave novamente.");
+          }
+        })();
       };
       recorder.start();
       recorderRef.current = recorder;
