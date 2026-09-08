@@ -2220,9 +2220,12 @@ function AccessTab() {
   const [userId, setUserId] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
 
-  const members = data.data?.members ?? [];
-  const instances = data.data?.instances ?? [];
-  const grants = data.data?.grants ?? [];
+  type Member = { id: string; name: string; email: string | null };
+  type AccessInstance = { id: string; name: string; phoneNumber: string | null; status: string };
+  type Grant = { id: string; userId: string; connectionId: string };
+  const members: Member[] = data.data?.members ?? [];
+  const instances: AccessInstance[] = data.data?.instances ?? [];
+  const grants: Grant[] = data.data?.grants ?? [];
 
   useEffect(() => {
     if (!userId) {
