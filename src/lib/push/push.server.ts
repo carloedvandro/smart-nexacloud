@@ -60,7 +60,10 @@ async function deliver(row: Row, notification: PushNotification, vapid: NonNulla
       return false;
     }
     console.error("[push] falha ao entregar", res.status, (await res.text()).slice(0, 300));
-    await supabaseAdmin.rpc as unknown as never; // no-op para manter tipos simples
+    await supabaseAdmin
+      .from("push_subscriptions")
+      .update({ failure_count: 1 })
+      .eq("id", row.id);
     return false;
   } catch (error) {
     console.error("[push] erro ao entregar", error instanceof Error ? error.message : error);
