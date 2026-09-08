@@ -1510,6 +1510,26 @@ function ContactsTab() {
 /* Mensagens                                                         */
 /* ---------------------------------------------------------------- */
 
+type EditorAttachment = {
+  /** Já salvo no servidor. */
+  path?: string;
+  /** Novo arquivo. */
+  base64?: string;
+  mime: string;
+  filename: string;
+  size: number;
+  preview: string | null;
+};
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+
+function formatSize(bytes: number) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function MessagesTab({ messages }: { messages: Message[] }) {
   const queryClient = useQueryClient();
   const saveFn = useServerFn(saveBroadcastMessage);
@@ -1517,15 +1537,10 @@ function MessagesTab({ messages }: { messages: Message[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
-  const [image, setImage] = useState<{
-    base64: string;
-    mime: string;
-    filename: string;
-    preview: string;
-  } | null>(null);
-  const [existingImage, setExistingImage] = useState<string | null>(null);
-  const [removeImage, setRemoveImage] = useState(false);
+  const [attachments, setAttachments] = useState<EditorAttachment[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const totalBytes = attachments.reduce((sum, a) => sum + a.size, 0);
 
   const unknownVars = useMemo(
     () =>
@@ -1539,36 +1554,50 @@ function MessagesTab({ messages }: { messages: Message[] }) {
     setEditingId(null);
     setName("");
     setContent("");
-    setImage(null);
-    setExistingImage(null);
-    setRemoveImage(false);
+    setAttachments([]);
   }
 
   function startEdit(m: Message) {
     setEditingId(m.id);
     setName(m.name);
     setContent(m.content ?? "");
-    setImage(null);
-    setRemoveImage(false);
-    setExistingImage(m.mediaPreviewUrl ?? null);
+    const saved = (m.attachmentPreviews ?? []).map((a) => ({
+      path: a.path,
+      mime: a.mime,
+      filename: a.filename,
+      size: 0,
+      preview: a.previewUrl ?? null,
+    }));
+    setAttachments(saved);
   }
 
-  async function pickImage(file: File) {
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error("A imagem deve ter no máximo 8 MB.");
-      return;
+  async function pickFiles(files: File[]) {
+    let running = totalBytes;
+    const added: EditorAttachment[] = [];
+    for (const file of files) {
+      if (file.size > MAX_FILE_BYTES) {
+        toast.error(`"${file.name}" passa de 5 MB. Cada arquivo deve ter no máximo 5 MB.`);
+        continue;
+      }
+      if (running + file.size > MAX_TOTAL_BYTES) {
+        toast.error("Os anexos somam mais de 25 MB. Remova algum arquivo antes de adicionar outro.");
+        break;
+      }
+      running += file.size;
+      const buffer = await file.arrayBuffer();
+      let binary = "";
+      const bytes = new Uint8Array(buffer);
+      for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+      const mime = file.type || "application/octet-stream";
+      added.push({
+        base64: btoa(binary),
+        mime,
+        filename: file.name || "arquivo",
+        size: file.size,
+        preview: mime.startsWith("image/") ? URL.createObjectURL(file) : null,
+      });
     }
-    const buffer = await file.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
-    setImage({
-      base64: btoa(binary),
-      mime: file.type || "image/jpeg",
-      filename: file.name || "imagem.jpg",
-      preview: URL.createObjectURL(file),
-    });
-    setRemoveImage(false);
+    if (added.length) setAttachments((prev) => [...prev, ...added]);
   }
 
   function save() {
@@ -1578,10 +1607,11 @@ function MessagesTab({ messages }: { messages: Message[] }) {
         ...(editingId ? { id: editingId } : {}),
         name,
         content,
-        ...(image
-          ? { mediaBase64: image.base64, mediaMimeType: image.mime, mediaFilename: image.filename }
-          : {}),
-        ...(removeImage && !image ? { removeMedia: true } : {}),
+        attachments: attachments.map((a) =>
+          a.path
+            ? { path: a.path, mime: a.mime, filename: a.filename }
+            : { base64: a.base64 ?? "", mime: a.mime, filename: a.filename },
+        ),
       },
     })
       .then(() => {
@@ -1599,8 +1629,8 @@ function MessagesTab({ messages }: { messages: Message[] }) {
         <CardHeader>
           <CardTitle className="text-base">{editingId ? "Editar modelo" : "Novo modelo"}</CardTitle>
           <CardDescription>
-            Variáveis aceitas: {"{{nome}}"} e {"{{primeiro_nome}}"}. Você pode anexar uma imagem — o
-            texto vai junto como legenda.
+            Variáveis aceitas: {"{{nome}}"} e {"{{primeiro_nome}}"}. Você pode anexar várias imagens
+            e documentos (PDF, DOC, XLS) — o texto vai como legenda do primeiro arquivo.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1633,38 +1663,63 @@ function MessagesTab({ messages }: { messages: Message[] }) {
 
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-              Imagem (opcional)
+              Anexos (imagens e documentos)
             </Label>
-            {image || (existingImage && !removeImage) ? (
-              <div className="flex items-start gap-3">
-                <img
-                  src={image?.preview ?? existingImage ?? ""}
-                  alt="Imagem anexada à mensagem"
-                  className="size-24 rounded-lg border border-border object-cover"
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive"
-                  onClick={() => {
-                    setImage(null);
-                    setRemoveImage(true);
-                  }}
-                >
-                  <X className="size-4" /> Remover imagem
-                </Button>
+            {attachments.length ? (
+              <div className="space-y-2">
+                {attachments.map((a, index) => (
+                  <div
+                    key={`${a.path ?? a.filename}-${index}`}
+                    className="flex items-center gap-3 rounded-lg border border-border p-2"
+                  >
+                    {a.preview ? (
+                      <img
+                        src={a.preview}
+                        alt={a.filename}
+                        className="size-12 rounded-md border border-border object-cover"
+                      />
+                    ) : (
+                      <div className="flex size-12 items-center justify-center rounded-md border border-border bg-muted text-xs font-medium uppercase text-muted-foreground">
+                        {(a.filename.split(".").pop() ?? "doc").slice(0, 4)}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">{a.filename}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {index === 0 ? "Leva o texto como legenda" : "Enviado em seguida"}
+                        {a.size ? ` · ${formatSize(a.size)}` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() =>
+                        setAttachments((prev) => prev.filter((_, i) => i !== index))
+                      }
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Total anexado: {formatSize(totalBytes) || "arquivos já salvos"} · limite de 5 MB
+                  por arquivo e 25 MB no total.
+                </p>
               </div>
             ) : null}
             <Input
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              multiple
+              accept="image/png,image/jpeg,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void pickImage(file);
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) void pickFiles(files);
                 e.target.value = "";
               }}
             />
           </div>
+
 
           <div className="space-y-1">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -1747,13 +1802,28 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     </Button>
                   </div>
                 </div>
-                {m.mediaPreviewUrl ? (
-                  <img
-                    src={m.mediaPreviewUrl}
-                    alt={`Imagem do modelo ${m.name}`}
-                    className="mt-2 size-28 rounded-lg border border-border object-cover"
-                  />
+                {(m.attachmentPreviews ?? []).length ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(m.attachmentPreviews ?? []).map((a) =>
+                      a.kind === "image" && a.previewUrl ? (
+                        <img
+                          key={a.path}
+                          src={a.previewUrl}
+                          alt={`Anexo ${a.filename} do modelo ${m.name}`}
+                          className="size-24 rounded-lg border border-border object-cover"
+                        />
+                      ) : (
+                        <span
+                          key={a.path}
+                          className="flex max-w-48 items-center gap-2 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs"
+                        >
+                          {a.filename}
+                        </span>
+                      ),
+                    )}
+                  </div>
                 ) : null}
+
                 <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
                   {m.content}
                 </p>

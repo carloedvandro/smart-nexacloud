@@ -72,16 +72,19 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
     return false;
   }
 
-  // Modelo com imagem: a mídia vai junto e o texto vira legenda.
+  // Modelo com anexos: o primeiro leva o texto como legenda e os demais seguem
+  // logo depois, na ordem em que foram anexados.
   const { data: queueRow } = await supabaseAdmin
     .from("broadcast_queue")
-    .select("message:broadcast_messages(media_url, media_type, media_filename)")
+    .select("message:broadcast_messages(media_url, media_type, media_filename, attachments)")
     .eq("id", item.queue_id)
     .maybeSingle();
-  const media = (queueRow as { message?: { media_url: string | null; media_type: string | null; media_filename: string | null } | null } | null)
-    ?.message ?? null;
+  const messageRow =
+    (queueRow as { message?: Record<string, any> | null } | null)?.message ?? null;
+  const { normalizeStoredAttachments } = await import("@/lib/broadcast/attachments");
+  const attachments = messageRow ? normalizeStoredAttachments(messageRow) : [];
 
-  if (!item.content.trim() && !media?.media_url) {
+  if (!item.content.trim() && !attachments.length) {
     await finalize(item.queue_id, false, null, "Mensagem vazia.");
     return false;
   }
@@ -96,24 +99,37 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
   const body = normalizeWhatsAppLinks(item.content ?? "");
 
   let sent;
-  if (media?.media_url) {
+  if (attachments.length) {
     const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
-    const url = await signedMediaUrl(media.media_url, 60 * 60);
-    if (!url) {
-      await finalize(item.queue_id, false, null, "Não consegui gerar o link da imagem.");
-      return false;
+    for (let index = 0; index < attachments.length; index += 1) {
+      const att = attachments[index]!;
+      const url = await signedMediaUrl(att.path, 60 * 60);
+      if (!url) {
+        await finalize(item.queue_id, false, null, `Não consegui gerar o link de "${att.filename}".`);
+        return false;
+      }
+      const result = await MegaApiService.sendMedia(creds, {
+        to: recipient,
+        url,
+        mediaType: att.kind === "image" ? "image" : "document",
+        mimeType: att.mime,
+        fileName: att.filename,
+        caption: index === 0 ? body : "",
+      });
+      sent = result;
+      if (!result.ok) break;
+      if (index < attachments.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+      }
     }
-    sent = await MegaApiService.sendMedia(creds, {
-      to: recipient,
-      url,
-      mediaType: "image",
-      mimeType: media.media_type ?? "image/jpeg",
-      fileName: media.media_filename ?? "imagem.jpg",
-      caption: body,
-    });
   } else {
     sent = await MegaApiService.sendText(creds, recipient, body);
   }
+  if (!sent) {
+    await finalize(item.queue_id, false, null, "Mensagem vazia.");
+    return false;
+  }
+
 
 
   if (!sent.ok) {

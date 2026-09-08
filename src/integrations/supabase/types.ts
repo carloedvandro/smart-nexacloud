@@ -678,6 +678,7 @@ export type Database = {
       }
       broadcast_messages: {
         Row: {
+          attachments: Json
           company_id: string
           content: string | null
           created_at: string
@@ -691,6 +692,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          attachments?: Json
           company_id: string
           content?: string | null
           created_at?: string
@@ -704,6 +706,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          attachments?: Json
           company_id?: string
           content?: string | null
           created_at?: string
