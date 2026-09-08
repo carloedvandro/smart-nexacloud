@@ -8,6 +8,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
+  attachmentKindFor,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_TOTAL_BYTES,
   normalizeStoredAttachments,
@@ -720,8 +721,10 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
 
       for (const att of incoming) {
         const mime = att.mime ?? "application/octet-stream";
-        const kind: "image" | "document" = mime.startsWith("image/") ? "image" : "document";
-        const filename = att.filename ?? (kind === "image" ? "imagem.jpg" : "arquivo");
+        const kind = attachmentKindFor(mime, att.filename);
+        const filename =
+          att.filename ??
+          (kind === "image" ? "imagem.jpg" : kind === "audio" ? "audio.ogg" : "arquivo");
         if (att.path) {
           saved.push({ path: att.path, mime, filename, kind });
           continue;

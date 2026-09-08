@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -10,6 +10,8 @@ import {
   Clock,
   Loader2,
   ImagePlus,
+  Mic,
+  Square,
   Megaphone,
   OctagonX,
   Pencil,
@@ -1530,6 +1532,59 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Gravação de áudio direto no painel para anexar ao modelo. */
+function AudioRecorderField({ onRecorded }: { onRecorded: (file: File) => void }) {
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+
+  async function start() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
+        ? "audio/ogg;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "";
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const type = recorder.mimeType || "audio/ogg";
+        const blob = new Blob(chunksRef.current, { type });
+        const ext = type.includes("ogg") ? "ogg" : type.includes("webm") ? "webm" : "m4a";
+        onRecorded(new File([blob], `audio-${Date.now()}.${ext}`, { type }));
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+    } catch {
+      toast.error("Não consegui acessar o microfone. Autorize o uso no navegador.");
+    }
+  }
+
+  function stop() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+  }
+
+  return (
+    <Button
+      type="button"
+      variant={recording ? "destructive" : "outline"}
+      size="sm"
+      onClick={() => (recording ? stop() : void start())}
+    >
+      {recording ? <Square className="size-4" /> : <Mic className="size-4" />}
+      {recording ? "Parar gravação" : "Gravar áudio"}
+    </Button>
+  );
+}
+
 function MessagesTab({ messages }: { messages: Message[] }) {
   const queryClient = useQueryClient();
   const saveFn = useServerFn(saveBroadcastMessage);
@@ -1663,7 +1718,7 @@ function MessagesTab({ messages }: { messages: Message[] }) {
 
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-              Anexos (imagens e documentos)
+              Anexos (imagens, áudios e documentos)
             </Label>
             {attachments.length ? (
               <div className="space-y-2">
@@ -1672,12 +1727,16 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     key={`${a.path ?? a.filename}-${index}`}
                     className="flex items-center gap-3 rounded-lg border border-border p-2"
                   >
-                    {a.preview ? (
+                    {a.preview && a.mime.startsWith("image/") ? (
                       <img
                         src={a.preview}
                         alt={a.filename}
                         className="size-12 rounded-md border border-border object-cover"
                       />
+                    ) : a.mime.startsWith("audio/") ? (
+                      <div className="flex size-12 items-center justify-center rounded-md border border-border bg-muted">
+                        <Mic className="size-5 text-muted-foreground" />
+                      </div>
                     ) : (
                       <div className="flex size-12 items-center justify-center rounded-md border border-border bg-muted text-xs font-medium uppercase text-muted-foreground">
                         {(a.filename.split(".").pop() ?? "doc").slice(0, 4)}
@@ -1711,13 +1770,14 @@ function MessagesTab({ messages }: { messages: Message[] }) {
             <Input
               type="file"
               multiple
-              accept="image/png,image/jpeg,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+              accept="image/png,image/jpeg,image/webp,audio/mpeg,audio/mp4,audio/ogg,audio/wav,.mp3,.m4a,.ogg,.opus,.wav,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
                 if (files.length) void pickFiles(files);
                 e.target.value = "";
               }}
             />
+            <AudioRecorderField onRecorded={(file) => void pickFiles([file])} />
           </div>
 
 
@@ -1805,7 +1865,9 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                 {(m.attachmentPreviews ?? []).length ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {(m.attachmentPreviews ?? []).map((a) =>
-                      a.kind === "image" && a.previewUrl ? (
+                      a.kind === "audio" && a.previewUrl ? (
+                        <audio key={a.path} controls src={a.previewUrl} className="h-10 w-56" />
+                      ) : a.kind === "image" && a.previewUrl ? (
                         <img
                           key={a.path}
                           src={a.previewUrl}

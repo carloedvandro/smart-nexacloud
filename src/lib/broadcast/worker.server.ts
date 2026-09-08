@@ -115,7 +115,7 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
       const result = await MegaApiService.sendMedia(creds, {
         to: recipient,
         url,
-        mediaType: att.kind === "image" ? "image" : "document",
+        mediaType: att.kind === "image" ? "image" : att.kind === "audio" ? "audio" : "document",
         mimeType: att.mime,
         fileName: att.filename,
         caption: "",
