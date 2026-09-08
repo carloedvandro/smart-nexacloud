@@ -524,6 +524,7 @@ export const deleteBroadcastContacts = createServerFn({ method: "POST" })
       .delete()
       .eq("company_id", companyId)
       .in("id", data.ids);
+    if (!access.isAdmin) del = del.eq("created_by", ctx.userId);
     const { error } = await del;
     if (error) throw new Error(error.message);
     return { ok: true };
