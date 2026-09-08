@@ -10,25 +10,79 @@ import { PhoneNormalizationService } from "@/lib/nexa/phone";
 
 type Ctx = { supabase: any; userId: string };
 
-async function requireAdmin(context: Ctx): Promise<{ companyId: string; userName: string | null }> {
+export type BroadcastAccess = {
+  companyId: string;
+  userName: string | null;
+  isAdmin: boolean;
+  /** Instâncias liberadas ao operador (vazio quando é administrador: vê todas). */
+  instanceIds: string[];
+};
+
+/**
+ * Libera o módulo para administradores e para operadores autorizados por instância.
+ * A RLS do banco repete as mesmas regras — esconder botões nunca é a proteção.
+ */
+async function requireAccess(context: Ctx): Promise<BroadcastAccess> {
   const [{ data: isAdmin }, { data: isPlatformAdmin }] = await Promise.all([
     context.supabase.rpc("is_company_admin"),
     context.supabase.rpc("is_platform_admin"),
   ]);
-  if (!isAdmin && !isPlatformAdmin) {
-    throw new Error("Somente administradores podem usar o módulo de Disparos.");
-  }
   const { data: profile } = await context.supabase
     .from("profiles")
     .select("company_id, full_name, email")
     .eq("id", context.userId)
     .maybeSingle();
   if (!profile?.company_id) throw new Error("Usuário sem empresa.");
-  return {
-    companyId: profile.company_id as string,
-    userName: profile.full_name ?? profile.email ?? null,
-  };
+  const companyId = profile.company_id as string;
+  const userName = (profile.full_name ?? profile.email ?? null) as string | null;
+
+  if (isAdmin || isPlatformAdmin) {
+    return { companyId, userName, isAdmin: true, instanceIds: [] };
+  }
+
+  const { data: grants } = await context.supabase
+    .from("broadcast_access")
+    .select("connection_id")
+    .eq("user_id", context.userId)
+    .eq("company_id", companyId);
+  const instanceIds = (grants ?? []).map((g: { connection_id: string }) => g.connection_id);
+  if (!instanceIds.length) {
+    throw new Error("Você não tem acesso ao módulo de Disparos.");
+  }
+  return { companyId, userName, isAdmin: false, instanceIds };
 }
+
+/** Igual a requireAccess, porém exclusivo de administradores. */
+async function requireAdmin(context: Ctx): Promise<BroadcastAccess> {
+  const access = await requireAccess(context);
+  if (!access.isAdmin) throw new Error("Somente administradores podem fazer isso.");
+  return access;
+}
+
+/** Operador enxerga só o que ele mesmo criou; administrador vê tudo da empresa. */
+function own(query: any, access: BroadcastAccess, ctx: Ctx) {
+  return access.isAdmin ? query : query.eq("created_by", ctx.userId);
+}
+
+/** Garante que a campanha é da empresa e, para operadores, criada por eles. */
+async function assertOwnCampaign(ctx: Ctx, access: BroadcastAccess, campaignId: string) {
+  let q = ctx.supabase
+    .from("broadcast_campaigns")
+    .select("id, instance_id")
+    .eq("id", campaignId)
+    .eq("company_id", access.companyId);
+  if (!access.isAdmin) q = q.eq("created_by", ctx.userId);
+  const { data: row } = await q.maybeSingle();
+  if (!row) throw new Error("Campanha inexistente ou fora do seu acesso.");
+  if (row.instance_id) assertInstance(access, row.instance_id as string);
+}
+
+function assertInstance(access: BroadcastAccess, instanceId: string) {
+  if (!access.isAdmin && !access.instanceIds.includes(instanceId)) {
+    throw new Error("Você não tem acesso a esta instância de disparo.");
+  }
+}
+
 
 async function log(
   context: Ctx,
@@ -69,7 +123,7 @@ const DEFAULT_SETTINGS = {
 export const getBroadcastSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { companyId } = await requireAdmin(context as unknown as Ctx);
+    const { companyId } = await requireAccess(context as unknown as Ctx);
     const { data } = await context.supabase
       .from("broadcast_settings")
       .select("*")
@@ -103,13 +157,16 @@ export const listBroadcastInstances = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
-    const { data, error } = await ctx.supabase
+    const access = await requireAccess(ctx);
+    const companyId = access.companyId;
+    let listQuery = ctx.supabase
       .from("whatsapp_connections")
       .select(
         "id, name, instance_number, is_trunk, connection_type, status, phone_number, qr_code, last_connected_at",
       )
-      .eq("company_id", companyId)
+      .eq("company_id", companyId);
+    if (!access.isAdmin) listQuery = listQuery.in("id", access.instanceIds);
+    const { data, error } = await listQuery
       .order("is_trunk", { ascending: false })
       .order("instance_number", { ascending: true });
     if (error) throw new Error(error.message);
@@ -192,7 +249,9 @@ export const connectBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    assertInstance(access, data.connectionId);
+    const { companyId } = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id, connection_type")
@@ -210,7 +269,9 @@ export const refreshBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    assertInstance(access, data.connectionId);
+    const { companyId } = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id")
@@ -227,7 +288,9 @@ export const disconnectBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    assertInstance(access, data.connectionId);
+    const { companyId, userName } = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id, connection_type")
@@ -268,13 +331,15 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
     let query = ctx.supabase
       .from("broadcast_contacts")
       .select("*")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(1000);
+    query = own(query, access, ctx);
 
     if (data.status) query = query.eq("status", data.status);
     if (typeof data.optIn === "boolean") query = query.eq("opt_in", data.optIn);
@@ -300,7 +365,7 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
+    const { companyId } = await requireAccess(ctx);
     const whatsapp = PhoneNormalizationService.normalize(data.phone);
     if (!whatsapp) throw new Error("Telefone inválido.");
 
@@ -343,7 +408,7 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
   .inputValidator((data: { rows: BroadcastContactInput[] }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const { companyId, userName } = await requireAccess(ctx);
 
     const seen = new Set<string>();
     const payload: Record<string, unknown>[] = [];
@@ -389,12 +454,15 @@ export const deleteBroadcastContacts = createServerFn({ method: "POST" })
   .inputValidator((data: { ids: string[] }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
-    const { error } = await ctx.supabase
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    let del = ctx.supabase
       .from("broadcast_contacts")
       .delete()
       .eq("company_id", companyId)
       .in("id", data.ids);
+    del = own(del, access, ctx);
+    const { error } = await del;
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -407,12 +475,17 @@ export const listBroadcastMessages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
-    const { data, error } = await ctx.supabase
-      .from("broadcast_messages")
-      .select("*")
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    const { data, error } = await own(
+      ctx.supabase
+        .from("broadcast_messages")
+        .select("*")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false }),
+      access,
+      ctx,
+    );
     if (error) throw new Error(error.message);
 
     const rows = (data ?? []) as Record<string, any>[];
@@ -478,7 +551,8 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
     const payload: Record<string, unknown> = {
       company_id: companyId,
       name: data.name.trim(),
@@ -510,11 +584,15 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
     }
 
     if (data.id) {
-      const { error } = await ctx.supabase
-        .from("broadcast_messages")
-        .update(payload)
-        .eq("id", data.id)
-        .eq("company_id", companyId);
+      const { error } = await own(
+        ctx.supabase
+          .from("broadcast_messages")
+          .update(payload)
+          .eq("id", data.id)
+          .eq("company_id", companyId),
+        access,
+        ctx,
+      );
       if (error) throw new Error(error.message);
       return { ok: true, id: data.id };
     }
@@ -532,12 +610,17 @@ export const deleteBroadcastMessage = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
-    const { error } = await ctx.supabase
-      .from("broadcast_messages")
-      .delete()
-      .eq("id", data.id)
-      .eq("company_id", companyId);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    const { error } = await own(
+      ctx.supabase
+        .from("broadcast_messages")
+        .delete()
+        .eq("id", data.id)
+        .eq("company_id", companyId),
+      access,
+      ctx,
+    );
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -569,14 +652,18 @@ export const listBroadcastCampaigns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
-    const { data: campaigns, error } = await ctx.supabase
-      .from("broadcast_campaigns")
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    const { data: campaigns, error } = await own(
+      ctx.supabase.from("broadcast_campaigns")
       .select(
         "*, instance:whatsapp_connections(id, name, status), message:broadcast_messages(id, name)",
       )
       .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }),
+      access,
+      ctx,
+    );
     if (error) throw new Error(error.message);
 
     const ids = (campaigns ?? []).map((c: { id: string }) => c.id);
@@ -634,7 +721,9 @@ export const saveBroadcastCampaign = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    assertInstance(access, data.instanceId);
 
     // Proteção da instância tronco também no backend (o banco recusa de novo).
     const { data: conn } = await ctx.supabase
@@ -674,6 +763,7 @@ export const saveBroadcastCampaign = createServerFn({ method: "POST" })
 
     let campaignId = data.id ?? null;
     if (campaignId) {
+      await assertOwnCampaign(ctx, access, campaignId);
       const { error } = await ctx.supabase
         .from("broadcast_campaigns")
         .update(payload)
@@ -738,7 +828,9 @@ export const startBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string; scheduledAt?: string | null }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
 
     const { data: campaign } = await ctx.supabase
       .from("broadcast_campaigns")
@@ -813,7 +905,9 @@ export const pauseBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     return setCampaignStatus(
       ctx,
       companyId,
@@ -832,7 +926,9 @@ export const resumeBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     return setCampaignStatus(
       ctx,
       companyId,
@@ -853,7 +949,9 @@ export const cancelBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     await ctx.supabase
       .from("broadcast_queue")
       .update({ status: "CANCELLED", error_message: "Campanha cancelada." })
@@ -879,7 +977,9 @@ export const getBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     const { data: campaign, error } = await ctx.supabase
       .from("broadcast_campaigns")
       .select("*")
@@ -904,7 +1004,9 @@ export const deleteBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     const { data: campaign } = await ctx.supabase
       .from("broadcast_campaigns")
       .select("id, name, status")
@@ -940,7 +1042,9 @@ export const duplicateBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     const { data: original } = await ctx.supabase
       .from("broadcast_campaigns")
       .select("*")
@@ -1034,7 +1138,8 @@ export const listBroadcastHistory = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
     let query = ctx.supabase
       .from("broadcast_queue")
       .select(
@@ -1044,6 +1149,7 @@ export const listBroadcastHistory = createServerFn({ method: "POST" })
       .order("created_at", { ascending: false })
       .limit(500);
 
+    if (!access.isAdmin) query = query.in("instance_id", access.instanceIds);
     if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
     if (data.status) query = query.eq("status", data.status);
     if (data.instanceId) query = query.eq("instance_id", data.instanceId);
@@ -1060,7 +1166,8 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
 
     const [
       { data: campaigns },
@@ -1069,22 +1176,38 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
       { data: settings },
       { data: instances },
     ] = await Promise.all([
-      ctx.supabase
-        .from("broadcast_campaigns")
-        .select("id, name, status, last_activity_at, instance_id")
-        .eq("company_id", companyId),
-      ctx.supabase
-        .from("broadcast_queue")
-        .select("status, sent_at, created_at")
-        .eq("company_id", companyId)
-        .limit(20000),
-      ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+      own(
+        ctx.supabase
+          .from("broadcast_campaigns")
+          .select("id, name, status, last_activity_at, instance_id")
+          .eq("company_id", companyId),
+        access,
+        ctx,
+      ),
+      (() => {
+        let q = ctx.supabase
+          .from("broadcast_queue")
+          .select("status, sent_at, created_at")
+          .eq("company_id", companyId)
+          .limit(20000);
+        if (!access.isAdmin) q = q.in("instance_id", access.instanceIds);
+        return q;
+      })(),
+      own(
+        ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+        access,
+        ctx,
+      ),
       ctx.supabase.from("broadcast_settings").select("*").eq("company_id", companyId).maybeSingle(),
-      ctx.supabase
-        .from("whatsapp_connections")
-        .select("id, name, status, connection_type, phone_number")
-        .eq("company_id", companyId)
-        .eq("connection_type", "BROADCAST"),
+      (() => {
+        let q = ctx.supabase
+          .from("whatsapp_connections")
+          .select("id, name, status, connection_type, phone_number")
+          .eq("company_id", companyId)
+          .eq("connection_type", "BROADCAST");
+        if (!access.isAdmin) q = q.in("id", access.instanceIds);
+        return q;
+      })(),
     ]);
 
     const startOfDay = new Date();
@@ -1139,13 +1262,141 @@ export const listBroadcastLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAdmin(ctx);
-    const { data, error } = await ctx.supabase
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    let logQuery = ctx.supabase
       .from("broadcast_logs")
       .select("*, campaign:broadcast_campaigns(id, name)")
-      .eq("company_id", companyId)
+      .eq("company_id", companyId);
+    if (!access.isAdmin) logQuery = logQuery.eq("user_id", ctx.userId);
+    const { data, error } = await logQuery
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) throw new Error(error.message);
     return data ?? [];
+  });
+
+/* ------------------------------------------------------------------ */
+/* Acesso de operadores (usuários comuns liberados por instância)      */
+/* ------------------------------------------------------------------ */
+
+/** Diz ao front se a pessoa é administradora ou operadora, e quais instâncias vê. */
+export const getBroadcastAccessInfo = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as unknown as Ctx;
+    try {
+      const access = await requireAccess(ctx);
+      return {
+        allowed: true,
+        isAdmin: access.isAdmin,
+        instanceIds: access.instanceIds,
+      };
+    } catch {
+      return { allowed: false, isAdmin: false, instanceIds: [] as string[] };
+    }
+  });
+
+/** Administrador: pessoas da empresa + instâncias de disparo + acessos já concedidos. */
+export const listBroadcastOperators = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as unknown as Ctx;
+    const { companyId } = await requireAdmin(ctx);
+
+    const [{ data: members }, { data: grants }, { data: instances }] = await Promise.all([
+      ctx.supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .eq("company_id", companyId)
+        .order("full_name", { ascending: true }),
+      ctx.supabase
+        .from("broadcast_access")
+        .select("id, user_id, connection_id, created_at")
+        .eq("company_id", companyId),
+      ctx.supabase
+        .from("whatsapp_connections")
+        .select("id, name, instance_number, phone_number, status")
+        .eq("company_id", companyId)
+        .eq("connection_type", "BROADCAST")
+        .order("instance_number", { ascending: true }),
+    ]);
+
+    return {
+      members: (members ?? []).map((m: Record<string, unknown>) => ({
+        id: m["id"] as string,
+        name: (m["full_name"] as string | null) ?? (m["email"] as string | null) ?? "Sem nome",
+        email: (m["email"] as string | null) ?? null,
+      })),
+      instances: (instances ?? []).map((i: Record<string, unknown>) => ({
+        id: i["id"] as string,
+        name: (i["name"] as string | null) ?? `Instância ${i["instance_number"] ?? ""}`,
+        phoneNumber: (i["phone_number"] as string | null) ?? null,
+        status: i["status"] as string,
+      })),
+      grants: (grants ?? []).map((g: Record<string, unknown>) => ({
+        id: g["id"] as string,
+        userId: g["user_id"] as string,
+        connectionId: g["connection_id"] as string,
+      })),
+    };
+  });
+
+/** Administrador: define exatamente quais instâncias a pessoa pode usar. */
+export const setBroadcastAccess = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { userId: string; connectionIds: string[] }) => {
+    if (!data.userId) throw new Error("Escolha a pessoa.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const { companyId, userName } = await requireAdmin(ctx);
+
+    const { data: target } = await ctx.supabase
+      .from("profiles")
+      .select("id, company_id, full_name, email")
+      .eq("id", data.userId)
+      .maybeSingle();
+    if (!target || target.company_id !== companyId) {
+      throw new Error("Esta pessoa não faz parte da sua empresa.");
+    }
+
+    const wanted = [...new Set(data.connectionIds)];
+    if (wanted.length) {
+      const { data: valid } = await ctx.supabase
+        .from("whatsapp_connections")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("connection_type", "BROADCAST")
+        .in("id", wanted);
+      const ok = new Set((valid ?? []).map((r: { id: string }) => r.id));
+      if (wanted.some((id) => !ok.has(id))) {
+        throw new Error("Só é possível liberar instâncias de disparo da sua empresa.");
+      }
+    }
+
+    await ctx.supabase
+      .from("broadcast_access")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("user_id", data.userId);
+
+    if (wanted.length) {
+      const { error } = await ctx.supabase.from("broadcast_access").insert(
+        wanted.map((connectionId) => ({
+          company_id: companyId,
+          user_id: data.userId,
+          connection_id: connectionId,
+          created_by: ctx.userId,
+        })),
+      );
+      if (error) throw new Error(error.message);
+    }
+
+    await log(ctx, companyId, userName, "BROADCAST_ACCESS_UPDATED", null, {
+      pessoa: target.full_name ?? target.email ?? data.userId,
+      instancias: wanted.length,
+    });
+    return { ok: true };
   });

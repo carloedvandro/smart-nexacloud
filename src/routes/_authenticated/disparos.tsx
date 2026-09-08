@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { AdminOnly } from "@/components/nexa/admin-only";
 import { AppShell } from "@/components/nexa/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +59,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
   cancelBroadcastCampaign,
+  getBroadcastAccessInfo,
+  listBroadcastOperators,
+  setBroadcastAccess,
   connectBroadcastInstance,
   deleteBroadcastCampaign,
   deleteBroadcastContacts,
@@ -176,14 +178,37 @@ function formatDate(value: string | null | undefined) {
 }
 
 function GuardedDisparosPage() {
-  return (
-    <AdminOnly title="Disparos" description="Campanhas de WhatsApp">
-      <DisparosPage />
-    </AdminOnly>
-  );
+  const accessFn = useServerFn(getBroadcastAccessInfo);
+  const access = useQuery({ queryKey: ["broadcast", "access"], queryFn: () => accessFn({}) });
+
+  if (access.isLoading) {
+    return (
+      <AppShell title="Disparos" description="Campanhas de WhatsApp">
+        <Skeleton className="h-64 w-full" />
+      </AppShell>
+    );
+  }
+
+  if (!access.data?.allowed) {
+    return (
+      <AppShell title="Disparos" description="Campanhas de WhatsApp">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+            <ShieldCheck className="size-8 text-muted-foreground" />
+            <p className="text-base font-medium">Área restrita</p>
+            <p className="max-w-md text-sm text-muted-foreground">
+              Peça a um administrador para liberar o seu acesso aos disparos.
+            </p>
+          </CardContent>
+        </Card>
+      </AppShell>
+    );
+  }
+
+  return <DisparosPage isAdmin={Boolean(access.data.isAdmin)} />;
 }
 
-function DisparosPage() {
+function DisparosPage({ isAdmin }: { isAdmin: boolean }) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("visao");
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
@@ -255,6 +280,7 @@ function DisparosPage() {
       title="Disparos"
       description="Campanhas de WhatsApp em instância dedicada, separada do atendimento"
       actions={
+        isAdmin ? (
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="destructive" size="sm">
@@ -276,6 +302,7 @@ function DisparosPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        ) : null
       }
     >
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
@@ -289,7 +316,8 @@ function DisparosPage() {
           <TabsTrigger value="mensagens">Mensagens</TabsTrigger>
           <TabsTrigger value="instancias">Instâncias de disparo</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
-          <TabsTrigger value="config">Configurações</TabsTrigger>
+          {isAdmin ? <TabsTrigger value="acesso">Acesso</TabsTrigger> : null}
+          {isAdmin ? <TabsTrigger value="config">Configurações</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="visao">
@@ -330,16 +358,28 @@ function DisparosPage() {
         </TabsContent>
 
         <TabsContent value="instancias">
-          <InstancesTab instances={instances.data ?? []} loading={instances.isLoading} />
+          <InstancesTab
+            instances={instances.data ?? []}
+            loading={instances.isLoading}
+            isAdmin={isAdmin}
+          />
         </TabsContent>
 
         <TabsContent value="historico">
           <HistoryTab campaigns={campaigns.data ?? []} instances={broadcastInstances} />
         </TabsContent>
 
-        <TabsContent value="config">
-          <SettingsTab />
-        </TabsContent>
+        {isAdmin ? (
+          <TabsContent value="acesso">
+            <AccessTab />
+          </TabsContent>
+        ) : null}
+
+        {isAdmin ? (
+          <TabsContent value="config">
+            <SettingsTab />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </AppShell>
   );
@@ -1630,7 +1670,15 @@ function MessagesTab({ messages }: { messages: Message[] }) {
 /* Instâncias                                                        */
 /* ---------------------------------------------------------------- */
 
-function InstancesTab({ instances, loading }: { instances: Instance[]; loading: boolean }) {
+function InstancesTab({
+  instances,
+  loading,
+  isAdmin,
+}: {
+  instances: Instance[];
+  loading: boolean;
+  isAdmin: boolean;
+}) {
   const queryClient = useQueryClient();
   const setTypeFn = useServerFn(setInstanceConnectionType);
   const connectFn = useServerFn(connectBroadcastInstance);
@@ -1735,20 +1783,22 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
                     >
                       Desconectar
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        run(
-                          setTypeFn({ data: { connectionId: instance.id, type: "TRUNK" } }),
-                          "Instância devolvida ao atendimento.",
-                        )
-                      }
-                    >
-                      Remover dos disparos
-                    </Button>
+                    {isAdmin ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          run(
+                            setTypeFn({ data: { connectionId: instance.id, type: "TRUNK" } }),
+                            "Instância devolvida ao atendimento.",
+                          )
+                        }
+                      >
+                        Remover dos disparos
+                      </Button>
+                    ) : null}
                   </>
-                ) : (
+                ) : isAdmin ? (
                   <Button
                     size="sm"
                     onClick={() =>
@@ -1760,7 +1810,7 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
                   >
                     Usar em disparos
                   </Button>
-                )}
+                ) : null}
               </div>
             )}
 
@@ -2152,6 +2202,167 @@ function SettingsTab() {
               Liberar disparos
             </Button>
           ) : null}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Acesso aos disparos                                               */
+/* ---------------------------------------------------------------- */
+
+function AccessTab() {
+  const queryClient = useQueryClient();
+  const listFn = useServerFn(listBroadcastOperators);
+  const saveFn = useServerFn(setBroadcastAccess);
+  const data = useQuery({ queryKey: ["broadcast", "access-admin"], queryFn: () => listFn({}) });
+  const [userId, setUserId] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+
+  type Member = { id: string; name: string; email: string | null };
+  type AccessInstance = { id: string; name: string; phoneNumber: string | null; status: string };
+  type Grant = { id: string; userId: string; connectionId: string };
+  const members: Member[] = data.data?.members ?? [];
+  const instances: AccessInstance[] = data.data?.instances ?? [];
+  const grants: Grant[] = data.data?.grants ?? [];
+
+  useEffect(() => {
+    if (!userId) {
+      setSelected([]);
+      return;
+    }
+    setSelected(grants.filter((g) => g.userId === userId).map((g) => g.connectionId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, data.dataUpdatedAt]);
+
+  const save = useMutation({
+    mutationFn: () => saveFn({ data: { userId, connectionIds: selected } }),
+    onSuccess: () => {
+      toast.success("Acesso atualizado.");
+      void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const byUser = new Map<string, string[]>();
+  for (const g of grants) {
+    byUser.set(g.userId, [...(byUser.get(g.userId) ?? []), g.connectionId]);
+  }
+
+  if (data.isLoading) return <Skeleton className="h-64 w-full" />;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Liberar disparos para uma pessoa</CardTitle>
+          <CardDescription>
+            A pessoa liberada usa os disparos apenas nas instâncias marcadas e só enxerga as
+            campanhas, contatos e mensagens que ela mesma criar. Você continua vendo tudo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Pessoa</Label>
+            <Select value={userId} onValueChange={setUserId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Escolha quem vai usar os disparos" />
+              </SelectTrigger>
+              <SelectContent>
+                {members.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {userId ? (
+            <div className="space-y-2">
+              <Label>Instâncias liberadas</Label>
+              {instances.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Marque alguma conexão como instância de disparo antes de liberar o acesso.
+                </p>
+              ) : (
+                instances.map((i) => (
+                  <label
+                    key={i.id}
+                    className="flex items-center gap-3 rounded-lg border border-border p-3 text-sm"
+                  >
+                    <Checkbox
+                      checked={selected.includes(i.id)}
+                      onCheckedChange={(checked) =>
+                        setSelected((prev) =>
+                          checked ? [...new Set([...prev, i.id])] : prev.filter((x) => x !== i.id),
+                        )
+                      }
+                    />
+                    <span className="flex-1">
+                      {i.name}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {i.phoneNumber ? PhoneNormalizationService.format(i.phoneNumber) : i.status}
+                      </span>
+                    </span>
+                  </label>
+                ))
+              )}
+              <Button onClick={() => save.mutate()} disabled={save.isPending}>
+                {save.isPending ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                Salvar acesso
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pessoas com acesso aos disparos</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {byUser.size === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Ninguém além dos administradores tem acesso aos disparos.
+            </p>
+          ) : (
+            [...byUser.entries()].map(([id, conns]) => (
+              <div
+                key={id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3"
+              >
+                <div className="text-sm">
+                  <p className="font-medium">{members.find((m) => m.id === id)?.name ?? id}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {conns
+                      .map((c) => instances.find((i) => i.id === c)?.name ?? "instância removida")
+                      .join(", ")}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => setUserId(id)}>
+                    <Pencil className="size-4" /> Editar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      saveFn({ data: { userId: id, connectionIds: [] } })
+                        .then(() => {
+                          toast.success("Acesso removido.");
+                          void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+                        })
+                        .catch((error: Error) => toast.error(error.message))
+                    }
+                  >
+                    <Trash2 className="size-4" /> Remover
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>
