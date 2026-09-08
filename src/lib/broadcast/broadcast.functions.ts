@@ -331,6 +331,8 @@ export type BroadcastContactInput = {
   optInSource?: string | null;
 };
 
+export type DuplicateInfo = { whatsapp: string; owner: string };
+
 /** Nome de quem cadastrou cada contato, para avisos de duplicidade. */
 async function ownerNames(ctx: Ctx, ids: string[]): Promise<Record<string, string>> {
   const unique = [...new Set(ids.filter(Boolean))];
