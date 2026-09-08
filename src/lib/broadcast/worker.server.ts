@@ -92,6 +92,9 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
     return false;
   }
 
+  const { normalizeWhatsAppLinks } = await import("@/lib/broadcast/links");
+  const body = normalizeWhatsAppLinks(item.content ?? "");
+
   let sent;
   if (media?.media_url) {
     const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
@@ -106,11 +109,12 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
       mediaType: "image",
       mimeType: media.media_type ?? "image/jpeg",
       fileName: media.media_filename ?? "imagem.jpg",
-      caption: item.content,
+      caption: body,
     });
   } else {
-    sent = await MegaApiService.sendText(creds, recipient, item.content);
+    sent = await MegaApiService.sendText(creds, recipient, body);
   }
+
 
   if (!sent.ok) {
     if (isRecipientProblem(sent.error)) {
