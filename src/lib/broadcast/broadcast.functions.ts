@@ -331,6 +331,21 @@ export type BroadcastContactInput = {
   optInSource?: string | null;
 };
 
+/** Nome de quem cadastrou cada contato, para avisos de duplicidade. */
+async function ownerNames(ctx: Ctx, ids: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return {};
+  const { data } = await ctx.supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", unique);
+  const map: Record<string, string> = {};
+  for (const row of data ?? []) {
+    map[row.id as string] = (row.full_name ?? row.email ?? "outro usuário") as string;
+  }
+  return map;
+}
+
 export const listBroadcastContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
@@ -346,7 +361,8 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(1000);
-    // Contatos são da empresa: administradores e operadores usam a mesma lista.
+    // Operador enxerga apenas os contatos que ele mesmo cadastrou.
+    if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
 
     if (data.status) query = query.eq("status", data.status);
     if (typeof data.optIn === "boolean") query = query.eq("opt_in", data.optIn);
@@ -372,9 +388,23 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
     const whatsapp = PhoneNormalizationService.normalize(data.phone);
     if (!whatsapp) throw new Error("Telefone inválido.");
+
+    // Aviso de duplicidade: o número já pode estar na agenda de outra pessoa.
+    const { data: existing } = await ctx.supabase
+      .from("broadcast_contacts")
+      .select("id, created_by")
+      .eq("company_id", companyId)
+      .eq("whatsapp", whatsapp)
+      .maybeSingle();
+    if (existing && existing.id !== data.id && existing.created_by !== ctx.userId) {
+      const names = await ownerNames(ctx, [existing.created_by as string]);
+      const owner = names[existing.created_by as string] ?? "outro usuário";
+      throw new Error(`Este contato já está cadastrado para ${owner}.`);
+    }
 
     const payload = {
       company_id: companyId,
@@ -442,18 +472,42 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
         created_by: ctx.userId,
       });
     }
-    if (!payload.length) return { imported: 0, invalid };
+    if (!payload.length) return { imported: 0, invalid, duplicates: [] as DuplicateInfo[] };
 
-    const { error } = await ctx.supabase
+    // Números já cadastrados por outra pessoa não são importados; viram aviso.
+    const numbers = payload.map((p) => p["whatsapp"] as string);
+    const { data: existing } = await ctx.supabase
       .from("broadcast_contacts")
-      .upsert(payload, { onConflict: "company_id,whatsapp" });
-    if (error) throw new Error(error.message);
+      .select("whatsapp, created_by")
+      .eq("company_id", companyId)
+      .in("whatsapp", numbers);
+    const foreign = (existing ?? []).filter(
+      (row: { created_by: string }) => row.created_by !== ctx.userId,
+    );
+    const names = await ownerNames(
+      ctx,
+      foreign.map((row: { created_by: string }) => row.created_by),
+    );
+    const duplicates: DuplicateInfo[] = foreign.map((row: any) => ({
+      whatsapp: row.whatsapp as string,
+      owner: names[row.created_by as string] ?? "outro usuário",
+    }));
+    const blocked = new Set(duplicates.map((d) => d.whatsapp));
+    const toImport = payload.filter((p) => !blocked.has(p["whatsapp"] as string));
+
+    if (toImport.length) {
+      const { error } = await ctx.supabase
+        .from("broadcast_contacts")
+        .upsert(toImport, { onConflict: "company_id,whatsapp" });
+      if (error) throw new Error(error.message);
+    }
 
     await log(ctx, companyId, userName, "CONTACTS_IMPORTED", null, {
-      total: payload.length,
+      total: toImport.length,
       invalidos: invalid,
+      duplicados: duplicates.length,
     });
-    return { imported: payload.length, invalid };
+    return { imported: toImport.length, invalid, duplicates };
   });
 
 export const deleteBroadcastContacts = createServerFn({ method: "POST" })
