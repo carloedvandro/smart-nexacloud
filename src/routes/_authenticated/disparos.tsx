@@ -1737,9 +1737,13 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                         className="size-12 rounded-md border border-border object-cover"
                       />
                     ) : a.mime.startsWith("audio/") ? (
-                      <div className="flex size-12 items-center justify-center rounded-md border border-border bg-muted">
-                        <Mic className="size-5 text-muted-foreground" />
-                      </div>
+                      a.preview ? (
+                        <audio controls src={a.preview} className="h-10 w-48" />
+                      ) : (
+                        <div className="flex size-12 items-center justify-center rounded-md border border-border bg-muted">
+                          <Mic className="size-5 text-muted-foreground" />
+                        </div>
+                      )
                     ) : (
                       <div className="flex size-12 items-center justify-center rounded-md border border-border bg-muted text-xs font-medium uppercase text-muted-foreground">
                         {(a.filename.split(".").pop() ?? "doc").slice(0, 4)}
