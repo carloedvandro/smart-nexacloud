@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { processWebhookEvent } from "@/lib/whatsapp/ingest.server";
+import { extractRemoteJid, processWebhookEvent } from "@/lib/whatsapp/ingest.server";
 
 type ClaimedEvent = {
   id: string;
