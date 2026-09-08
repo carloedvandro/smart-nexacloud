@@ -139,13 +139,16 @@ export const listBroadcastInstances = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
-    const { data, error } = await ctx.supabase
+    const access = await requireAccess(ctx);
+    const companyId = access.companyId;
+    let listQuery = ctx.supabase
       .from("whatsapp_connections")
       .select(
         "id, name, instance_number, is_trunk, connection_type, status, phone_number, qr_code, last_connected_at",
       )
-      .eq("company_id", companyId)
+      .eq("company_id", companyId);
+    if (!access.isAdmin) listQuery = listQuery.in("id", access.instanceIds);
+    const { data, error } = await listQuery
       .order("is_trunk", { ascending: false })
       .order("instance_number", { ascending: true });
     if (error) throw new Error(error.message);
@@ -228,7 +231,9 @@ export const connectBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    assertInstance(access, data.connectionId);
+    const companyId = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id, connection_type")
@@ -246,7 +251,9 @@ export const refreshBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    assertInstance(access, data.connectionId);
+    const companyId = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id")
@@ -263,7 +270,9 @@ export const disconnectBroadcastInstance = createServerFn({ method: "POST" })
   .inputValidator((data: { connectionId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    assertInstance(access, data.connectionId);
+    const companyId, userName = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id, connection_type")
@@ -670,7 +679,9 @@ export const saveBroadcastCampaign = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    assertInstance(access, data.instanceId);
 
     // Proteção da instância tronco também no backend (o banco recusa de novo).
     const { data: conn } = await ctx.supabase
