@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Eye, EyeOff, KeyRound, ShieldCheck, Trash2 } from "lucide-react";
+import { KeyRound, ShieldCheck, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,6 @@ type CompanyGroup = {
 
 export function PlatformDeleteAdminsCard() {
   const queryClient = useQueryClient();
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [limits, setLimits] = useState<Record<string, string>>({});
   const [targetUser, setTargetUser] = useState<Record<string, string>>({});
   const [newName, setNewName] = useState<Record<string, string>>({});
@@ -180,7 +179,6 @@ export function PlatformDeleteAdminsCard() {
                 ) : (
                   group.members.map((member) => {
                     const key = member.user_id as string;
-                    const show = revealed[key] ?? false;
                     return (
                       <div
                         key={key}
