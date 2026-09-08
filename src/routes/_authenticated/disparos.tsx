@@ -514,6 +514,18 @@ function CampaignsTab({
   const resumeFn = useServerFn(resumeBroadcastCampaign);
   const cancelFn = useServerFn(cancelBroadcastCampaign);
   const duplicateFn = useServerFn(duplicateBroadcastCampaign);
+  const checkFn = useServerFn(checkCampaignRecentSends);
+  const [confirm, setConfirm] = useState<{
+    campaignId: string;
+    rows: {
+      whatsapp: string;
+      name: string | null;
+      owner: string;
+      sentAt: string | null;
+      campaign: string | null;
+    }[];
+  } | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
 
   function run(promise: Promise<unknown>, message: string) {
     promise
@@ -523,6 +535,44 @@ function CampaignsTab({
       })
       .catch((error: Error) => toast.error(error.message));
   }
+
+  function doStart(campaignId: string) {
+    run(
+      startFn({ data: { campaignId } }).then((r) => {
+        const res = r as { enqueued?: number; reason?: string } | undefined;
+        if ((res?.enqueued ?? 0) === 0) {
+          if (res?.reason === "already_sent") {
+            throw new Error(
+              "Todos os contatos desta campanha já receberam a mensagem. Use Duplicar para reenviar a todos.",
+            );
+          }
+          throw new Error(
+            "Nenhum contato entrou na fila. Verifique se os contatos estão ativos e, se exigir consentimento, se deram opt-in.",
+          );
+        }
+        return r;
+      }),
+      "Campanha iniciada.",
+    );
+  }
+
+  /** Antes de disparar, avisa quem já recebeu mensagem recentemente. Nunca bloqueia. */
+  async function tryStart(campaignId: string) {
+    setChecking(campaignId);
+    try {
+      const rows = await checkFn({ data: { campaignId } });
+      if (rows.length) {
+        setConfirm({ campaignId, rows });
+        return;
+      }
+      doStart(campaignId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao verificar contatos.");
+    } finally {
+      setChecking(null);
+    }
+  }
+
 
   if (loading) return <Skeleton className="h-64 w-full" />;
   if (!campaigns.length) {
