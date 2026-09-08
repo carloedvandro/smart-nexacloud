@@ -407,7 +407,7 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
         row["sharedWith"] = byNumber[row["whatsapp"] as string] ?? [];
       }
     }
-    return list;
+    return list as unknown as (BroadcastContactRow & { sharedWith: string[] })[];
   });
 
 export const saveBroadcastContact = createServerFn({ method: "POST" })
