@@ -1238,8 +1238,11 @@ function ContactsTab() {
           optInSource: form.optIn ? form.optInSource || "cadastro manual" : null,
         },
       }),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const warning = (result as { warning?: string | null } | undefined)?.warning;
       toast.success("Contato salvo.");
+      if (warning) toast.warning(warning, { duration: 8000 });
+
       setForm({
         name: "",
         phone: "",
