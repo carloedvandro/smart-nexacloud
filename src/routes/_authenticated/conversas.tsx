@@ -934,14 +934,15 @@ function MediaComposer({
         if (blob.size === 0) return;
 
         void import("@/lib/whatsapp/audio-encoding")
-          .then(({ recordingToWhatsAppAudio }) => recordingToWhatsAppAudio(blob))
-          .then((mp3) => {
-            onFile({ blob: mp3, name: `audio-${Date.now()}.mp3`, kind: "audio" });
+          .then(({ prepareRecordingForWhatsApp }) => prepareRecordingForWhatsApp(blob))
+          .then(({ blob: prepared, extension }) => {
+            onFile({ blob: prepared, name: `audio-${Date.now()}.${extension}`, kind: "audio" });
           })
           .catch((error: unknown) => {
             console.error("[audio] conversão para WhatsApp falhou", error);
             toast.error("Não consegui preparar o áudio para o WhatsApp. Grave novamente.");
           });
+
       };
       recorder.start();
       recorderRef.current = recorder;

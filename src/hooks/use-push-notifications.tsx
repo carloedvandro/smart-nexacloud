@@ -174,12 +174,13 @@ export function useConversationPushPresence(conversationId: string | null) {
 
     const publish = (visible: boolean) => {
       if (!endpoint) return;
-      const body: Database["public"]["Functions"]["set_push_conversation_view"]["Args"] = {
+      const body = {
         _endpoint: endpoint,
         _view_id: viewId,
         _conversation_id: visible ? conversationId : null,
         _sequence: ++conversationViewSequence,
-      };
+      } satisfies Record<string, unknown> as unknown as Database["public"]["Functions"]["set_push_conversation_view"]["Args"];
+
       void fetch(`${url}/rest/v1/rpc/set_push_conversation_view`, {
         method: "POST",
         headers: {
