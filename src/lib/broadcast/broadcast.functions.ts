@@ -605,15 +605,21 @@ export const listBroadcastMessages = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
 
     const rows = (data ?? []) as Record<string, any>[];
-    const withMedia = rows.filter((row) => row["media_url"]);
-    if (withMedia.length) {
-      const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
-      await Promise.all(
-        withMedia.map(async (row) => {
-          row["mediaPreviewUrl"] = await signedMediaUrl(row["media_url"] as string, 60 * 60);
-        }),
-      );
-    }
+    const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
+    await Promise.all(
+      rows.map(async (row) => {
+        const list = normalizeStoredAttachments(row);
+        row["attachmentPreviews"] = await Promise.all(
+          list.map(async (att) => ({
+            ...att,
+            previewUrl: await signedMediaUrl(att.path, 60 * 60),
+          })),
+        );
+        row["mediaPreviewUrl"] = row["media_url"]
+          ? await signedMediaUrl(row["media_url"] as string, 60 * 60)
+          : null;
+      }),
+    );
     return rows as (Record<string, any> & {
       id: string;
       name: string;
@@ -623,10 +629,45 @@ export const listBroadcastMessages = createServerFn({ method: "GET" })
       media_type: string | null;
       media_filename: string | null;
       mediaPreviewUrl?: string | null;
+      attachmentPreviews?: (StoredAttachment & { previewUrl: string | null })[];
       created_at: string;
       updated_at: string;
     })[];
   });
+
+export type StoredAttachment = {
+  path: string;
+  mime: string;
+  filename: string;
+  kind: "image" | "document";
+};
+
+/** Une o formato antigo (uma imagem) com o novo (vários anexos). */
+export function normalizeStoredAttachments(row: Record<string, any>): StoredAttachment[] {
+  const raw = Array.isArray(row["attachments"]) ? (row["attachments"] as any[]) : [];
+  const list = raw
+    .filter((a) => a && typeof a.path === "string")
+    .map((a) => ({
+      path: a.path as string,
+      mime: (a.mime as string) ?? "application/octet-stream",
+      filename: (a.filename as string) ?? "arquivo",
+      kind: (a.kind === "image" ? "image" : "document") as "image" | "document",
+    }));
+  if (list.length) return list;
+  if (row["media_url"]) {
+    const mime = (row["media_type"] as string) ?? "image/jpeg";
+    return [
+      {
+        path: row["media_url"] as string,
+        mime,
+        filename: (row["media_filename"] as string) ?? "imagem.jpg",
+        kind: mime.startsWith("image/") ? "image" : "document",
+      },
+    ];
+  }
+  return [];
+}
+
 
 const ALLOWED_VARIABLES = ["nome", "primeiro_nome"];
 
