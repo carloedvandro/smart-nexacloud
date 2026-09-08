@@ -130,6 +130,44 @@ export const createPlatformCompany = createServerFn({ method: "POST" })
     return { id: company.id, name: company.name };
   });
 
+/** Atualiza dados cadastrais de uma empresa. */
+export const updatePlatformCompany = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { companyId: string; name: string; legalName?: string; document?: string }) => {
+    if (!data.companyId) throw new Error("Selecione a empresa.");
+    if (!data.name?.trim()) throw new Error("Informe o nome da empresa.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    await assertPlatformAdmin(context.supabase as never);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { error } = await supabaseAdmin
+      .from("companies")
+      .update({
+        name: data.name.trim(),
+        legal_name: data.legalName?.trim() || null,
+        document: data.document?.trim() || null,
+      })
+      .eq("id", data.companyId);
+    if (error) throw new Error(error.message);
+
+    await supabaseAdmin.from("audit_logs").insert({
+      company_id: data.companyId,
+      user_id: context.userId,
+      action: "UPDATE_COMPANY",
+      entity_type: "company",
+      entity_id: data.companyId,
+      metadata: {
+        name: data.name.trim(),
+        legal_name: data.legalName?.trim() || null,
+        document: data.document?.trim() || null,
+      },
+    });
+
+    return { ok: true };
+  });
+
 /** Lista todas as instâncias provisionadas na plataforma. */
 export const listPlatformInstances = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])

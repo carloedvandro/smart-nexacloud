@@ -44,6 +44,7 @@ import {
   setCompanyMemberRole,
   setPlatformCompanyStatus,
   transferInstanceCompany,
+  updatePlatformCompany,
   updateInstanceCredentials,
 
 } from "@/lib/platform/platform.functions";
@@ -106,6 +107,31 @@ function PlatformPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("ADMIN");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  const [editTarget, setEditTarget] = useState<{ id: string; name: string } | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLegalName, setEditLegalName] = useState("");
+  const [editDocument, setEditDocument] = useState("");
+  const updateCompanyFn = useServerFn(updatePlatformCompany);
+
+  const editCompanyMutation = useMutation({
+    mutationFn: () =>
+      updateCompanyFn({
+        data: {
+          companyId: editTarget?.id ?? "",
+          name: editName,
+          legalName: editLegalName,
+          document: editDocument,
+        },
+      }),
+    onSuccess: () => {
+      setEditTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["platform-companies"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-instances"] });
+      toast.success("Dados da empresa atualizados");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const [licenseTarget, setLicenseTarget] = useState<{ id: string; name: string } | null>(null);
   const [licenseUsers, setLicenseUsers] = useState(8);
@@ -433,6 +459,20 @@ function PlatformPage() {
                       size="sm"
                       variant="ghost"
                       onClick={() => {
+                        setEditTarget({ id: company.id, name: company.name });
+                        setEditName(company.name);
+                        setEditLegalName(company.legalName ?? "");
+                        setEditDocument(company.document ?? "");
+                      }}
+                    >
+                      Editar
+                    </Button>
+
+
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
                         setLicenseTarget({ id: company.id, name: company.name });
                         setLicenseUsers(company.maxInternalUsers);
                         setLicenseConsultants(company.maxConsultants);
@@ -643,6 +683,37 @@ function PlatformPage() {
             <Button onClick={() => licenseMutation.mutate()} disabled={licenseMutation.isPending}>
               {licenseMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
               Salvar limites
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar empresa</DialogTitle>
+            <DialogDescription>
+              Corrija o nome, a razão social e o CNPJ/CPF exibidos para esta empresa.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input value={editName} onChange={(event) => setEditName(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Razão social</Label>
+              <Input value={editLegalName} onChange={(event) => setEditLegalName(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>CNPJ / CPF</Label>
+              <Input value={editDocument} onChange={(event) => setEditDocument(event.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => editCompanyMutation.mutate()} disabled={editCompanyMutation.isPending}>
+              {editCompanyMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Salvar alterações
             </Button>
           </DialogFooter>
         </DialogContent>
