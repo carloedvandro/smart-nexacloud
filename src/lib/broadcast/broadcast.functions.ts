@@ -10,25 +10,61 @@ import { PhoneNormalizationService } from "@/lib/nexa/phone";
 
 type Ctx = { supabase: any; userId: string };
 
-async function requireAdmin(context: Ctx): Promise<{ companyId: string; userName: string | null }> {
+export type BroadcastAccess = {
+  companyId: string;
+  userName: string | null;
+  isAdmin: boolean;
+  /** Instâncias liberadas ao operador (vazio quando é administrador: vê todas). */
+  instanceIds: string[];
+};
+
+/**
+ * Libera o módulo para administradores e para operadores autorizados por instância.
+ * A RLS do banco repete as mesmas regras — esconder botões nunca é a proteção.
+ */
+async function requireAccess(context: Ctx): Promise<BroadcastAccess> {
   const [{ data: isAdmin }, { data: isPlatformAdmin }] = await Promise.all([
     context.supabase.rpc("is_company_admin"),
     context.supabase.rpc("is_platform_admin"),
   ]);
-  if (!isAdmin && !isPlatformAdmin) {
-    throw new Error("Somente administradores podem usar o módulo de Disparos.");
-  }
   const { data: profile } = await context.supabase
     .from("profiles")
     .select("company_id, full_name, email")
     .eq("id", context.userId)
     .maybeSingle();
   if (!profile?.company_id) throw new Error("Usuário sem empresa.");
-  return {
-    companyId: profile.company_id as string,
-    userName: profile.full_name ?? profile.email ?? null,
-  };
+  const companyId = profile.company_id as string;
+  const userName = (profile.full_name ?? profile.email ?? null) as string | null;
+
+  if (isAdmin || isPlatformAdmin) {
+    return { companyId, userName, isAdmin: true, instanceIds: [] };
+  }
+
+  const { data: grants } = await context.supabase
+    .from("broadcast_access")
+    .select("connection_id")
+    .eq("user_id", context.userId)
+    .eq("company_id", companyId);
+  const instanceIds = (grants ?? []).map((g: { connection_id: string }) => g.connection_id);
+  if (!instanceIds.length) {
+    throw new Error("Você não tem acesso ao módulo de Disparos.");
+  }
+  return { companyId, userName, isAdmin: false, instanceIds };
 }
+
+/** Igual a requireAccess, porém exclusivo de administradores. */
+async function requireAdmin(context: Ctx): Promise<BroadcastAccess> {
+  const access = await requireAccess(context);
+  if (!access.isAdmin) throw new Error("Somente administradores podem fazer isso.");
+  return access;
+}
+
+function assertInstance(access: BroadcastAccess, instanceId: string) {
+  if (!access.isAdmin && !access.instanceIds.includes(instanceId)) {
+    throw new Error("Você não tem acesso a esta instância de disparo.");
+  }
+}
+
 
 async function log(
   context: Ctx,
