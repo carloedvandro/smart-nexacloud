@@ -38,7 +38,7 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook/$token")({
         const externalEventId = extractEventId(payload);
 
         // Idempotência: o índice único (connection_id, external_event_id) barra repetições.
-        const { error: eventError } = await supabaseAdmin
+        const { data: queuedEvent, error: eventError } = await supabaseAdmin
           .from("whatsapp_events")
           .insert({
             company_id: connection.company_id,
@@ -57,6 +57,21 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook/$token")({
           }
           console.error("[whatsapp] falha ao registrar evento", eventError.message);
           return new Response(JSON.stringify({ ok: true, stored: false }), jsonInit());
+        }
+
+        if (queuedEvent?.id && isInboundText(payload)) {
+          const { processWebhookEvent } = await import("@/lib/whatsapp/ingest.server");
+          await processWebhookEvent({
+            companyId: connection.company_id,
+            connectionId: connection.id,
+            payload,
+            ingestOnly: true,
+          }).catch((error) =>
+            console.error(
+              "[whatsapp] ingestão imediata falhou; fila fará nova tentativa",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
         }
 
         // O trabalho pesado roda pela fila persistente. Responder agora evita
@@ -85,4 +100,15 @@ function extractEventId(payload: Record<string, unknown>): string | null {
     }
   }
   return null;
+}
+
+function isInboundText(payload: Record<string, unknown>): boolean {
+  const data = (payload["data"] as Record<string, unknown> | undefined) ?? payload;
+  const key = (data["key"] as Record<string, unknown> | undefined) ??
+    (payload["key"] as Record<string, unknown> | undefined);
+  if (key?.["fromMe"] === true) return false;
+  const serialized = JSON.stringify(data);
+  return !/(audioMessage|pttMessage|imageMessage|videoMessage|documentMessage|stickerMessage)/i.test(
+    serialized,
+  );
 }
