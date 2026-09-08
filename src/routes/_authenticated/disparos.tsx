@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -10,6 +10,8 @@ import {
   Clock,
   Loader2,
   ImagePlus,
+  Mic,
+  Square,
   Megaphone,
   OctagonX,
   Pencil,
