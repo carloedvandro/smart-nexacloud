@@ -2360,10 +2360,11 @@ export type Database = {
       }
       broadcast_finalize: {
         Args: {
-          _error?: string
+          _error: string
           _ok: boolean
-          _provider_message_id?: string
+          _provider_message_id: string
           _queue_id: string
+          _skip?: boolean
         }
         Returns: undefined
       }
