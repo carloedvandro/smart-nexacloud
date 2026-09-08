@@ -1884,6 +1884,48 @@ export type Database = {
           },
         ]
       }
+      push_conversation_views: {
+        Row: {
+          conversation_id: string | null
+          expires_at: string
+          sequence: number
+          subscription_id: string
+          user_id: string
+          view_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          expires_at: string
+          sequence: number
+          subscription_id: string
+          user_id: string
+          view_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          expires_at?: string
+          sequence?: number
+          subscription_id?: string
+          user_id?: string
+          view_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_conversation_views_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_conversation_views_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "push_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       push_subscriptions: {
         Row: {
           auth: string
@@ -2413,17 +2455,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      set_push_conversation_view: {
-        Args: { _endpoint: string; _view_id: string; _conversation_id: string | null; _sequence: number }
-        Returns: boolean
-      }
-      active_push_conversation_subscriptions: {
-        Args: { _conversation_id: string; _subscription_ids: string[] }
-        Returns: { subscription_id: string }[]
-      }
       accept_company_invites: {
         Args: { _email: string; _user_id: string }
         Returns: string
+      }
+      active_push_conversation_subscriptions: {
+        Args: { _conversation_id: string; _subscription_ids: string[] }
+        Returns: {
+          subscription_id: string
+        }[]
       }
       ai_resume_conversation: {
         Args: { _conversation_id: string; _reason?: string }
@@ -2832,6 +2872,15 @@ export type Database = {
           _transcription?: string
         }
         Returns: undefined
+      }
+      set_push_conversation_view: {
+        Args: {
+          _conversation_id: string
+          _endpoint: string
+          _sequence: number
+          _view_id: string
+        }
+        Returns: boolean
       }
       set_trunk_whatsapp_instance: {
         Args: { _connection_id: string }
