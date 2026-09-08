@@ -700,11 +700,15 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
     }
 
     if (data.id) {
-      const { error } = await ctx.supabase
-        .from("broadcast_messages")
-        .update(payload)
-        .eq("id", data.id)
-        .eq("company_id", companyId);
+      const { error } = await own(
+        ctx.supabase
+          .from("broadcast_messages")
+          .update(payload)
+          .eq("id", data.id)
+          .eq("company_id", companyId),
+        access,
+        ctx,
+      );
       if (error) throw new Error(error.message);
       return { ok: true, id: data.id };
     }
