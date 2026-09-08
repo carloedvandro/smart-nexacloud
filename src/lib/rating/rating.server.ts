@@ -43,15 +43,26 @@ async function sendToLead(companyId: string, conversationId: string, text: strin
     return false;
   }
 
-  await supabaseAdmin.rpc("post_message", {
-    _conversation_id: conversationId,
-    _sender_type: "system",
-    _content: text,
-    _message_type: "text",
-    _sender_name: "NexaAtende",
+  // Grava direto: a RPC `post_message` depende de sessão de usuário e falha
+  // silenciosamente no servidor, deixando a mensagem automática sem registro.
+  const { data: conv } = await supabaseAdmin
+    .from("conversations")
+    .select("company_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  await supabaseAdmin.from("messages").insert({
+    company_id: conv?.company_id ?? companyId,
+    conversation_id: conversationId,
+    sender_type: "system",
+    sender_name: "NexaAtende",
+    message_type: "text",
+    content: text,
+    delivery_status: "SENT",
+    delivered_at: new Date().toISOString(),
   });
   return true;
 }
+
 
 /**
  * Envia a pergunta de avaliação para leads que acabaram de virar abandonados
