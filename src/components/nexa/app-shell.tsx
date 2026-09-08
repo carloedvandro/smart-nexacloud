@@ -9,7 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+
 import { supabase } from "@/integrations/supabase/client";
+import { getBroadcastAccessInfo } from "@/lib/broadcast/broadcast.functions";
 import { AVAILABILITY_LABEL } from "@/lib/nexa/domain";
 import { NAV_ITEMS } from "@/lib/nexa/navigation";
 import { cn } from "@/lib/utils";
@@ -71,12 +75,23 @@ export function AppShell({
   }, [profile?.id]);
 
   const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
+  // Consultores liberados por um administrador também enxergam o menu de Disparos.
+  const broadcastAccessFn = useServerFn(getBroadcastAccessInfo);
+  const broadcastAccess = useQuery({
+    queryKey: ["broadcast", "access"],
+    queryFn: () => broadcastAccessFn({}),
+    enabled: Boolean(profile?.id) && !isAdmin,
+    staleTime: 5 * 60_000,
+  });
+  const canBroadcast = isAdmin || Boolean(broadcastAccess.data?.allowed);
   const items = NAV_ITEMS.filter((item) =>
-    item.roles.includes("PLATFORM_ADMIN") && item.roles.length === 1
-      ? isPlatformAdmin
-      : isAdmin
-        ? true
-        : item.roles.includes("CONSULTANT"),
+    item.to === "/disparos"
+      ? canBroadcast
+      : item.roles.includes("PLATFORM_ADMIN") && item.roles.length === 1
+        ? isPlatformAdmin
+        : isAdmin
+          ? true
+          : item.roles.includes("CONSULTANT"),
   );
 
   async function handleSignOut() {
