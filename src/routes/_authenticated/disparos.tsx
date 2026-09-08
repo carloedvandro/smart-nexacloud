@@ -1938,6 +1938,13 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
                 <SelectItem value="90">90 dias</SelectItem>
               </SelectContent>
             </Select>
+            <Input
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="Buscar por número"
+              className="w-48"
+              inputMode="tel"
+            />
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -1945,10 +1952,10 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
             <Skeleton className="h-40 w-full" />
           ) : rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum envio no período.
+              {digits ? "Nenhum envio para esse número." : "Nenhum envio no período."}
             </p>
           ) : (
-            rows.map((row: HistoryRow) => (
+            pageRows.map((row: HistoryRow) => (
               <div key={row.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
