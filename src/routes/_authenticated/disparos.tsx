@@ -1802,13 +1802,28 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     </Button>
                   </div>
                 </div>
-                {m.mediaPreviewUrl ? (
-                  <img
-                    src={m.mediaPreviewUrl}
-                    alt={`Imagem do modelo ${m.name}`}
-                    className="mt-2 size-28 rounded-lg border border-border object-cover"
-                  />
+                {(m.attachmentPreviews ?? []).length ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(m.attachmentPreviews ?? []).map((a) =>
+                      a.kind === "image" && a.previewUrl ? (
+                        <img
+                          key={a.path}
+                          src={a.previewUrl}
+                          alt={`Anexo ${a.filename} do modelo ${m.name}`}
+                          className="size-24 rounded-lg border border-border object-cover"
+                        />
+                      ) : (
+                        <span
+                          key={a.path}
+                          className="flex max-w-48 items-center gap-2 truncate rounded-lg border border-border bg-muted px-3 py-2 text-xs"
+                        >
+                          {a.filename}
+                        </span>
+                      ),
+                    )}
+                  </div>
                 ) : null}
+
                 <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
                   {m.content}
                 </p>
