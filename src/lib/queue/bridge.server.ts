@@ -246,6 +246,20 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
     if (!ok) {
       await releaseNotificationClaim(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
     }
+
+    // Aviso no celular/computador (notificação do sistema), além do WhatsApp.
+    try {
+      const { notifyLeadAssigned } = await import("@/lib/push/push.server");
+      await notifyLeadAssigned({
+        userId: attempt.consultant_id,
+        leadName: lead?.name?.trim() || lead?.whatsapp || "Novo contato",
+        conversationId: attempt.conversation_id,
+        detail: lastText ? lastText.slice(0, 100) : `Assuma em até ${seconds || 60}s`,
+        offer: true,
+      });
+    } catch (error) {
+      console.error("[push] aviso de oferta falhou", error instanceof Error ? error.message : error);
+    }
   }
 }
 
