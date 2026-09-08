@@ -172,7 +172,7 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
   }
 
   const providerId = sent.data?.key?.id ?? (sent.data as { messageId?: string } | undefined)?.messageId ?? null;
-  await finalize(item.queue_id, true, providerId, null);
+  await finalize(item.queue_id, true, providerId, partialErrors.join(" | ") || null);
   return true;
 }
 
