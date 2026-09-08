@@ -81,7 +81,7 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
     .maybeSingle();
   const messageRow =
     (queueRow as { message?: Record<string, any> | null } | null)?.message ?? null;
-  const { normalizeStoredAttachments } = await import("@/lib/broadcast/broadcast.functions");
+  const { normalizeStoredAttachments } = await import("@/lib/broadcast/attachments");
   const attachments = messageRow ? normalizeStoredAttachments(messageRow) : [];
 
   if (!item.content.trim() && !attachments.length) {
