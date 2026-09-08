@@ -548,6 +548,22 @@ export async function processWebhookEvent(input: {
     });
   }
 
+  // Aviso push (celular/computador) para o responsável — ou para toda a
+  // equipe quando o lead está aguardando consultor.
+  if (!result.duplicate && result.conversation_id) {
+    try {
+      const { notifyInboundMessage } = await import("@/lib/push/push.server");
+      await notifyInboundMessage({
+        companyId,
+        conversationId: result.conversation_id,
+        content: content ?? null,
+        messageType,
+      });
+    } catch (error) {
+      console.error("[push] aviso de mensagem falhou", error instanceof Error ? error.message : error);
+    }
+  }
+
   if (ingestOnly) {
     return {
       status: result.duplicate ? "duplicate" : "processed",

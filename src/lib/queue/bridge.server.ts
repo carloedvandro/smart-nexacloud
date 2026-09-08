@@ -187,6 +187,28 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       if (!timeoutSent) {
         await releaseNotificationClaim(attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id);
       }
+      // Ninguém assumiu dentro do prazo: avisa a equipe no celular.
+      try {
+        const [{ data: timeoutConversation }, { notifyLeadAbandoned }] = await Promise.all([
+          supabaseAdmin
+            .from("conversations")
+            .select("lead:leads(name, whatsapp)")
+            .eq("id", attempt.conversation_id)
+            .maybeSingle(),
+          import("@/lib/push/push.server"),
+        ]);
+        const timeoutLead = (timeoutConversation?.lead ?? null) as {
+          name: string | null;
+          whatsapp: string | null;
+        } | null;
+        await notifyLeadAbandoned({
+          companyId,
+          conversationId: attempt.conversation_id,
+          leadName: timeoutLead?.name?.trim() || timeoutLead?.whatsapp || "Novo contato",
+        });
+      } catch (error) {
+        console.error("[push] aviso de lead sem atendimento falhou", error instanceof Error ? error.message : error);
+      }
       continue;
     }
 
@@ -245,6 +267,20 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
     });
     if (!ok) {
       await releaseNotificationClaim(attempt.conversation_id, EVENT_OFFER_NOTIFIED, attempt.id);
+    }
+
+    // Aviso no celular/computador (notificação do sistema), além do WhatsApp.
+    try {
+      const { notifyLeadAssigned } = await import("@/lib/push/push.server");
+      await notifyLeadAssigned({
+        userId: attempt.consultant_id,
+        leadName: lead?.name?.trim() || lead?.whatsapp || "Novo contato",
+        conversationId: attempt.conversation_id,
+        detail: lastText ? lastText.slice(0, 100) : `Assuma em até ${seconds || 60}s`,
+        offer: true,
+      });
+    } catch (error) {
+      console.error("[push] aviso de oferta falhou", error instanceof Error ? error.message : error);
     }
   }
 }
