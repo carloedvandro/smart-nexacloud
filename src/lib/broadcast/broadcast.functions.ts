@@ -660,7 +660,10 @@ export const listBroadcastCampaigns = createServerFn({ method: "GET" })
         "*, instance:whatsapp_connections(id, name, status), message:broadcast_messages(id, name)",
       )
       .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }),
+      access,
+      ctx,
+    );
     if (error) throw new Error(error.message);
 
     const ids = (campaigns ?? []).map((c: { id: string }) => c.id);
@@ -824,7 +827,9 @@ export const startBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string; scheduledAt?: string | null }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
 
     const { data: campaign } = await ctx.supabase
       .from("broadcast_campaigns")
@@ -899,7 +904,9 @@ export const pauseBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     return setCampaignStatus(
       ctx,
       companyId,
@@ -918,7 +925,9 @@ export const resumeBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     return setCampaignStatus(
       ctx,
       companyId,
@@ -939,7 +948,9 @@ export const cancelBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     await ctx.supabase
       .from("broadcast_queue")
       .update({ status: "CANCELLED", error_message: "Campanha cancelada." })
@@ -965,7 +976,9 @@ export const getBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     const { data: campaign, error } = await ctx.supabase
       .from("broadcast_campaigns")
       .select("*")
@@ -990,7 +1003,9 @@ export const deleteBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     const { data: campaign } = await ctx.supabase
       .from("broadcast_campaigns")
       .select("id, name, status")
@@ -1026,7 +1041,9 @@ export const duplicateBroadcastCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { campaignId: string }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
     const { data: original } = await ctx.supabase
       .from("broadcast_campaigns")
       .select("*")
