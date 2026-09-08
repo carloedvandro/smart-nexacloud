@@ -333,6 +333,25 @@ export type BroadcastContactInput = {
 
 export type DuplicateInfo = { whatsapp: string; owner: string };
 
+export type BroadcastContactRow = {
+  id: string;
+  company_id: string;
+  name: string | null;
+  phone: string | null;
+  whatsapp: string;
+  company_name: string | null;
+  tags: string[];
+  source: string | null;
+  note: string | null;
+  status: "ATIVO" | "PAUSADO" | "BLOQUEADO" | "DESCADASTRADO";
+  opt_in: boolean;
+  opt_in_source: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+
 /** Nome de quem cadastrou cada contato, para avisos de duplicidade. */
 async function ownerNames(ctx: Ctx, ids: string[]): Promise<Record<string, string>> {
   const unique = [...new Set(ids.filter(Boolean))];
