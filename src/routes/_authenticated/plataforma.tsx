@@ -648,6 +648,37 @@ function PlatformPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar empresa</DialogTitle>
+            <DialogDescription>
+              Corrija o nome, a razão social e o CNPJ/CPF exibidos para esta empresa.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input value={editName} onChange={(event) => setEditName(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Razão social</Label>
+              <Input value={editLegalName} onChange={(event) => setEditLegalName(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>CNPJ / CPF</Label>
+              <Input value={editDocument} onChange={(event) => setEditDocument(event.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => editCompanyMutation.mutate()} disabled={editCompanyMutation.isPending}>
+              {editCompanyMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Salvar alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={companyOpen} onOpenChange={setCompanyOpen}>
 
         <DialogContent>
