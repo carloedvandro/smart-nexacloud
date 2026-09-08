@@ -20,6 +20,9 @@ export function NexaLogo({
           )}
         >
           Nexa<span className="text-primary">Atende</span>
+          <span className="ml-1 rounded bg-primary/15 px-1 py-0.5 align-middle text-[0.58rem] font-bold uppercase tracking-wider text-primary">
+            beta
+          </span>
         </span>
         <span
           className={cn(
