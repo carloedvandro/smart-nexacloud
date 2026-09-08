@@ -56,6 +56,32 @@ function providerError(payload: unknown): string | null {
   return null;
 }
 
+/**
+ * A MEGA pode responder que a instância sumiu ("Instance not found") ou está
+ * deslogada ("Instance not logged in"). Nesses casos o número precisa ser
+ * reconectado pelo QR — refletimos isso no painel para o operador ver o
+ * problema em vez de só ver mensagens falhando.
+ */
+async function flagInstanceOffline(creds: MegaCredentials, message: string) {
+  const text = message.toLowerCase();
+  const notFound = text.includes("instance not found");
+  const loggedOut = text.includes("not logged in") || text.includes("instance not connected");
+  if (!notFound && !loggedOut) return;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin
+      .from("whatsapp_connections")
+      .update({
+        status: notFound ? "ERROR" : "LOGGED_OUT",
+        last_disconnected_at: new Date().toISOString(),
+      })
+      .eq("id", creds.connectionId)
+      .neq("status", notFound ? "ERROR" : "LOGGED_OUT");
+  } catch (error) {
+    console.error("[mega] falha ao marcar instância offline", error);
+  }
+}
+
 async function request<T>(
   creds: MegaCredentials,
   path: string,
@@ -103,6 +129,7 @@ async function request<T>(
         name,
         body: text?.slice(0, 500),
       });
+      await flagInstanceOffline(creds, `${name} ${rawMessage} ${text ?? ""}`);
       return { ok: false, error: message, status: response.status };
     }
 
