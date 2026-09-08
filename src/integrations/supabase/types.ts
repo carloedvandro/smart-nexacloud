@@ -2602,6 +2602,7 @@ export type Database = {
         Args: { _drop_id: string; _keep_id: string }
         Returns: string
       }
+      my_company_status: { Args: never; Returns: string }
       normalize_phone: { Args: { _raw: string }; Returns: string }
       platform_invite_company_member: {
         Args: {
@@ -2646,6 +2647,13 @@ export type Database = {
           _company_id: string
           _max_consultants: number
           _max_internal_users: number
+        }
+        Returns: undefined
+      }
+      platform_set_company_status: {
+        Args: {
+          _company_id: string
+          _status: Database["public"]["Enums"]["company_status"]
         }
         Returns: undefined
       }
