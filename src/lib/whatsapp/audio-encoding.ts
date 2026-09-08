@@ -81,15 +81,28 @@ function passthrough(recording: Blob): PreparedAudio | null {
 }
 
 export async function prepareRecordingForWhatsApp(recording: Blob): Promise<PreparedAudio> {
+  // 1) Melhor caminho: OGG/Opus, que chega como áudio de voz no WhatsApp
+  //    (bolha com ondinha), igual a um áudio gravado no celular.
+  const direct = passthrough(recording);
+  if (direct && direct.extension === "ogg") return direct;
+
+  try {
+    const { webmOpusToOgg } = await import("@/lib/whatsapp/opus-remux");
+    const ogg = await webmOpusToOgg(recording);
+    if (ogg && ogg.size > 0) return { blob: ogg, extension: "ogg" };
+  } catch (error) {
+    console.error("[audio] não consegui gerar OGG/Opus, seguindo para MP3", error);
+  }
+
   try {
     return { blob: await toMp3(recording), extension: "mp3" };
   } catch (error) {
     console.error("[audio] conversão para MP3 falhou, tentando formato original", error);
-    const direct = passthrough(recording);
     if (direct) return direct;
     throw error instanceof Error ? error : new Error("Falha ao preparar o áudio.");
   }
 }
+
 
 /** Compatibilidade com o nome antigo. */
 export async function recordingToWhatsAppAudio(recording: Blob): Promise<Blob> {
