@@ -1201,3 +1201,128 @@ export const listBroadcastLogs = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return data ?? [];
   });
+
+/* ------------------------------------------------------------------ */
+/* Acesso de operadores (usuários comuns liberados por instância)      */
+/* ------------------------------------------------------------------ */
+
+/** Diz ao front se a pessoa é administradora ou operadora, e quais instâncias vê. */
+export const getBroadcastAccessInfo = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as unknown as Ctx;
+    try {
+      const access = await requireAccess(ctx);
+      return {
+        allowed: true,
+        isAdmin: access.isAdmin,
+        instanceIds: access.instanceIds,
+      };
+    } catch {
+      return { allowed: false, isAdmin: false, instanceIds: [] as string[] };
+    }
+  });
+
+/** Administrador: pessoas da empresa + instâncias de disparo + acessos já concedidos. */
+export const listBroadcastOperators = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as unknown as Ctx;
+    const { companyId } = await requireAdmin(ctx);
+
+    const [{ data: members }, { data: grants }, { data: instances }] = await Promise.all([
+      ctx.supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .eq("company_id", companyId)
+        .order("full_name", { ascending: true }),
+      ctx.supabase
+        .from("broadcast_access")
+        .select("id, user_id, connection_id, created_at")
+        .eq("company_id", companyId),
+      ctx.supabase
+        .from("whatsapp_connections")
+        .select("id, name, instance_number, phone_number, status")
+        .eq("company_id", companyId)
+        .eq("connection_type", "BROADCAST")
+        .order("instance_number", { ascending: true }),
+    ]);
+
+    return {
+      members: (members ?? []).map((m: Record<string, unknown>) => ({
+        id: m["id"] as string,
+        name: (m["full_name"] as string | null) ?? (m["email"] as string | null) ?? "Sem nome",
+        email: (m["email"] as string | null) ?? null,
+      })),
+      instances: (instances ?? []).map((i: Record<string, unknown>) => ({
+        id: i["id"] as string,
+        name: (i["name"] as string | null) ?? `Instância ${i["instance_number"] ?? ""}`,
+        phoneNumber: (i["phone_number"] as string | null) ?? null,
+        status: i["status"] as string,
+      })),
+      grants: (grants ?? []).map((g: Record<string, unknown>) => ({
+        id: g["id"] as string,
+        userId: g["user_id"] as string,
+        connectionId: g["connection_id"] as string,
+      })),
+    };
+  });
+
+/** Administrador: define exatamente quais instâncias a pessoa pode usar. */
+export const setBroadcastAccess = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { userId: string; connectionIds: string[] }) => {
+    if (!data.userId) throw new Error("Escolha a pessoa.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const { companyId, userName } = await requireAdmin(ctx);
+
+    const { data: target } = await ctx.supabase
+      .from("profiles")
+      .select("id, company_id, full_name, email")
+      .eq("id", data.userId)
+      .maybeSingle();
+    if (!target || target.company_id !== companyId) {
+      throw new Error("Esta pessoa não faz parte da sua empresa.");
+    }
+
+    const wanted = [...new Set(data.connectionIds)];
+    if (wanted.length) {
+      const { data: valid } = await ctx.supabase
+        .from("whatsapp_connections")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("connection_type", "BROADCAST")
+        .in("id", wanted);
+      const ok = new Set((valid ?? []).map((r: { id: string }) => r.id));
+      if (wanted.some((id) => !ok.has(id))) {
+        throw new Error("Só é possível liberar instâncias de disparo da sua empresa.");
+      }
+    }
+
+    await ctx.supabase
+      .from("broadcast_access")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("user_id", data.userId);
+
+    if (wanted.length) {
+      const { error } = await ctx.supabase.from("broadcast_access").insert(
+        wanted.map((connectionId) => ({
+          company_id: companyId,
+          user_id: data.userId,
+          connection_id: connectionId,
+          created_by: ctx.userId,
+        })),
+      );
+      if (error) throw new Error(error.message);
+    }
+
+    await log(ctx, companyId, userName, "BROADCAST_ACCESS_UPDATED", null, {
+      pessoa: target.full_name ?? target.email ?? data.userId,
+      instancias: wanted.length,
+    });
+    return { ok: true };
+  });
