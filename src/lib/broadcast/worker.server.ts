@@ -57,6 +57,8 @@ function isRecipientProblem(error: string | null | undefined) {
   return (
     text.includes("resource not found in your plan") ||
     text.includes("not found in your plan") ||
+    text.includes("number not registered") ||
+    text.includes("not registered on whatsapp") ||
     text.includes("number not exists") ||
     text.includes("number does not exist") ||
     text.includes("exists: false") ||
