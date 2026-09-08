@@ -30,13 +30,17 @@ export function normalizeWhatsAppLinks(text: string): string {
     return `\u0000${tokens.length - 1}\u0000`;
   });
 
-  // 2) Números soltos viram links do WhatsApp.
+  // 2) Números soltos viram links do WhatsApp, com um selo visual antes do
+  //    endereço para o cliente reconhecer que é o WhatsApp e não um link
+  //    estranho. O WhatsApp não aceita botões/ícones em texto comum, então o
+  //    emoji é a forma mais próxima de "camuflar" o link.
   working = working.replace(PHONE_LIKE, (match) => {
     const link = toWaLink(match);
     if (!link) return match;
-    tokens.push(link);
+    tokens.push(`💬 Falar no WhatsApp 👉 ${link}`);
     return `\u0000${tokens.length - 1}\u0000`;
   });
+
 
   return working.replace(/\u0000(\d+)\u0000/g, (_m, i) => tokens[Number(i)] ?? "");
 }
