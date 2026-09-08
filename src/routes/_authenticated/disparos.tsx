@@ -59,6 +59,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
   cancelBroadcastCampaign,
+  checkCampaignRecentSends,
+
   getBroadcastAccessInfo,
   listBroadcastOperators,
   setBroadcastAccess,
@@ -514,6 +516,18 @@ function CampaignsTab({
   const resumeFn = useServerFn(resumeBroadcastCampaign);
   const cancelFn = useServerFn(cancelBroadcastCampaign);
   const duplicateFn = useServerFn(duplicateBroadcastCampaign);
+  const checkFn = useServerFn(checkCampaignRecentSends);
+  const [confirm, setConfirm] = useState<{
+    campaignId: string;
+    rows: {
+      whatsapp: string;
+      name: string | null;
+      owner: string;
+      sentAt: string | null;
+      campaign: string | null;
+    }[];
+  } | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
 
   function run(promise: Promise<unknown>, message: string) {
     promise
@@ -523,6 +537,44 @@ function CampaignsTab({
       })
       .catch((error: Error) => toast.error(error.message));
   }
+
+  function doStart(campaignId: string) {
+    run(
+      startFn({ data: { campaignId } }).then((r) => {
+        const res = r as { enqueued?: number; reason?: string } | undefined;
+        if ((res?.enqueued ?? 0) === 0) {
+          if (res?.reason === "already_sent") {
+            throw new Error(
+              "Todos os contatos desta campanha já receberam a mensagem. Use Duplicar para reenviar a todos.",
+            );
+          }
+          throw new Error(
+            "Nenhum contato entrou na fila. Verifique se os contatos estão ativos e, se exigir consentimento, se deram opt-in.",
+          );
+        }
+        return r;
+      }),
+      "Campanha iniciada.",
+    );
+  }
+
+  /** Antes de disparar, avisa quem já recebeu mensagem recentemente. Nunca bloqueia. */
+  async function tryStart(campaignId: string) {
+    setChecking(campaignId);
+    try {
+      const rows = await checkFn({ data: { campaignId } });
+      if (rows.length) {
+        setConfirm({ campaignId, rows });
+        return;
+      }
+      doStart(campaignId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao verificar contatos.");
+    } finally {
+      setChecking(null);
+    }
+  }
+
 
   if (loading) return <Skeleton className="h-64 w-full" />;
   if (!campaigns.length) {
@@ -598,28 +650,17 @@ function CampaignsTab({
                 {["DRAFT", "COMPLETED", "CANCELLED", "ERROR"].includes(campaign.status) && (
                   <Button
                     size="sm"
-                    onClick={() =>
-                      run(
-                        startFn({ data: { campaignId: campaign.id } }).then((r) => {
-                          const res = r as { enqueued?: number; reason?: string } | undefined;
-                          if ((res?.enqueued ?? 0) === 0) {
-                            if (res?.reason === "already_sent") {
-                              throw new Error(
-                                "Todos os contatos desta campanha já receberam a mensagem. Use Duplicar para reenviar a todos.",
-                              );
-                            }
-                            throw new Error(
-                              "Nenhum contato entrou na fila. Verifique se os contatos estão ativos e, se exigir consentimento, se deram opt-in.",
-                            );
-                          }
-                          return r;
-                        }),
-                        "Campanha iniciada.",
-                      )
-                    }
+                    disabled={checking === campaign.id}
+                    onClick={() => void tryStart(campaign.id)}
                   >
-                    <Play className="size-4" /> Iniciar
+                    {checking === campaign.id ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Play className="size-4" />
+                    )}{" "}
+                    Iniciar
                   </Button>
+
                 )}
                 {campaign.status === "RUNNING" || campaign.status === "SCHEDULED" ? (
                   <Button
@@ -696,8 +737,44 @@ function CampaignsTab({
           </Card>
         );
       })}
+
+      <AlertDialog open={Boolean(confirm)} onOpenChange={(open) => !open && setConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Alguns contatos já receberam disparo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nos últimos 30 dias estes números já receberam mensagem. Você pode continuar mesmo
+              assim.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-60 space-y-1 overflow-y-auto rounded-md border border-border p-2 text-xs">
+            {(confirm?.rows ?? []).map((row, index) => (
+              <p key={`${row.whatsapp}-${row.owner}-${index}`}>
+                <span className="font-medium">
+                  {row.name ?? PhoneNormalizationService.format(row.whatsapp)}
+                </span>{" "}
+                — disparo de {row.owner}
+                {row.campaign ? ` (${row.campaign})` : ""} em {formatDate(row.sentAt)}
+              </p>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const id = confirm?.campaignId;
+                setConfirm(null);
+                if (id) doStart(id);
+              }}
+            >
+              Continuar mesmo assim
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
+
 }
 
 /* ---------------------------------------------------------------- */
@@ -1177,14 +1254,15 @@ function ContactsTab() {
       if (dups.length) {
         const detalhe = dups
           .slice(0, 5)
-          .map((d) => `${d.whatsapp} — ${d.owner}`)
+          .map((d) => `${d.whatsapp} — já está no disparo de ${d.owner}`)
           .join("\n");
         toast.warning(
-          `${dups.length} contato(s) já cadastrado(s) e não importado(s):\n${detalhe}` +
+          `${dups.length} contato(s) também estão na lista de outra pessoa:\n${detalhe}` +
             (dups.length > 5 ? `\n… e mais ${dups.length - 5}.` : ""),
           { duration: 10000 },
         );
       }
+
       void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao importar.");
@@ -1237,8 +1315,11 @@ function ContactsTab() {
           optInSource: form.optIn ? form.optInSource || "cadastro manual" : null,
         },
       }),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const warning = (result as { warning?: string | null } | undefined)?.warning;
       toast.success("Contato salvo.");
+      if (warning) toast.warning(warning, { duration: 8000 });
+
       setForm({
         name: "",
         phone: "",
@@ -1372,7 +1453,11 @@ function ContactsTab() {
             (contacts.data ?? []).map((contact: Contact) => (
               <div
                 key={contact.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
+                  (contact.sharedWith ?? []).length
+                    ? "border-amber-500/50 bg-amber-500/10"
+                    : "border-border"
+                }`}
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">{contact.name ?? "Sem nome"}</p>
@@ -1380,7 +1465,13 @@ function ContactsTab() {
                     {PhoneNormalizationService.format(contact.whatsapp)}
                     {contact.company_name ? ` · ${contact.company_name}` : ""}
                   </p>
+                  {(contact.sharedWith ?? []).length ? (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                      Também está no disparo de {(contact.sharedWith ?? []).join(", ")}
+                    </p>
+                  ) : null}
                 </div>
+
                 <div className="flex items-center gap-2">
                   {(contact.tags ?? []).slice(0, 3).map((tag: string) => (
                     <Badge key={tag} variant="outline">

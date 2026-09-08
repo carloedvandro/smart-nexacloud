@@ -333,6 +333,25 @@ export type BroadcastContactInput = {
 
 export type DuplicateInfo = { whatsapp: string; owner: string };
 
+export type BroadcastContactRow = {
+  id: string;
+  company_id: string;
+  name: string | null;
+  phone: string | null;
+  whatsapp: string;
+  company_name: string | null;
+  tags: string[];
+  source: string | null;
+  note: string | null;
+  status: "ATIVO" | "PAUSADO" | "BLOQUEADO" | "DESCADASTRADO";
+  opt_in: boolean;
+  opt_in_source: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+
 /** Nome de quem cadastrou cada contato, para avisos de duplicidade. */
 async function ownerNames(ctx: Ctx, ids: string[]): Promise<Record<string, string>> {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -379,7 +398,35 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
 
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
-    return rows ?? [];
+    const list = (rows ?? []) as Record<string, any>[];
+
+    // Marca quais números também estão na lista de outra pessoa da empresa.
+    if (list.length) {
+      const numbers = [...new Set(list.map((r) => r["whatsapp"] as string))];
+      const { data: others } = await ctx.supabase
+        .from("broadcast_contacts")
+        .select("whatsapp, created_by")
+        .eq("company_id", companyId)
+        .in("whatsapp", numbers);
+      const foreign = (others ?? []).filter(
+        (r: { created_by: string }) => r.created_by && r.created_by !== ctx.userId,
+      );
+      const names = await ownerNames(
+        ctx,
+        foreign.map((r: { created_by: string }) => r.created_by),
+      );
+      const byNumber: Record<string, string[]> = {};
+      for (const r of foreign) {
+        const key = r.whatsapp as string;
+        const owner = names[r.created_by as string] ?? "outro usuário";
+        byNumber[key] = byNumber[key] ?? [];
+        if (!byNumber[key]!.includes(owner)) byNumber[key]!.push(owner);
+      }
+      for (const row of list) {
+        row["sharedWith"] = byNumber[row["whatsapp"] as string] ?? [];
+      }
+    }
+    return list as unknown as (BroadcastContactRow & { sharedWith: string[] })[];
   });
 
 export const saveBroadcastContact = createServerFn({ method: "POST" })
@@ -395,17 +442,26 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
     const whatsapp = PhoneNormalizationService.normalize(data.phone);
     if (!whatsapp) throw new Error("Telefone inválido.");
 
-    // Aviso de duplicidade: o número já pode estar na agenda de outra pessoa.
+    // Duplicidade não bloqueia: o número pode existir na lista de outra pessoa.
     const { data: existing } = await ctx.supabase
       .from("broadcast_contacts")
       .select("id, created_by")
       .eq("company_id", companyId)
-      .eq("whatsapp", whatsapp)
-      .maybeSingle();
-    if (existing && existing.id !== data.id && existing.created_by !== ctx.userId) {
-      const names = await ownerNames(ctx, [existing.created_by as string]);
-      const owner = names[existing.created_by as string] ?? "outro usuário";
-      throw new Error(`Este contato já está cadastrado para ${owner}.`);
+      .eq("whatsapp", whatsapp);
+    const foreign = (existing ?? []).filter(
+      (row: { id: string; created_by: string }) =>
+        row.created_by && row.created_by !== ctx.userId && row.id !== data.id,
+    );
+    let warning: string | null = null;
+    if (foreign.length) {
+      const names = await ownerNames(
+        ctx,
+        foreign.map((r: { created_by: string }) => r.created_by),
+      );
+      const owners = [
+        ...new Set(foreign.map((r: any) => names[r.created_by as string] ?? "outro usuário")),
+      ];
+      warning = `Este contato já está no disparo de ${owners.join(", ")}.`;
     }
 
     const payload = {
@@ -430,17 +486,18 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
         .eq("id", data.id)
         .eq("company_id", companyId);
       if (error) throw new Error(error.message);
-      return { ok: true, id: data.id };
+      return { ok: true, id: data.id, warning };
     }
 
     const { data: row, error } = await ctx.supabase
       .from("broadcast_contacts")
-      .upsert(payload, { onConflict: "company_id,whatsapp" })
+      .upsert(payload, { onConflict: "company_id,created_by,whatsapp" })
       .select("id")
       .maybeSingle();
     if (error) throw new Error(error.message);
-    return { ok: true, id: row?.id as string };
+    return { ok: true, id: row?.id as string, warning };
   });
+
 
 export const importBroadcastContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -476,7 +533,7 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
     }
     if (!payload.length) return { imported: 0, invalid, duplicates: [] as DuplicateInfo[] };
 
-    // Números já cadastrados por outra pessoa não são importados; viram aviso.
+    // Duplicados não bloqueiam: importa tudo e apenas informa de quem já são.
     const numbers = payload.map((p) => p["whatsapp"] as string);
     const { data: existing } = await ctx.supabase
       .from("broadcast_contacts")
@@ -484,7 +541,7 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
       .eq("company_id", companyId)
       .in("whatsapp", numbers);
     const foreign = (existing ?? []).filter(
-      (row: { created_by: string }) => row.created_by !== ctx.userId,
+      (row: { created_by: string }) => row.created_by && row.created_by !== ctx.userId,
     );
     const names = await ownerNames(
       ctx,
@@ -494,15 +551,15 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
       whatsapp: row.whatsapp as string,
       owner: names[row.created_by as string] ?? "outro usuário",
     }));
-    const blocked = new Set(duplicates.map((d) => d.whatsapp));
-    const toImport = payload.filter((p) => !blocked.has(p["whatsapp"] as string));
+    const toImport = payload;
 
     if (toImport.length) {
       const { error } = await ctx.supabase
         .from("broadcast_contacts")
-        .upsert(toImport, { onConflict: "company_id,whatsapp" });
+        .upsert(toImport, { onConflict: "company_id,created_by,whatsapp" });
       if (error) throw new Error(error.message);
     }
+
 
     await log(ctx, companyId, userName, "CONTACTS_IMPORTED", null, {
       total: toImport.length,
@@ -874,7 +931,94 @@ async function setCampaignStatus(
   return { ok: true };
 }
 
+export type RecentSendInfo = {
+  whatsapp: string;
+  name: string | null;
+  owner: string;
+  sentAt: string | null;
+  campaign: string | null;
+};
+
+/**
+ * Números da campanha que já receberam disparo recente (30 dias), em qualquer
+ * campanha da empresa. Serve só de aviso: nunca bloqueia o envio.
+ */
+export const checkCampaignRecentSends = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { campaignId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
+
+    const { data: links } = await ctx.supabase
+      .from("broadcast_campaign_contacts")
+      .select("contact:broadcast_contacts(id, name, whatsapp)")
+      .eq("campaign_id", data.campaignId)
+      .eq("company_id", companyId);
+    const contacts = (links ?? [])
+      .map((row: any) => row.contact)
+      .filter(Boolean) as { id: string; name: string | null; whatsapp: string }[];
+    if (!contacts.length) return [] as RecentSendInfo[];
+
+    const numbers = [...new Set(contacts.map((c) => c.whatsapp))];
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Todos os contatos da empresa com esses números (de qualquer usuário).
+    const { data: sameNumber } = await ctx.supabase
+      .from("broadcast_contacts")
+      .select("id, whatsapp, created_by")
+      .eq("company_id", companyId)
+      .in("whatsapp", numbers);
+    const byId = new Map<string, { whatsapp: string; created_by: string | null }>();
+    for (const row of sameNumber ?? []) byId.set(row.id as string, row as any);
+    if (!byId.size) return [] as RecentSendInfo[];
+
+    const { data: sends } = await ctx.supabase
+      .from("broadcast_queue")
+      .select("contact_id, sent_at, campaign:broadcast_campaigns(id, name, created_by)")
+      .eq("company_id", companyId)
+      .eq("status", "SENT")
+      .neq("campaign_id", data.campaignId)
+      .gte("sent_at", since)
+      .in("contact_id", [...byId.keys()])
+      .order("sent_at", { ascending: false })
+      .limit(500);
+
+    const names = await ownerNames(
+      ctx,
+      (sends ?? []).map((row: any) => row.campaign?.created_by).filter(Boolean),
+    );
+    const nameByNumber = new Map(contacts.map((c) => [c.whatsapp, c.name] as const));
+    const seen = new Set<string>();
+    const result: RecentSendInfo[] = [];
+    for (const row of sends ?? []) {
+      const contact = byId.get(row.contact_id as string);
+      if (!contact) continue;
+      const ownerId = (row as any).campaign?.created_by as string | undefined;
+      const owner =
+        ownerId === ctx.userId
+          ? "você"
+          : ownerId
+            ? (names[ownerId] ?? "outro usuário")
+            : "outro usuário";
+      const key = `${contact.whatsapp}|${owner}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({
+        whatsapp: contact.whatsapp,
+        name: nameByNumber.get(contact.whatsapp) ?? null,
+        owner,
+        sentAt: (row.sent_at as string | null) ?? null,
+        campaign: ((row as any).campaign?.name as string | null) ?? null,
+      });
+    }
+    return result;
+  });
+
 export const startBroadcastCampaign = createServerFn({ method: "POST" })
+
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { campaignId: string; scheduledAt?: string | null }) => data)
   .handler(async ({ data, context }) => {
