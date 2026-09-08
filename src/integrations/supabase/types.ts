@@ -2482,64 +2482,35 @@ export type Database = {
         }
         Returns: boolean
       }
-      ingest_inbound_message:
-        | {
-            Args: {
-              _connection_id: string
-              _content?: string
-              _external_message_id: string
-              _media_url?: string
-              _message_type?: Database["public"]["Enums"]["message_type"]
-              _metadata?: Json
-              _mime_type?: string
-              _push_name?: string
-              _remote_jid: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              _connection_id: string
-              _content?: string
-              _external_message_id: string
-              _media_url?: string
-              _message_type?: Database["public"]["Enums"]["message_type"]
-              _metadata?: Json
-              _mime_type?: string
-              _push_name?: string
-              _real_phone?: string
-              _remote_jid: string
-            }
-            Returns: Json
-          }
-      ingest_outbound_echo:
-        | {
-            Args: {
-              _connection_id: string
-              _content?: string
-              _external_message_id: string
-              _media_url?: string
-              _message_type?: Database["public"]["Enums"]["message_type"]
-              _metadata?: Json
-              _mime_type?: string
-              _remote_jid: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              _connection_id: string
-              _content?: string
-              _external_message_id: string
-              _media_url?: string
-              _message_type?: Database["public"]["Enums"]["message_type"]
-              _metadata?: Json
-              _mime_type?: string
-              _real_phone?: string
-              _remote_jid: string
-            }
-            Returns: Json
-          }
+      ingest_inbound_message: {
+        Args: {
+          _connection_id: string
+          _content?: string
+          _external_message_id: string
+          _media_url?: string
+          _message_type?: Database["public"]["Enums"]["message_type"]
+          _metadata?: Json
+          _mime_type?: string
+          _push_name?: string
+          _real_phone?: string
+          _remote_jid: string
+        }
+        Returns: Json
+      }
+      ingest_outbound_echo: {
+        Args: {
+          _connection_id: string
+          _content?: string
+          _external_message_id: string
+          _media_url?: string
+          _message_type?: Database["public"]["Enums"]["message_type"]
+          _metadata?: Json
+          _mime_type?: string
+          _real_phone?: string
+          _remote_jid: string
+        }
+        Returns: Json
+      }
       invite_link_info: { Args: { _token: string }; Returns: Json }
       is_abandoned_conversation: {
         Args: { _conversation_id: string }
