@@ -1711,13 +1711,14 @@ function MessagesTab({ messages }: { messages: Message[] }) {
             <Input
               type="file"
               multiple
-              accept="image/png,image/jpeg,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+              accept="image/png,image/jpeg,image/webp,audio/mpeg,audio/mp4,audio/ogg,audio/wav,.mp3,.m4a,.ogg,.opus,.wav,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
                 if (files.length) void pickFiles(files);
                 e.target.value = "";
               }}
             />
+            <AudioRecorderField onRecorded={(file) => void pickFiles([file])} />
           </div>
 
 

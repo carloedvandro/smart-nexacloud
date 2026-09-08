@@ -8,6 +8,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
+  attachmentKindFor,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_TOTAL_BYTES,
   normalizeStoredAttachments,
