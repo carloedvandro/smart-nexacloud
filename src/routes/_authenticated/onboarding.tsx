@@ -66,11 +66,12 @@ function OnboardingPage() {
         <NexaLogo className="mb-8" />
         <Card className="shadow-panel">
           <CardHeader>
-            <CardTitle>Configurar sua empresa</CardTitle>
+            <CardTitle>Cadastrar sua empresa</CardTitle>
             <CardDescription>
-              Este cadastro cria o espaço da empresa, define você como administrador e aplica as
-              configurações iniciais de fila (SLA de 60 segundos) e horário de atendimento.
+              O cadastro é enviado para análise. Após a aprovação do administrador do sistema, você
+              passa a ser o administrador da empresa e pode convidar sua equipe por dentro do painel.
             </CardDescription>
+
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
