@@ -806,6 +806,8 @@ function NewCampaignTab({
   const saveFn = useServerFn(saveBroadcastCampaign);
   const startFn = useServerFn(startBroadcastCampaign);
   const getCampaignFn = useServerFn(getBroadcastCampaign);
+  const deleteContactsFn = useServerFn(deleteBroadcastContacts);
+  const [contactSearch, setContactSearch] = useState("");
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
