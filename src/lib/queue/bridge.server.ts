@@ -187,6 +187,28 @@ export async function notifyQueueOffers(companyId: string): Promise<void> {
       if (!timeoutSent) {
         await releaseNotificationClaim(attempt.conversation_id, EVENT_TIMEOUT_NOTIFIED, attempt.id);
       }
+      // Ninguém assumiu dentro do prazo: avisa a equipe no celular.
+      try {
+        const [{ data: timeoutConversation }, { notifyLeadAbandoned }] = await Promise.all([
+          supabaseAdmin
+            .from("conversations")
+            .select("lead:leads(name, whatsapp)")
+            .eq("id", attempt.conversation_id)
+            .maybeSingle(),
+          import("@/lib/push/push.server"),
+        ]);
+        const timeoutLead = (timeoutConversation?.lead ?? null) as {
+          name: string | null;
+          whatsapp: string | null;
+        } | null;
+        await notifyLeadAbandoned({
+          companyId,
+          conversationId: attempt.conversation_id,
+          leadName: timeoutLead?.name?.trim() || timeoutLead?.whatsapp || "Novo contato",
+        });
+      } catch (error) {
+        console.error("[push] aviso de lead sem atendimento falhou", error instanceof Error ? error.message : error);
+      }
       continue;
     }
 
