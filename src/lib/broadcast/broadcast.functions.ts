@@ -379,7 +379,35 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
 
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
-    return rows ?? [];
+    const list = (rows ?? []) as Record<string, any>[];
+
+    // Marca quais números também estão na lista de outra pessoa da empresa.
+    if (list.length) {
+      const numbers = [...new Set(list.map((r) => r["whatsapp"] as string))];
+      const { data: others } = await ctx.supabase
+        .from("broadcast_contacts")
+        .select("whatsapp, created_by")
+        .eq("company_id", companyId)
+        .in("whatsapp", numbers);
+      const foreign = (others ?? []).filter(
+        (r: { created_by: string }) => r.created_by && r.created_by !== ctx.userId,
+      );
+      const names = await ownerNames(
+        ctx,
+        foreign.map((r: { created_by: string }) => r.created_by),
+      );
+      const byNumber: Record<string, string[]> = {};
+      for (const r of foreign) {
+        const key = r.whatsapp as string;
+        const owner = names[r.created_by as string] ?? "outro usuário";
+        byNumber[key] = byNumber[key] ?? [];
+        if (!byNumber[key]!.includes(owner)) byNumber[key]!.push(owner);
+      }
+      for (const row of list) {
+        row["sharedWith"] = byNumber[row["whatsapp"] as string] ?? [];
+      }
+    }
+    return list;
   });
 
 export const saveBroadcastContact = createServerFn({ method: "POST" })
@@ -395,17 +423,26 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
     const whatsapp = PhoneNormalizationService.normalize(data.phone);
     if (!whatsapp) throw new Error("Telefone inválido.");
 
-    // Aviso de duplicidade: o número já pode estar na agenda de outra pessoa.
+    // Duplicidade não bloqueia: o número pode existir na lista de outra pessoa.
     const { data: existing } = await ctx.supabase
       .from("broadcast_contacts")
       .select("id, created_by")
       .eq("company_id", companyId)
-      .eq("whatsapp", whatsapp)
-      .maybeSingle();
-    if (existing && existing.id !== data.id && existing.created_by !== ctx.userId) {
-      const names = await ownerNames(ctx, [existing.created_by as string]);
-      const owner = names[existing.created_by as string] ?? "outro usuário";
-      throw new Error(`Este contato já está cadastrado para ${owner}.`);
+      .eq("whatsapp", whatsapp);
+    const foreign = (existing ?? []).filter(
+      (row: { id: string; created_by: string }) =>
+        row.created_by && row.created_by !== ctx.userId && row.id !== data.id,
+    );
+    let warning: string | null = null;
+    if (foreign.length) {
+      const names = await ownerNames(
+        ctx,
+        foreign.map((r: { created_by: string }) => r.created_by),
+      );
+      const owners = [
+        ...new Set(foreign.map((r: any) => names[r.created_by as string] ?? "outro usuário")),
+      ];
+      warning = `Este contato já está no disparo de ${owners.join(", ")}.`;
     }
 
     const payload = {
@@ -430,17 +467,18 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
         .eq("id", data.id)
         .eq("company_id", companyId);
       if (error) throw new Error(error.message);
-      return { ok: true, id: data.id };
+      return { ok: true, id: data.id, warning };
     }
 
     const { data: row, error } = await ctx.supabase
       .from("broadcast_contacts")
-      .upsert(payload, { onConflict: "company_id,whatsapp" })
+      .upsert(payload, { onConflict: "company_id,created_by,whatsapp" })
       .select("id")
       .maybeSingle();
     if (error) throw new Error(error.message);
-    return { ok: true, id: row?.id as string };
+    return { ok: true, id: row?.id as string, warning };
   });
+
 
 export const importBroadcastContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
