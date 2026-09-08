@@ -1610,7 +1610,7 @@ function MessagesTab({ messages }: { messages: Message[] }) {
         attachments: attachments.map((a) =>
           a.path
             ? { path: a.path, mime: a.mime, filename: a.filename }
-            : { base64: a.base64, mime: a.mime, filename: a.filename },
+            : { base64: a.base64 ?? "", mime: a.mime, filename: a.filename },
         ),
       },
     })
