@@ -1396,7 +1396,11 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
         if (!access.isAdmin) q = q.in("instance_id", access.instanceIds);
         return q;
       })(),
-      ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+      own(
+        ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+        access,
+        ctx,
+      ),
       ctx.supabase.from("broadcast_settings").select("*").eq("company_id", companyId).maybeSingle(),
       (() => {
         let q = ctx.supabase
