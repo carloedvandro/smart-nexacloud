@@ -1718,7 +1718,7 @@ function MessagesTab({ messages }: { messages: Message[] }) {
 
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-              Anexos (imagens e documentos)
+              Anexos (imagens, áudios e documentos)
             </Label>
             {attachments.length ? (
               <div className="space-y-2">
@@ -1727,12 +1727,16 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                     key={`${a.path ?? a.filename}-${index}`}
                     className="flex items-center gap-3 rounded-lg border border-border p-2"
                   >
-                    {a.preview ? (
+                    {a.preview && a.mime.startsWith("image/") ? (
                       <img
                         src={a.preview}
                         alt={a.filename}
                         className="size-12 rounded-md border border-border object-cover"
                       />
+                    ) : a.mime.startsWith("audio/") ? (
+                      <div className="flex size-12 items-center justify-center rounded-md border border-border bg-muted">
+                        <Mic className="size-5 text-muted-foreground" />
+                      </div>
                     ) : (
                       <div className="flex size-12 items-center justify-center rounded-md border border-border bg-muted text-xs font-medium uppercase text-muted-foreground">
                         {(a.filename.split(".").pop() ?? "doc").slice(0, 4)}
@@ -1861,7 +1865,9 @@ function MessagesTab({ messages }: { messages: Message[] }) {
                 {(m.attachmentPreviews ?? []).length ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {(m.attachmentPreviews ?? []).map((a) =>
-                      a.kind === "image" && a.previewUrl ? (
+                      a.kind === "audio" && a.previewUrl ? (
+                        <audio key={a.path} controls src={a.previewUrl} className="h-10 w-56" />
+                      ) : a.kind === "image" && a.previewUrl ? (
                         <img
                           key={a.path}
                           src={a.previewUrl}
