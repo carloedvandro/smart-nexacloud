@@ -2413,6 +2413,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      set_push_conversation_view: {
+        Args: { _endpoint: string; _view_id: string; _conversation_id: string | null; _sequence: number }
+        Returns: boolean
+      }
+      active_push_conversation_subscriptions: {
+        Args: { _conversation_id: string; _subscription_ids: string[] }
+        Returns: { subscription_id: string }[]
+      }
       accept_company_invites: {
         Args: { _email: string; _user_id: string }
         Returns: string

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useAuth } from "@/hooks/use-auth";
+import type { Database } from "@/integrations/supabase/types";
 
 import {
   getPushPublicKey,
@@ -143,4 +145,100 @@ export function usePushNotifications() {
   const test = useCallback(async () => testFn({ data: undefined }), [testFn]);
 
   return { ...state, enable, disable, test, refresh };
+}
+
+let conversationViewId: string | undefined;
+let conversationViewSequence = 0;
+
+export function useConversationPushPresence(conversationId: string | null) {
+  const { session } = useAuth();
+  const accessToken = session?.access_token;
+
+  useEffect(() => {
+    if (!conversationId || !accessToken || !("serviceWorker" in navigator)) return;
+    const url = import.meta.env["VITE_SUPABASE_URL"];
+    const apiKey = import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"];
+    if (!url || !apiKey) return;
+
+    const viewId = (conversationViewId ??= crypto.randomUUID());
+    let endpoint: string | undefined;
+    let disposed = false;
+    let pageHidden = false;
+    let warned = false;
+
+    const warn = () => {
+      if (warned) return;
+      warned = true;
+      console.warn("[push] Presença indisponível; os avisos continuam habilitados.");
+    };
+
+    const publish = (visible: boolean) => {
+      if (!endpoint) return;
+      const body: Database["public"]["Functions"]["set_push_conversation_view"]["Args"] = {
+        _endpoint: endpoint,
+        _view_id: viewId,
+        _conversation_id: visible ? conversationId : null,
+        _sequence: ++conversationViewSequence,
+      };
+      void fetch(`${url}/rest/v1/rpc/set_push_conversation_view`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: apiKey,
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(body),
+        keepalive: true,
+      })
+        .then((response) => {
+          if (!response.ok) warn();
+        })
+        .catch(warn);
+    };
+    const isVisible = () =>
+      !disposed && !pageHidden && document.visibilityState === "visible" && document.hasFocus();
+    const update = () => publish(isVisible());
+    const hide = () => {
+      pageHidden = true;
+      publish(false);
+    };
+    const show = () => {
+      pageHidden = false;
+      update();
+    };
+    const blur = () => publish(false);
+
+    document.addEventListener("visibilitychange", update);
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", blur);
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", show);
+    window.addEventListener("online", update);
+
+    void navigator.serviceWorker
+      .getRegistration(SW_URL)
+      .then((registration) => registration?.pushManager.getSubscription())
+      .then((subscription) => {
+        if (disposed || !subscription) return;
+        endpoint = subscription.endpoint;
+        update();
+      })
+      .catch(warn);
+
+    const heartbeat = window.setInterval(() => {
+      if (isVisible()) publish(true);
+    }, 5_000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", update);
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", blur);
+      window.removeEventListener("pagehide", hide);
+      window.removeEventListener("pageshow", show);
+      window.removeEventListener("online", update);
+      publish(false);
+    };
+  }, [conversationId, accessToken]);
 }

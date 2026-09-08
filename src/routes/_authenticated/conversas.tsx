@@ -40,6 +40,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useConversationPushPresence } from "@/hooks/use-push-notifications";
 import {
   CONVERSATION_STATUS_LABEL,
   OPEN_CONVERSATION_STATUSES,
@@ -380,10 +381,15 @@ function ConversationThread({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
 
-  const { data: messages, isLoading } = useQuery({
+  const {
+    data: messages,
+    isLoading,
+    isError: messagesError,
+  } = useQuery({
     queryKey: ["messages", conversation.id],
     queryFn: () => listMessages(conversation.id),
   });
+  useConversationPushPresence(!isLoading && !messagesError && messages ? conversation.id : null);
 
   const { data: consultants } = useQuery({
     queryKey: ["consultants", companyId],

@@ -33,7 +33,11 @@ export function getVapidPublicKey(): string | null {
   return process.env["VAPID_PUBLIC_KEY"] ?? null;
 }
 
-async function deliver(row: Row, notification: PushNotification, vapid: NonNullable<ReturnType<typeof vapidKeys>>) {
+async function deliver(
+  row: Row,
+  notification: PushNotification,
+  vapid: NonNullable<ReturnType<typeof vapidKeys>>,
+) {
   const subscription: PushSubscription = {
     endpoint: row.endpoint,
     expirationTime: null,
@@ -60,10 +64,7 @@ async function deliver(row: Row, notification: PushNotification, vapid: NonNulla
       return false;
     }
     console.error("[push] falha ao entregar", res.status, (await res.text()).slice(0, 300));
-    await supabaseAdmin
-      .from("push_subscriptions")
-      .update({ failure_count: 1 })
-      .eq("id", row.id);
+    await supabaseAdmin.from("push_subscriptions").update({ failure_count: 1 }).eq("id", row.id);
     return false;
   } catch (error) {
     console.error("[push] erro ao entregar", error instanceof Error ? error.message : error);
@@ -75,6 +76,7 @@ async function deliver(row: Row, notification: PushNotification, vapid: NonNulla
 export async function sendPushToUsers(
   userIds: Array<string | null | undefined>,
   notification: PushNotification,
+  visibleConversationId?: string,
 ): Promise<number> {
   const vapid = vapidKeys();
   if (!vapid) {
@@ -92,19 +94,33 @@ export async function sendPushToUsers(
   const rows = (data ?? []) as Row[];
   if (!rows.length) return 0;
 
-  const results = await Promise.all(rows.map((row) => deliver(row, notification, vapid)));
+  const visibleSubscriptions = new Set<string>();
+  if (visibleConversationId) {
+    const { data: views, error } = await supabaseAdmin.rpc(
+      "active_push_conversation_subscriptions",
+      {
+        _conversation_id: visibleConversationId,
+        _subscription_ids: rows.map((row) => row.id),
+      },
+    );
+    if (error) {
+      console.warn("[push] Presença indisponível; mantendo envio das notificações.");
+    } else {
+      for (const view of views ?? []) visibleSubscriptions.add(view.subscription_id);
+    }
+  }
+  const results = await Promise.all(
+    rows
+      .filter((row) => !visibleSubscriptions.has(row.id))
+      .map((row) => deliver(row, notification, vapid)),
+  );
   return results.filter(Boolean).length;
 }
 
 /** Todos os usuários ativos da empresa (para avisos sem dono definido). */
 async function companyUserIds(companyId: string, exclude?: string | null) {
-  const { data } = await supabaseAdmin
-    .from("profiles")
-    .select("id")
-    .eq("company_id", companyId);
-  return (data ?? [])
-    .map((row) => row.id as string)
-    .filter((id) => id !== exclude);
+  const { data } = await supabaseAdmin.from("profiles").select("id").eq("company_id", companyId);
+  return (data ?? []).map((row) => row.id as string).filter((id) => id !== exclude);
 }
 
 function preview(text: string | null | undefined, fallback: string) {
@@ -127,7 +143,10 @@ export async function notifyInboundMessage(input: {
     .maybeSingle();
   if (!conversation) return;
 
-  const lead = (conversation.lead ?? null) as { name: string | null; whatsapp: string | null } | null;
+  const lead = (conversation.lead ?? null) as {
+    name: string | null;
+    whatsapp: string | null;
+  } | null;
   const leadName = lead?.name?.trim() || lead?.whatsapp || "Novo contato";
   const fallbackByType: Record<string, string> = {
     audio: "🎤 Áudio recebido",
@@ -136,28 +155,39 @@ export async function notifyInboundMessage(input: {
     video: "🎬 Vídeo recebido",
     document: "📎 Documento recebido",
   };
-  const body = preview(input.content, fallbackByType[input.messageType ?? "text"] ?? "Nova mensagem");
+  const body = preview(
+    input.content,
+    fallbackByType[input.messageType ?? "text"] ?? "Nova mensagem",
+  );
   const url = `/conversas?c=${conversationId}`;
 
   const owner = conversation.assigned_user_id as string | null;
   if (owner) {
-    await sendPushToUsers([owner], {
-      title: `💬 ${leadName}`,
-      body,
-      url,
-      tag: `conv-${conversationId}`,
-    });
+    await sendPushToUsers(
+      [owner],
+      {
+        title: `💬 ${leadName}`,
+        body,
+        url,
+        tag: `conv-${conversationId}`,
+      },
+      conversationId,
+    );
     return;
   }
 
   if (conversation.status === "WAITING_HUMAN") {
-    await sendPushToUsers(await companyUserIds(companyId), {
-      title: `🔔 Lead aguardando: ${leadName}`,
-      body,
-      url,
-      tag: `conv-${conversationId}`,
-      requireInteraction: true,
-    });
+    await sendPushToUsers(
+      await companyUserIds(companyId),
+      {
+        title: `🔔 Lead aguardando: ${leadName}`,
+        body,
+        url,
+        tag: `conv-${conversationId}`,
+        requireInteraction: true,
+      },
+      conversationId,
+    );
   }
 }
 
