@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Eye, EyeOff, KeyRound, ShieldCheck, Trash2 } from "lucide-react";
+import { KeyRound, ShieldCheck, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,6 @@ type Row = {
   max_delete_admins: number;
   user_id: string | null;
   display_name: string | null;
-  password_plain: string | null;
   full_name: string | null;
   email: string | null;
   updated_at: string | null;
@@ -40,7 +39,6 @@ type CompanyGroup = {
 
 export function PlatformDeleteAdminsCard() {
   const queryClient = useQueryClient();
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [limits, setLimits] = useState<Record<string, string>>({});
   const [targetUser, setTargetUser] = useState<Record<string, string>>({});
   const [newName, setNewName] = useState<Record<string, string>>({});
@@ -181,7 +179,6 @@ export function PlatformDeleteAdminsCard() {
                 ) : (
                   group.members.map((member) => {
                     const key = member.user_id as string;
-                    const show = revealed[key] ?? false;
                     return (
                       <div
                         key={key}
@@ -195,16 +192,8 @@ export function PlatformDeleteAdminsCard() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="font-mono text-xs">
-                            {show ? member.password_plain ?? "senha antiga (não visível)" : "••••••••"}
+                            senha protegida
                           </Badge>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setRevealed((prev) => ({ ...prev, [key]: !show }))}
-                            aria-label={show ? "Ocultar senha" : "Mostrar senha"}
-                          >
-                            {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
