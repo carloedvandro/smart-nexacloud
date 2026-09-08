@@ -113,6 +113,16 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
   }
 
   if (!sent.ok) {
+    if (isRecipientProblem(sent.error)) {
+      await finalize(
+        item.queue_id,
+        false,
+        null,
+        "Número sem WhatsApp ativo — contato ignorado.",
+        true,
+      );
+      return true;
+    }
     await finalize(item.queue_id, false, null, sent.error);
     return false;
   }
