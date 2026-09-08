@@ -737,8 +737,44 @@ function CampaignsTab({
           </Card>
         );
       })}
+
+      <AlertDialog open={Boolean(confirm)} onOpenChange={(open) => !open && setConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Alguns contatos já receberam disparo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nos últimos 30 dias estes números já receberam mensagem. Você pode continuar mesmo
+              assim.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-60 space-y-1 overflow-y-auto rounded-md border border-border p-2 text-xs">
+            {(confirm?.rows ?? []).map((row, index) => (
+              <p key={`${row.whatsapp}-${row.owner}-${index}`}>
+                <span className="font-medium">
+                  {row.name ?? PhoneNormalizationService.format(row.whatsapp)}
+                </span>{" "}
+                — disparo de {row.owner}
+                {row.campaign ? ` (${row.campaign})` : ""} em {formatDate(row.sentAt)}
+              </p>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const id = confirm?.campaignId;
+                setConfirm(null);
+                if (id) doStart(id);
+              }}
+            >
+              Continuar mesmo assim
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
+
 }
 
 /* ---------------------------------------------------------------- */
