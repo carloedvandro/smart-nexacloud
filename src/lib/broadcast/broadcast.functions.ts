@@ -597,11 +597,11 @@ export const listBroadcastMessages = createServerFn({ method: "GET" })
     const ctx = context as unknown as Ctx;
     const access = await requireAccess(ctx);
     const { companyId } = access;
-    const { data, error } = await ctx.supabase
-      .from("broadcast_messages")
-      .select("*")
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+    const { data, error } = await own(
+      ctx.supabase.from("broadcast_messages").select("*").eq("company_id", companyId),
+      access,
+      ctx,
+    ).order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
 
     const rows = (data ?? []) as Record<string, any>[];
