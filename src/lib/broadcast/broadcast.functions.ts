@@ -763,6 +763,7 @@ export const saveBroadcastCampaign = createServerFn({ method: "POST" })
 
     let campaignId = data.id ?? null;
     if (campaignId) {
+      await assertOwnCampaign(ctx, access, campaignId);
       const { error } = await ctx.supabase
         .from("broadcast_campaigns")
         .update(payload)
@@ -1137,7 +1138,8 @@ export const listBroadcastHistory = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
     let query = ctx.supabase
       .from("broadcast_queue")
       .select(
@@ -1147,6 +1149,7 @@ export const listBroadcastHistory = createServerFn({ method: "POST" })
       .order("created_at", { ascending: false })
       .limit(500);
 
+    if (!access.isAdmin) query = query.in("instance_id", access.instanceIds);
     if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
     if (data.status) query = query.eq("status", data.status);
     if (data.instanceId) query = query.eq("instance_id", data.instanceId);
@@ -1173,16 +1176,24 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
       { data: settings },
       { data: instances },
     ] = await Promise.all([
-      ctx.supabase
-        .from("broadcast_campaigns")
-        .select("id, name, status, last_activity_at, instance_id")
-        .eq("company_id", companyId),
+      own(
+        ctx.supabase
+          .from("broadcast_campaigns")
+          .select("id, name, status, last_activity_at, instance_id")
+          .eq("company_id", companyId),
+        access,
+        ctx,
+      ),
       ctx.supabase
         .from("broadcast_queue")
         .select("status, sent_at, created_at")
         .eq("company_id", companyId)
         .limit(20000),
-      ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+      own(
+        ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+        access,
+        ctx,
+      ),
       ctx.supabase.from("broadcast_settings").select("*").eq("company_id", companyId).maybeSingle(),
       (() => {
         let q = ctx.supabase
@@ -1247,11 +1258,14 @@ export const listBroadcastLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
-    const { data, error } = await ctx.supabase
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    let logQuery = ctx.supabase
       .from("broadcast_logs")
       .select("*, campaign:broadcast_campaigns(id, name)")
-      .eq("company_id", companyId)
+      .eq("company_id", companyId);
+    if (!access.isAdmin) logQuery = logQuery.eq("user_id", ctx.userId);
+    const { data, error } = await logQuery
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) throw new Error(error.message);
