@@ -328,6 +328,65 @@ export type Database = {
           },
         ]
       }
+      broadcast_access: {
+        Row: {
+          company_id: string
+          connection_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          connection_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          connection_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_access_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_access_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_access_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_access_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       broadcast_campaign_contacts: {
         Row: {
           campaign_id: string
@@ -2372,6 +2431,10 @@ export type Database = {
         Args: { _content: string; _name: string }
         Returns: string
       }
+      can_use_broadcast_instance: {
+        Args: { _connection_id: string }
+        Returns: boolean
+      }
       can_view_conversation: {
         Args: { _conversation_id: string }
         Returns: boolean
@@ -2514,6 +2577,7 @@ export type Database = {
         Args: { _conversation_id: string }
         Returns: boolean
       }
+      is_broadcast_operator: { Args: never; Returns: boolean }
       is_company_admin: { Args: never; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       lead_company_scope: { Args: { _lead_id: string }; Returns: string }
