@@ -67,7 +67,6 @@ export type Database = {
           created_at: string
           display_name: string
           password_hash: string
-          password_plain: string | null
           updated_at: string
           user_id: string
         }
@@ -76,7 +75,6 @@ export type Database = {
           created_at?: string
           display_name: string
           password_hash: string
-          password_plain?: string | null
           updated_at?: string
           user_id: string
         }
@@ -85,7 +83,6 @@ export type Database = {
           created_at?: string
           display_name?: string
           password_hash?: string
-          password_plain?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -2567,7 +2564,6 @@ export type Database = {
           email: string
           full_name: string
           max_delete_admins: number
-          password_plain: string
           updated_at: string
           user_id: string
         }[]
