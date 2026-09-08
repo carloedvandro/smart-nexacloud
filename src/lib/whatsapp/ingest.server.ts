@@ -273,8 +273,14 @@ export async function processWebhookEvent(input: {
   connectionId: string;
   companyId: string;
   payload: Json;
+  /**
+   * Grava texto recebido no CRM imediatamente, mas deixa IA, fila humana e
+   * notificações para o worker persistente. O worker reencontra a mensagem
+   * pela idempotência e continua a automação sem duplicar o balão.
+   */
+  ingestOnly?: boolean;
 }): Promise<IngestOutcome> {
-  const { connectionId, companyId, payload } = input;
+  const { connectionId, companyId, payload, ingestOnly = false } = input;
   const body = (pick(payload, "data") as Json | undefined) ?? payload;
   const eventType = normalizeEventType(payload, null);
 
@@ -540,6 +546,14 @@ export async function processWebhookEvent(input: {
       companyId,
       body,
     });
+  }
+
+  if (ingestOnly) {
+    return {
+      status: result.duplicate ? "duplicate" : "processed",
+      reason: "texto gravado; automação pendente",
+      ...(result.message_id ? { messageId: result.message_id } : {}),
+    };
   }
 
   console.info("[whatsapp] mensagem processada", {

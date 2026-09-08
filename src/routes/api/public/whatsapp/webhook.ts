@@ -47,7 +47,7 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
         const externalEventId = extractEventId(payload);
 
         // Idempotência: índice único (connection_id, external_event_id).
-        const { error: eventError } = await supabaseAdmin
+        const { data: queuedEvent, error: eventError } = await supabaseAdmin
           .from("whatsapp_events")
           .insert({
             company_id: credential.company_id,
@@ -66,6 +66,24 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
           }
           console.error("[whatsapp] falha ao registrar evento", eventError.message);
           return new Response(JSON.stringify({ ok: true, stored: false }), jsonInit());
+        }
+
+        // Texto simples deve aparecer no painel sem aguardar o relógio da fila.
+        // A linha permanece pendente para o worker executar IA/rodízio depois;
+        // a RPC de ingestão é idempotente e impede um segundo balão.
+        if (queuedEvent?.id && isInboundText(payload)) {
+          const { processWebhookEvent } = await import("@/lib/whatsapp/ingest.server");
+          await processWebhookEvent({
+            companyId: credential.company_id,
+            connectionId: credential.connection_id,
+            payload,
+            ingestOnly: true,
+          }).catch((error) =>
+            console.error(
+              "[whatsapp] ingestão imediata falhou; fila fará nova tentativa",
+              error instanceof Error ? error.message : String(error),
+            ),
+          );
         }
 
         // O trabalho pesado roda pela fila persistente. Responder agora evita
@@ -90,4 +108,15 @@ function extractEventId(payload: Record<string, unknown>): string | null {
     }
   }
   return null;
+}
+
+function isInboundText(payload: Record<string, unknown>): boolean {
+  const data = (payload["data"] as Record<string, unknown> | undefined) ?? payload;
+  const key = (data["key"] as Record<string, unknown> | undefined) ??
+    (payload["key"] as Record<string, unknown> | undefined);
+  if (key?.["fromMe"] === true) return false;
+  const serialized = JSON.stringify(data);
+  return !/(audioMessage|pttMessage|imageMessage|videoMessage|documentMessage|stickerMessage)/i.test(
+    serialized,
+  );
 }
