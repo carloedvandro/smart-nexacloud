@@ -110,13 +110,16 @@ function extractEventId(payload: Record<string, unknown>): string | null {
   return null;
 }
 
+/**
+ * Caminho rápido: texto, áudio, imagem e figurinha entram na conversa na hora.
+ * Vídeo e documento continuam pela fila (download pesado poderia derrubar o webhook).
+ * A transcrição e a resposta da IA seguem sempre pela fila.
+ */
 function isInboundText(payload: Record<string, unknown>): boolean {
   const data = (payload["data"] as Record<string, unknown> | undefined) ?? payload;
   const key = (data["key"] as Record<string, unknown> | undefined) ??
     (payload["key"] as Record<string, unknown> | undefined);
   if (key?.["fromMe"] === true) return false;
   const serialized = JSON.stringify(data);
-  return !/(audioMessage|pttMessage|imageMessage|videoMessage|documentMessage|stickerMessage)/i.test(
-    serialized,
-  );
+  return !/(videoMessage|documentMessage)/i.test(serialized);
 }
