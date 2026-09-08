@@ -1184,11 +1184,15 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
         access,
         ctx,
       ),
-      ctx.supabase
-        .from("broadcast_queue")
-        .select("status, sent_at, created_at")
-        .eq("company_id", companyId)
-        .limit(20000),
+      (() => {
+        let q = ctx.supabase
+          .from("broadcast_queue")
+          .select("status, sent_at, created_at")
+          .eq("company_id", companyId)
+          .limit(20000);
+        if (!access.isAdmin) q = q.in("instance_id", access.instanceIds);
+        return q;
+      })(),
       own(
         ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
         access,
