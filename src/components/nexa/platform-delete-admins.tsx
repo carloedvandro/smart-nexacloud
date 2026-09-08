@@ -25,7 +25,6 @@ type Row = {
   max_delete_admins: number;
   user_id: string | null;
   display_name: string | null;
-  password_plain: string | null;
   full_name: string | null;
   email: string | null;
   updated_at: string | null;
@@ -195,16 +194,8 @@ export function PlatformDeleteAdminsCard() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="font-mono text-xs">
-                            {show ? member.password_plain ?? "senha antiga (não visível)" : "••••••••"}
+                            senha protegida
                           </Badge>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setRevealed((prev) => ({ ...prev, [key]: !show }))}
-                            aria-label={show ? "Ocultar senha" : "Mostrar senha"}
-                          >
-                            {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
