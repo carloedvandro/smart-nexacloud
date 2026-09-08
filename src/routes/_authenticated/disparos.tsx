@@ -1376,7 +1376,11 @@ function ContactsTab() {
             (contacts.data ?? []).map((contact: Contact) => (
               <div
                 key={contact.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
+                  (contact.sharedWith ?? []).length
+                    ? "border-amber-500/50 bg-amber-500/10"
+                    : "border-border"
+                }`}
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">{contact.name ?? "Sem nome"}</p>
@@ -1384,7 +1388,13 @@ function ContactsTab() {
                     {PhoneNormalizationService.format(contact.whatsapp)}
                     {contact.company_name ? ` · ${contact.company_name}` : ""}
                   </p>
+                  {(contact.sharedWith ?? []).length ? (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                      Também está no disparo de {(contact.sharedWith ?? []).join(", ")}
+                    </p>
+                  ) : null}
                 </div>
+
                 <div className="flex items-center gap-2">
                   {(contact.tags ?? []).slice(0, 3).map((tag: string) => (
                     <Badge key={tag} variant="outline">
