@@ -44,6 +44,7 @@ import {
   setCompanyMemberRole,
   setPlatformCompanyStatus,
   transferInstanceCompany,
+  updatePlatformCompany,
   updateInstanceCredentials,
 
 } from "@/lib/platform/platform.functions";
@@ -106,6 +107,31 @@ function PlatformPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "CONSULTANT">("ADMIN");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  const [editTarget, setEditTarget] = useState<{ id: string; name: string } | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLegalName, setEditLegalName] = useState("");
+  const [editDocument, setEditDocument] = useState("");
+  const updateCompanyFn = useServerFn(updatePlatformCompany);
+
+  const editCompanyMutation = useMutation({
+    mutationFn: () =>
+      updateCompanyFn({
+        data: {
+          companyId: editTarget?.id ?? "",
+          name: editName,
+          legalName: editLegalName,
+          document: editDocument,
+        },
+      }),
+    onSuccess: () => {
+      setEditTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["platform-companies"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-instances"] });
+      toast.success("Dados da empresa atualizados");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const [licenseTarget, setLicenseTarget] = useState<{ id: string; name: string } | null>(null);
   const [licenseUsers, setLicenseUsers] = useState(8);
