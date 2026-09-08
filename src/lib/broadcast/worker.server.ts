@@ -29,13 +29,40 @@ async function claim(limit: number): Promise<ClaimedItem[]> {
   return (data ?? []) as unknown as ClaimedItem[];
 }
 
-async function finalize(queueId: string, ok: boolean, providerId: string | null, error: string | null) {
-  await supabaseAdmin.rpc("broadcast_finalize", {
-    _queue_id: queueId,
-    _ok: ok,
-    _provider_message_id: providerId as unknown as string,
-    _error: error as unknown as string,
-  });
+async function finalize(
+  queueId: string,
+  ok: boolean,
+  providerId: string | null,
+  error: string | null,
+  skip = false,
+) {
+  await (supabaseAdmin.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<unknown>)(
+    "broadcast_finalize",
+    {
+      _queue_id: queueId,
+      _ok: ok,
+      _provider_message_id: providerId,
+      _error: error,
+      _skip: skip,
+    },
+  );
+}
+
+/**
+ * Erros que são do destinatário (número inexistente/sem WhatsApp), não da
+ * conexão. Marcamos como ignorado para a campanha não pausar sozinha.
+ */
+function isRecipientProblem(error: string | null | undefined) {
+  const text = (error ?? "").toLowerCase();
+  return (
+    text.includes("resource not found in your plan") ||
+    text.includes("not found in your plan") ||
+    text.includes("number not exists") ||
+    text.includes("number does not exist") ||
+    text.includes("exists: false") ||
+    text.includes("invalid number") ||
+    text.includes("não existe no whatsapp")
+  );
 }
 
 async function sendOne(item: ClaimedItem): Promise<boolean> {
