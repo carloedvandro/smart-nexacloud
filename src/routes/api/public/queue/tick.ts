@@ -79,7 +79,7 @@ async function runTick(
   if (scope === "whatsapp") {
     let whatsappProcessed = 0;
     for (let round = 0; round < 5; round++) {
-      const batch = await processPendingWhatsappEvents(12);
+      const batch = await processPendingWhatsappEvents(20);
       whatsappProcessed += batch;
       if (batch === 0) break;
     }
