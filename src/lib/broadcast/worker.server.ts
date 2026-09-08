@@ -98,6 +98,8 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
   const { normalizeWhatsAppLinks } = await import("@/lib/broadcast/links");
   const body = normalizeWhatsAppLinks(item.content ?? "");
 
+  // Ordem de chegada: primeiro todos os arquivos (sem legenda) e, por último,
+  // o texto — assim o contexto fecha a sequência no WhatsApp do cliente.
   let sent;
   if (attachments.length) {
     const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
@@ -114,13 +116,14 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
         mediaType: att.kind === "image" ? "image" : "document",
         mimeType: att.mime,
         fileName: att.filename,
-        caption: index === 0 ? body : "",
+        caption: "",
       });
       sent = result;
       if (!result.ok) break;
-      if (index < attachments.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1_200));
-      }
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+    }
+    if (sent?.ok && body.trim()) {
+      sent = await MegaApiService.sendText(creds, recipient, body);
     }
   } else {
     sent = await MegaApiService.sendText(creds, recipient, body);
