@@ -1649,7 +1649,10 @@ function MessagesTab({ messages }: { messages: Message[] }) {
         mime,
         filename: file.name || "arquivo",
         size: file.size,
-        preview: mime.startsWith("image/") ? URL.createObjectURL(file) : null,
+        preview:
+          mime.startsWith("image/") || mime.startsWith("audio/")
+            ? URL.createObjectURL(file)
+            : null,
       });
     }
     if (added.length) setAttachments((prev) => [...prev, ...added]);
