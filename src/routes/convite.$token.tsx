@@ -163,20 +163,43 @@ function InvitePage() {
               <CardContent className="space-y-4">
                 {session ? (
                   <>
-                    <div className="space-y-2">
-                      <Label htmlFor="cpf">CPF</Label>
-                      <Input
-                        id="cpf"
-                        inputMode="numeric"
-                        placeholder="000.000.000-00"
-                        value={document}
-                        onChange={(e) => setDocument(e.target.value)}
-                      />
-                    </div>
-                    <Button className="w-full" disabled={busy} onClick={handleAccept}>
-                      {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-                      Entrar na equipe
-                    </Button>
+                    {info.email &&
+                    (session.user.email ?? "").toLowerCase() !== info.email.toLowerCase() ? (
+                      <div className="space-y-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                        <p>
+                          Este convite é para <strong>{info.email}</strong>, mas você está conectado
+                          como <strong>{session.user.email}</strong>.
+                        </p>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={async () => {
+                            await supabase.auth.signOut();
+                            await refresh();
+                            toast.success("Sessão encerrada. Agora cadastre-se com o e-mail do convite.");
+                          }}
+                        >
+                          Sair e usar o e-mail do convite
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="cpf">CPF</Label>
+                          <Input
+                            id="cpf"
+                            inputMode="numeric"
+                            placeholder="000.000.000-00"
+                            value={document}
+                            onChange={(e) => setDocument(e.target.value)}
+                          />
+                        </div>
+                        <Button className="w-full" disabled={busy} onClick={handleAccept}>
+                          {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                          Entrar na equipe
+                        </Button>
+                      </>
+                    )}
                   </>
                 ) : (
                   <form className="space-y-4" onSubmit={handleSignUp}>
