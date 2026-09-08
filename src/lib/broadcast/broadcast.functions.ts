@@ -533,7 +533,7 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
     }
     if (!payload.length) return { imported: 0, invalid, duplicates: [] as DuplicateInfo[] };
 
-    // Números já cadastrados por outra pessoa não são importados; viram aviso.
+    // Duplicados não bloqueiam: importa tudo e apenas informa de quem já são.
     const numbers = payload.map((p) => p["whatsapp"] as string);
     const { data: existing } = await ctx.supabase
       .from("broadcast_contacts")
@@ -541,7 +541,7 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
       .eq("company_id", companyId)
       .in("whatsapp", numbers);
     const foreign = (existing ?? []).filter(
-      (row: { created_by: string }) => row.created_by !== ctx.userId,
+      (row: { created_by: string }) => row.created_by && row.created_by !== ctx.userId,
     );
     const names = await ownerNames(
       ctx,
@@ -551,15 +551,15 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
       whatsapp: row.whatsapp as string,
       owner: names[row.created_by as string] ?? "outro usuário",
     }));
-    const blocked = new Set(duplicates.map((d) => d.whatsapp));
-    const toImport = payload.filter((p) => !blocked.has(p["whatsapp"] as string));
+    const toImport = payload;
 
     if (toImport.length) {
       const { error } = await ctx.supabase
         .from("broadcast_contacts")
-        .upsert(toImport, { onConflict: "company_id,whatsapp" });
+        .upsert(toImport, { onConflict: "company_id,created_by,whatsapp" });
       if (error) throw new Error(error.message);
     }
+
 
     await log(ctx, companyId, userName, "CONTACTS_IMPORTED", null, {
       total: toImport.length,
