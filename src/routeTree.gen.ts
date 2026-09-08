@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedAguardandoAprovacaoRouteImport } from './routes/_authenticated/aguardando-aprovacao'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
 import { Route as AuthenticatedConhecimentoRouteImport } from './routes/_authenticated/conhecimento'
 import { Route as AuthenticatedConsultoresRouteImport } from './routes/_authenticated/consultores'
@@ -51,6 +52,12 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAguardandoAprovacaoRoute =
+  AuthenticatedAguardandoAprovacaoRouteImport.update({
+    id: '/aguardando-aprovacao',
+    path: '/aguardando-aprovacao',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedConfiguracoesRoute =
   AuthenticatedConfiguracoesRouteImport.update({
     id: '/configuracoes',
@@ -183,6 +190,7 @@ const ApiPublicWhatsappWebhookTokenRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/aguardando-aprovacao': typeof AuthenticatedAguardandoAprovacaoRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/conhecimento': typeof AuthenticatedConhecimentoRoute
   '/consultores': typeof AuthenticatedConsultoresRoute
@@ -211,6 +219,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/aguardando-aprovacao': typeof AuthenticatedAguardandoAprovacaoRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/conhecimento': typeof AuthenticatedConhecimentoRoute
   '/consultores': typeof AuthenticatedConsultoresRoute
@@ -241,6 +250,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/aguardando-aprovacao': typeof AuthenticatedAguardandoAprovacaoRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/_authenticated/conhecimento': typeof AuthenticatedConhecimentoRoute
   '/_authenticated/consultores': typeof AuthenticatedConsultoresRoute
@@ -271,6 +281,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/aguardando-aprovacao'
     | '/configuracoes'
     | '/conhecimento'
     | '/consultores'
@@ -299,6 +310,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/aguardando-aprovacao'
     | '/configuracoes'
     | '/conhecimento'
     | '/consultores'
@@ -328,6 +340,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/aguardando-aprovacao'
     | '/_authenticated/configuracoes'
     | '/_authenticated/conhecimento'
     | '/_authenticated/consultores'
@@ -390,6 +403,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/aguardando-aprovacao': {
+      id: '/_authenticated/aguardando-aprovacao'
+      path: '/aguardando-aprovacao'
+      fullPath: '/aguardando-aprovacao'
+      preLoaderRoute: typeof AuthenticatedAguardandoAprovacaoRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/configuracoes': {
       id: '/_authenticated/configuracoes'
@@ -563,6 +583,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAguardandoAprovacaoRoute: typeof AuthenticatedAguardandoAprovacaoRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
   AuthenticatedConhecimentoRoute: typeof AuthenticatedConhecimentoRoute
   AuthenticatedConsultoresRoute: typeof AuthenticatedConsultoresRoute
@@ -581,6 +602,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAguardandoAprovacaoRoute: AuthenticatedAguardandoAprovacaoRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
   AuthenticatedConhecimentoRoute: AuthenticatedConhecimentoRoute,
   AuthenticatedConsultoresRoute: AuthenticatedConsultoresRoute,

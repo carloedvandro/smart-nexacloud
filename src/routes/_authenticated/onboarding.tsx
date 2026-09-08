@@ -47,8 +47,9 @@ function OnboardingPage() {
     }
     await refresh();
     setBusy(false);
-    toast.success("Empresa criada. Você é o administrador.");
-    void navigate({ to: "/dashboard", replace: true });
+    toast.success("Cadastro enviado. Aguarde a aprovação do administrador do sistema.");
+    void navigate({ to: "/aguardando-aprovacao", replace: true });
+
   }
 
   if (loading || !profileLoaded || profile?.company_id) {
