@@ -678,16 +678,28 @@ export function validateTemplate(content: string): string[] {
   return [...new Set(found.filter((name) => !ALLOWED_VARIABLES.includes(name)))];
 }
 
+/** Anexo enviado pela tela: já salvo (path) ou novo (base64). */
+export type AttachmentInput = {
+  path?: string;
+  base64?: string;
+  mime?: string | null;
+  filename?: string | null;
+};
+
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+export const MAX_ATTACHMENTS_TOTAL_BYTES = 25 * 1024 * 1024;
+
 export type BroadcastMessageInput = {
   id?: string;
   name: string;
   content: string;
   status?: string;
-  /** Imagem opcional em base64 (sem prefixo data:). */
+  /** Lista completa de anexos desejada para o modelo (imagens e documentos). */
+  attachments?: AttachmentInput[];
+  /** Compatibilidade com a versão de imagem única. */
   mediaBase64?: string | null;
   mediaMimeType?: string | null;
   mediaFilename?: string | null;
-  /** Remove a imagem atual do modelo. */
   removeMedia?: boolean;
 };
 
@@ -695,8 +707,9 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: BroadcastMessageInput) => {
     if (!data.name?.trim()) throw new Error("Informe o nome interno da mensagem.");
-    if (!data.content?.trim() && !data.mediaBase64) {
-      throw new Error("Escreva o texto da mensagem ou anexe uma imagem.");
+    const hasAttachments = Boolean(data.attachments?.length) || Boolean(data.mediaBase64);
+    if (!data.content?.trim() && !hasAttachments) {
+      throw new Error("Escreva o texto da mensagem ou anexe um arquivo.");
     }
     const unknown = validateTemplate(data.content ?? "");
     if (unknown.length) {
@@ -718,27 +731,59 @@ export const saveBroadcastMessage = createServerFn({ method: "POST" })
       created_by: ctx.userId,
     };
 
-    if (data.mediaBase64) {
+    const incoming: AttachmentInput[] = data.attachments
+      ? data.attachments
+      : data.mediaBase64
+        ? [
+            {
+              base64: data.mediaBase64,
+              mime: data.mediaMimeType ?? "image/jpeg",
+              filename: data.mediaFilename ?? "imagem.jpg",
+            },
+          ]
+        : [];
+
+    if (data.attachments || data.mediaBase64 || data.removeMedia) {
       const { base64ToBytes, storeMedia } = await import("@/lib/whatsapp/media.server");
-      const bytes = base64ToBytes(data.mediaBase64);
-      if (bytes.byteLength > 8 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 8 MB.");
-      const path = await storeMedia({
-        companyId,
-        connectionId: "broadcast",
-        bytes,
-        mimeType: data.mediaMimeType ?? "image/jpeg",
-        kind: "image",
-        fileName: data.mediaFilename ?? null,
-      });
-      if (!path) throw new Error("Não consegui salvar a imagem. Tente novamente.");
-      payload["media_url"] = path;
-      payload["media_type"] = data.mediaMimeType ?? "image/jpeg";
-      payload["media_filename"] = data.mediaFilename ?? "imagem.jpg";
-    } else if (data.removeMedia) {
-      payload["media_url"] = null;
-      payload["media_type"] = null;
-      payload["media_filename"] = null;
+      const saved: StoredAttachment[] = [];
+      let totalBytes = 0;
+
+      for (const att of incoming) {
+        const mime = att.mime ?? "application/octet-stream";
+        const kind: "image" | "document" = mime.startsWith("image/") ? "image" : "document";
+        const filename = att.filename ?? (kind === "image" ? "imagem.jpg" : "arquivo");
+        if (att.path) {
+          saved.push({ path: att.path, mime, filename, kind });
+          continue;
+        }
+        if (!att.base64) continue;
+        const bytes = base64ToBytes(att.base64);
+        if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+          throw new Error(`"${filename}" passa de 5 MB. Cada arquivo deve ter no máximo 5 MB.`);
+        }
+        totalBytes += bytes.byteLength;
+        if (totalBytes > MAX_ATTACHMENTS_TOTAL_BYTES) {
+          throw new Error("Os anexos somam mais de 25 MB. Reduza os arquivos e tente de novo.");
+        }
+        const path = await storeMedia({
+          companyId,
+          connectionId: "broadcast",
+          bytes,
+          mimeType: mime,
+          kind,
+          fileName: filename,
+        });
+        if (!path) throw new Error(`Não consegui salvar "${filename}". Tente novamente.`);
+        saved.push({ path, mime, filename, kind });
+      }
+
+      payload["attachments"] = saved;
+      const first = saved[0] ?? null;
+      payload["media_url"] = first?.path ?? null;
+      payload["media_type"] = first?.mime ?? null;
+      payload["media_filename"] = first?.filename ?? null;
     }
+
 
     if (data.id) {
       const { error } = await own(
