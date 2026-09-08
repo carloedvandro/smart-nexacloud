@@ -931,7 +931,94 @@ async function setCampaignStatus(
   return { ok: true };
 }
 
+export type RecentSendInfo = {
+  whatsapp: string;
+  name: string | null;
+  owner: string;
+  sentAt: string | null;
+  campaign: string | null;
+};
+
+/**
+ * Números da campanha que já receberam disparo recente (30 dias), em qualquer
+ * campanha da empresa. Serve só de aviso: nunca bloqueia o envio.
+ */
+export const checkCampaignRecentSends = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { campaignId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
+    await assertOwnCampaign(ctx, access, data.campaignId);
+
+    const { data: links } = await ctx.supabase
+      .from("broadcast_campaign_contacts")
+      .select("contact:broadcast_contacts(id, name, whatsapp)")
+      .eq("campaign_id", data.campaignId)
+      .eq("company_id", companyId);
+    const contacts = (links ?? [])
+      .map((row: any) => row.contact)
+      .filter(Boolean) as { id: string; name: string | null; whatsapp: string }[];
+    if (!contacts.length) return [] as RecentSendInfo[];
+
+    const numbers = [...new Set(contacts.map((c) => c.whatsapp))];
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Todos os contatos da empresa com esses números (de qualquer usuário).
+    const { data: sameNumber } = await ctx.supabase
+      .from("broadcast_contacts")
+      .select("id, whatsapp, created_by")
+      .eq("company_id", companyId)
+      .in("whatsapp", numbers);
+    const byId = new Map<string, { whatsapp: string; created_by: string | null }>();
+    for (const row of sameNumber ?? []) byId.set(row.id as string, row as any);
+    if (!byId.size) return [] as RecentSendInfo[];
+
+    const { data: sends } = await ctx.supabase
+      .from("broadcast_queue")
+      .select("contact_id, sent_at, campaign:broadcast_campaigns(id, name, created_by)")
+      .eq("company_id", companyId)
+      .eq("status", "SENT")
+      .neq("campaign_id", data.campaignId)
+      .gte("sent_at", since)
+      .in("contact_id", [...byId.keys()])
+      .order("sent_at", { ascending: false })
+      .limit(500);
+
+    const names = await ownerNames(
+      ctx,
+      (sends ?? []).map((row: any) => row.campaign?.created_by).filter(Boolean),
+    );
+    const nameByNumber = new Map(contacts.map((c) => [c.whatsapp, c.name] as const));
+    const seen = new Set<string>();
+    const result: RecentSendInfo[] = [];
+    for (const row of sends ?? []) {
+      const contact = byId.get(row.contact_id as string);
+      if (!contact) continue;
+      const ownerId = (row as any).campaign?.created_by as string | undefined;
+      const owner =
+        ownerId === ctx.userId
+          ? "você"
+          : ownerId
+            ? (names[ownerId] ?? "outro usuário")
+            : "outro usuário";
+      const key = `${contact.whatsapp}|${owner}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({
+        whatsapp: contact.whatsapp,
+        name: nameByNumber.get(contact.whatsapp) ?? null,
+        owner,
+        sentAt: (row.sent_at as string | null) ?? null,
+        campaign: ((row as any).campaign?.name as string | null) ?? null,
+      });
+    }
+    return result;
+  });
+
 export const startBroadcastCampaign = createServerFn({ method: "POST" })
+
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { campaignId: string; scheduledAt?: string | null }) => data)
   .handler(async ({ data, context }) => {
