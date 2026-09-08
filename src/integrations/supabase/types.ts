@@ -2834,7 +2834,7 @@ export type Database = {
         | "FAILED"
         | "SKIPPED"
         | "CANCELLED"
-      company_status: "ACTIVE" | "SUSPENDED" | "INACTIVE"
+      company_status: "ACTIVE" | "SUSPENDED" | "INACTIVE" | "PENDING"
       content_status: "DRAFT" | "ACTIVE" | "ARCHIVED"
       conversation_status:
         | "AI_ACTIVE"
@@ -3063,7 +3063,7 @@ export const Constants = {
         "SKIPPED",
         "CANCELLED",
       ],
-      company_status: ["ACTIVE", "SUSPENDED", "INACTIVE"],
+      company_status: ["ACTIVE", "SUSPENDED", "INACTIVE", "PENDING"],
       content_status: ["DRAFT", "ACTIVE", "ARCHIVED"],
       conversation_status: [
         "AI_ACTIVE",
