@@ -23,18 +23,25 @@ export type BroadcastAccess = {
  * A RLS do banco repete as mesmas regras — esconder botões nunca é a proteção.
  */
 async function requireAccess(context: Ctx): Promise<BroadcastAccess> {
-  const [{ data: isAdmin }, { data: isPlatformAdmin }] = await Promise.all([
+  const [adminRpc, platformRpc, { data: profile }, { data: roleRows }] = await Promise.all([
     context.supabase.rpc("is_company_admin"),
     context.supabase.rpc("is_platform_admin"),
+    context.supabase
+      .from("profiles")
+      .select("company_id, full_name, email")
+      .eq("id", context.userId)
+      .maybeSingle(),
+    // Rede de segurança: se a função do banco não puder ser chamada, o papel
+    // ainda é lido direto da tabela de papéis.
+    context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
   ]);
-  const { data: profile } = await context.supabase
-    .from("profiles")
-    .select("company_id, full_name, email")
-    .eq("id", context.userId)
-    .maybeSingle();
   if (!profile?.company_id) throw new Error("Usuário sem empresa.");
   const companyId = profile.company_id as string;
   const userName = (profile.full_name ?? profile.email ?? null) as string | null;
+
+  const roles = (roleRows ?? []).map((r: { role: string }) => r.role);
+  const isAdmin = adminRpc.data === true || roles.includes("ADMIN");
+  const isPlatformAdmin = platformRpc.data === true || roles.includes("PLATFORM_ADMIN");
 
   if (isAdmin || isPlatformAdmin) {
     return { companyId, userName, isAdmin: true, instanceIds: [] };
