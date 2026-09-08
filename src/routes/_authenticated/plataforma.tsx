@@ -459,6 +459,20 @@ function PlatformPage() {
                       size="sm"
                       variant="ghost"
                       onClick={() => {
+                        setEditTarget({ id: company.id, name: company.name });
+                        setEditName(company.name);
+                        setEditLegalName(company.legalName ?? "");
+                        setEditDocument(company.document ?? "");
+                      }}
+                    >
+                      Editar
+                    </Button>
+
+
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
                         setLicenseTarget({ id: company.id, name: company.name });
                         setLicenseUsers(company.maxInternalUsers);
                         setLicenseConsultants(company.maxConsultants);
