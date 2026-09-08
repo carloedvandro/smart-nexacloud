@@ -38,6 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AVAILABILITY_LABEL, type Availability } from "@/lib/nexa/domain";
 import { PasswordInput } from "@/components/nexa/password-input";
 import { PlatformDeleteAdminsCard } from "@/components/nexa/platform-delete-admins";
+import { PushNotificationsCard } from "@/components/nexa/push-notifications-card";
 
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
@@ -87,8 +88,9 @@ function SettingsPage() {
           ) : null}
         </TabsList>
 
-        <TabsContent value="perfil">
+        <TabsContent value="perfil" className="space-y-4">
           <ProfileCard onSaved={refresh} />
+          <PushNotificationsCard />
         </TabsContent>
 
         <TabsContent value="seguranca">
