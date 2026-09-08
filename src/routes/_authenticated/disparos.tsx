@@ -1987,6 +1987,7 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
               </div>
             ))
           )}
+          <Pager page={historyPage} total={rows.length} onChange={setHistoryPage} />
         </CardContent>
       </Card>
 
@@ -1996,12 +1997,12 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
           <CardDescription>Ações administrativas do módulo de disparos.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          {(logs.data ?? []).length === 0 ? (
+          {logRows.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               Nenhuma ação registrada.
             </p>
           ) : (
-            (logs.data ?? []).map((entry: LogRow) => (
+            logPageRows.map((entry: LogRow) => (
               <div key={entry.id} className="flex items-center justify-between gap-2 text-sm">
                 <span>
                   <strong>{entry.action}</strong>{" "}
@@ -2013,6 +2014,7 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
               </div>
             ))
           )}
+          <Pager page={logsPage} total={logRows.length} onChange={setLogsPage} />
         </CardContent>
       </Card>
     </div>
