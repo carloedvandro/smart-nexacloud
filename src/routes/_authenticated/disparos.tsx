@@ -806,6 +806,8 @@ function NewCampaignTab({
   const saveFn = useServerFn(saveBroadcastCampaign);
   const startFn = useServerFn(startBroadcastCampaign);
   const getCampaignFn = useServerFn(getBroadcastCampaign);
+  const deleteContactsFn = useServerFn(deleteBroadcastContacts);
+  const [contactSearch, setContactSearch] = useState("");
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
@@ -1019,32 +1021,90 @@ function NewCampaignTab({
                 Limpar
               </Button>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                className="max-w-xs"
+                placeholder="Buscar contato por nome ou número"
+                value={contactSearch}
+                onChange={(e) => setContactSearch(e.target.value)}
+              />
+              {selected.length ? (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    if (!confirm(`Excluir ${selected.length} contato(s) da sua lista?`)) return;
+                    void deleteContactsFn({ data: { ids: selected } })
+                      .then(() => {
+                        toast.success("Contato(s) excluído(s).");
+                        setSelected([]);
+                        void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+                      })
+                      .catch((error: Error) => toast.error(error.message));
+                  }}
+                >
+                  <Trash2 className="size-4" /> Excluir selecionados
+                </Button>
+              ) : null}
+            </div>
             <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
               {contacts.length === 0 ? (
                 <p className="p-3 text-sm text-muted-foreground">
                   Cadastre contatos na aba “Contatos”.
                 </p>
               ) : (
-                contacts.map((contact) => (
-                  <label
+                contacts
+                  .filter((contact) => {
+                    const term = contactSearch.trim().toLowerCase();
+                    if (!term) return true;
+                    const digits = term.replace(/\D/g, "");
+                    return (
+                      (contact.name ?? "").toLowerCase().includes(term) ||
+                      (digits ? contact.whatsapp.includes(digits) : false)
+                    );
+                  })
+                  .map((contact) => (
+                  <div
                     key={contact.id}
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                    className="flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                   >
-                    <Checkbox
-                      checked={selected.includes(contact.id)}
-                      onCheckedChange={(checked) =>
-                        setSelected((prev) =>
-                          checked ? [...prev, contact.id] : prev.filter((id) => id !== contact.id),
-                        )
-                      }
-                    />
-                    <span className="flex-1 truncate">{contact.name ?? "Sem nome"}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {PhoneNormalizationService.format(contact.whatsapp)}
-                    </span>
-                    {contact.opt_in ? <Badge variant="secondary">opt-in</Badge> : null}
-                  </label>
-                ))
+                    <label className="flex flex-1 cursor-pointer items-center gap-3 truncate">
+                      <Checkbox
+                        checked={selected.includes(contact.id)}
+                        onCheckedChange={(checked) =>
+                          setSelected((prev) =>
+                            checked
+                              ? [...prev, contact.id]
+                              : prev.filter((id) => id !== contact.id),
+                          )
+                        }
+                      />
+                      <span className="flex-1 truncate">{contact.name ?? "Sem nome"}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {PhoneNormalizationService.format(contact.whatsapp)}
+                      </span>
+                      {contact.opt_in ? <Badge variant="secondary">opt-in</Badge> : null}
+                    </label>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      title="Excluir contato"
+                      onClick={() => {
+                        if (!confirm(`Excluir ${contact.name ?? contact.whatsapp} da sua lista?`))
+                          return;
+                        void deleteContactsFn({ data: { ids: [contact.id] } })
+                          .then(() => {
+                            toast.success("Contato excluído.");
+                            setSelected((prev) => prev.filter((id) => id !== contact.id));
+                            void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+                          })
+                          .catch((error: Error) => toast.error(error.message));
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                  ))
               )}
             </div>
           </CardContent>
