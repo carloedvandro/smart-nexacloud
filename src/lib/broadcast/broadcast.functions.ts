@@ -1372,46 +1372,49 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
     const access = await requireAccess(ctx);
     const { companyId } = access;
 
-    const [
-      { data: campaigns },
-      { data: queue },
-      { data: contacts },
-      { data: settings },
-      { data: instances },
-    ] = await Promise.all([
-      own(
+    const { data: campaigns } = await own(
+      ctx.supabase
+        .from("broadcast_campaigns")
+        .select("id, name, status, last_activity_at, instance_id")
+        .eq("company_id", companyId),
+      access,
+      ctx,
+    );
+    const campaignIds = (campaigns ?? []).map((c: { id: string }) => c.id);
+
+    const [{ data: queue }, { data: contacts }, { data: settings }, { data: instances }] =
+      await Promise.all([
+        (async () => {
+          // Operador só enxerga os envios das campanhas dele.
+          if (!access.isAdmin && !campaignIds.length) return { data: [] as any[] };
+          let q = ctx.supabase
+            .from("broadcast_queue")
+            .select("status, sent_at, created_at")
+            .eq("company_id", companyId)
+            .limit(20000);
+          if (!access.isAdmin) q = q.in("campaign_id", campaignIds);
+          return q;
+        })(),
+        own(
+          ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
+          access,
+          ctx,
+        ),
         ctx.supabase
-          .from("broadcast_campaigns")
-          .select("id, name, status, last_activity_at, instance_id")
-          .eq("company_id", companyId),
-        access,
-        ctx,
-      ),
-      (() => {
-        let q = ctx.supabase
-          .from("broadcast_queue")
-          .select("status, sent_at, created_at")
+          .from("broadcast_settings")
+          .select("*")
           .eq("company_id", companyId)
-          .limit(20000);
-        if (!access.isAdmin) q = q.in("instance_id", access.instanceIds);
-        return q;
-      })(),
-      own(
-        ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
-        access,
-        ctx,
-      ),
-      ctx.supabase.from("broadcast_settings").select("*").eq("company_id", companyId).maybeSingle(),
-      (() => {
-        let q = ctx.supabase
-          .from("whatsapp_connections")
-          .select("id, name, status, connection_type, phone_number")
-          .eq("company_id", companyId)
-          .eq("connection_type", "BROADCAST");
-        if (!access.isAdmin) q = q.in("id", access.instanceIds);
-        return q;
-      })(),
-    ]);
+          .maybeSingle(),
+        (() => {
+          let q = ctx.supabase
+            .from("whatsapp_connections")
+            .select("id, name, status, connection_type, phone_number")
+            .eq("company_id", companyId)
+            .eq("connection_type", "BROADCAST");
+          if (!access.isAdmin) q = q.in("id", access.instanceIds);
+          return q;
+        })(),
+      ]);
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
