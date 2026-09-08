@@ -335,6 +335,11 @@ export const MegaApiService = {
       last = result;
 
       if (result.status === 401 || result.status === 403) return result;
+      // Só tentamos o endpoint alternativo quando o primeiro nem existe na
+      // versão da MEGA (404/405). Em qualquer outra falha o servidor pode já
+      // ter aceitado e entregue a mídia — repetir faria o cliente receber o
+      // mesmo arquivo duas vezes.
+      if (result.status !== 404 && result.status !== 405) return result;
     }
     return last;
   },
