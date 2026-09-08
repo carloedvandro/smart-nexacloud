@@ -650,28 +650,17 @@ function CampaignsTab({
                 {["DRAFT", "COMPLETED", "CANCELLED", "ERROR"].includes(campaign.status) && (
                   <Button
                     size="sm"
-                    onClick={() =>
-                      run(
-                        startFn({ data: { campaignId: campaign.id } }).then((r) => {
-                          const res = r as { enqueued?: number; reason?: string } | undefined;
-                          if ((res?.enqueued ?? 0) === 0) {
-                            if (res?.reason === "already_sent") {
-                              throw new Error(
-                                "Todos os contatos desta campanha já receberam a mensagem. Use Duplicar para reenviar a todos.",
-                              );
-                            }
-                            throw new Error(
-                              "Nenhum contato entrou na fila. Verifique se os contatos estão ativos e, se exigir consentimento, se deram opt-in.",
-                            );
-                          }
-                          return r;
-                        }),
-                        "Campanha iniciada.",
-                      )
-                    }
+                    disabled={checking === campaign.id}
+                    onClick={() => void tryStart(campaign.id)}
                   >
-                    <Play className="size-4" /> Iniciar
+                    {checking === campaign.id ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Play className="size-4" />
+                    )}{" "}
+                    Iniciar
                   </Button>
+
                 )}
                 {campaign.status === "RUNNING" || campaign.status === "SCHEDULED" ? (
                   <Button
