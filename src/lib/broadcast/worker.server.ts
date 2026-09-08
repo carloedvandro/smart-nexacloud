@@ -102,15 +102,18 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
 
   // Ordem de chegada: primeiro todos os arquivos (sem legenda) e, por último,
   // o texto — assim o contexto fecha a sequência no WhatsApp do cliente.
+  // Se um anexo falhar, seguimos com os demais e com o texto: o cliente
+  // recebe o que for possível e a falha fica registrada no histórico.
   let sent;
+  const partialErrors: string[] = [];
   if (attachments.length) {
     const { signedMediaUrl } = await import("@/lib/whatsapp/media.server");
     for (let index = 0; index < attachments.length; index += 1) {
       const att = attachments[index]!;
       const url = await signedMediaUrl(att.path, 60 * 60);
       if (!url) {
-        await finalize(item.queue_id, false, null, `Não consegui gerar o link de "${att.filename}".`);
-        return false;
+        partialErrors.push(`Não consegui gerar o link de "${att.filename}".`);
+        continue;
       }
       const result = await MegaApiService.sendMedia(creds, {
         to: recipient,
@@ -120,18 +123,34 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
         fileName: att.filename,
         caption: "",
       });
-      sent = result;
-      if (!result.ok) break;
+      if (!result.ok) {
+        // Problema do destinatário interrompe tudo: o número não recebe nada.
+        if (isRecipientProblem(result.error)) {
+          sent = result;
+          break;
+        }
+        partialErrors.push(`Falha ao enviar "${att.filename}": ${result.error ?? "erro"}`);
+      } else {
+        sent = result;
+      }
       await new Promise((resolve) => setTimeout(resolve, 1_200));
     }
-    if (sent?.ok && body.trim()) {
-      sent = await MegaApiService.sendText(creds, recipient, body);
+    const recipientBlocked = sent && !sent.ok;
+    if (!recipientBlocked && body.trim()) {
+      const text = await MegaApiService.sendText(creds, recipient, body);
+      if (!text.ok) partialErrors.push(`Falha ao enviar o texto: ${text.error ?? "erro"}`);
+      else sent = text;
     }
   } else {
     sent = await MegaApiService.sendText(creds, recipient, body);
   }
   if (!sent) {
-    await finalize(item.queue_id, false, null, "Mensagem vazia.");
+    await finalize(
+      item.queue_id,
+      false,
+      null,
+      partialErrors.join(" | ") || "Mensagem vazia.",
+    );
     return false;
   }
 
@@ -153,7 +172,7 @@ async function sendOne(item: ClaimedItem): Promise<boolean> {
   }
 
   const providerId = sent.data?.key?.id ?? (sent.data as { messageId?: string } | undefined)?.messageId ?? null;
-  await finalize(item.queue_id, true, providerId, null);
+  await finalize(item.queue_id, true, providerId, partialErrors.join(" | ") || null);
   return true;
 }
 
