@@ -103,6 +103,17 @@ export async function notifyManualAssignment(input: {
       } else {
         notified = true;
       }
+      try {
+        const { notifyLeadAssigned } = await import("@/lib/push/push.server");
+        await notifyLeadAssigned({
+          userId: newUserId,
+          leadName: leadLabel,
+          conversationId,
+          detail: `Atribuído por ${actorName}`,
+        });
+      } catch (error) {
+        console.error("[push] aviso de atribuição falhou", error instanceof Error ? error.message : error);
+      }
     } else {
       console.error("[atribuição] consultor sem WhatsApp pessoal", newUserId);
       reason =
