@@ -42,6 +42,7 @@ import {
   provisionInstanceForCompany,
   removeCompanyMember,
   setCompanyMemberRole,
+  setPlatformCompanyStatus,
   transferInstanceCompany,
   updateInstanceCredentials,
 
@@ -81,6 +82,7 @@ function PlatformPage() {
   const configureWebhookFn = useServerFn(configurePlatformWebhook);
   const updateCredentialsFn = useServerFn(updateInstanceCredentials);
   const transferFn = useServerFn(transferInstanceCompany);
+  const setCompanyStatusFn = useServerFn(setPlatformCompanyStatus);
 
   const [companyOpen, setCompanyOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
@@ -240,7 +242,20 @@ function PlatformPage() {
     void queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
   };
 
+  const companyStatusMutation = useMutation({
+    mutationFn: (vars: {
+      companyId: string;
+      status: "ACTIVE" | "PENDING" | "SUSPENDED" | "INACTIVE";
+    }) => setCompanyStatusFn({ data: vars }),
+    onSuccess: () => {
+      toast.success("Situação da empresa atualizada.");
+      void queryClient.invalidateQueries({ queryKey: ["platform-companies"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const transferMutation = useMutation({
+
     mutationFn: (vars: { connectionId: string; companyId: string }) =>
       transferFn({ data: vars }),
     onSuccess: () => {
@@ -377,10 +392,43 @@ function PlatformPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {company.status === "PENDING" ? (
+                      <Badge className="bg-amber-500 text-white hover:bg-amber-500">
+                        Aguardando aprovação
+                      </Badge>
+                    ) : company.status === "ACTIVE" ? null : (
+                      <Badge variant="destructive">{company.status.toLowerCase()}</Badge>
+                    )}
+                    {company.status === "PENDING" ? (
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          companyStatusMutation.mutate({ companyId: company.id, status: "ACTIVE" })
+                        }
+                        disabled={companyStatusMutation.isPending}
+                      >
+                        Aprovar
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          companyStatusMutation.mutate({
+                            companyId: company.id,
+                            status: company.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED",
+                          })
+                        }
+                        disabled={companyStatusMutation.isPending}
+                      >
+                        {company.status === "SUSPENDED" ? "Reativar" : "Suspender"}
+                      </Button>
+                    )}
                     <Badge variant="outline">{company.instanceCount} instâncias</Badge>
                     <Badge variant="secondary">
                       Licença: {company.maxConsultants} consultores / {company.maxInternalUsers} usuários
                     </Badge>
+
                     <Button
                       size="sm"
                       variant="ghost"

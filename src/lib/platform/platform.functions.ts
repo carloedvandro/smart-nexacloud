@@ -540,3 +540,19 @@ export const getPlatformOverview = createServerFn({ method: "GET" })
       })),
     };
   });
+
+/** Aprova, suspende ou reativa uma empresa (somente super administrador). */
+export const setPlatformCompanyStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { companyId: string; status: "ACTIVE" | "PENDING" | "SUSPENDED" | "INACTIVE" }) => {
+    if (!data.companyId) throw new Error("Empresa inválida.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc("platform_set_company_status", {
+      _company_id: data.companyId,
+      _status: data.status,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
