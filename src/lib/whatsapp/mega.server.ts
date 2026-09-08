@@ -129,6 +129,7 @@ async function request<T>(
         name,
         body: text?.slice(0, 500),
       });
+      await flagInstanceOffline(creds, `${name} ${rawMessage} ${text ?? ""}`);
       return { ok: false, error: message, status: response.status };
     }
 
