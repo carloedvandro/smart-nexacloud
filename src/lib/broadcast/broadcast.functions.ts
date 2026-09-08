@@ -233,7 +233,7 @@ export const connectBroadcastInstance = createServerFn({ method: "POST" })
     const ctx = context as unknown as Ctx;
     const access = await requireAccess(ctx);
     assertInstance(access, data.connectionId);
-    const companyId = access;
+    const { companyId } = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id, connection_type")
@@ -253,7 +253,7 @@ export const refreshBroadcastInstance = createServerFn({ method: "POST" })
     const ctx = context as unknown as Ctx;
     const access = await requireAccess(ctx);
     assertInstance(access, data.connectionId);
-    const companyId = access;
+    const { companyId } = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id")
@@ -272,7 +272,7 @@ export const disconnectBroadcastInstance = createServerFn({ method: "POST" })
     const ctx = context as unknown as Ctx;
     const access = await requireAccess(ctx);
     assertInstance(access, data.connectionId);
-    const companyId, userName = access;
+    const { companyId, userName } = access;
     const { data: conn } = await ctx.supabase
       .from("whatsapp_connections")
       .select("id, connection_type")
@@ -1107,7 +1107,8 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId } = access;
 
     const [
       { data: campaigns },
@@ -1127,11 +1128,15 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
         .limit(20000),
       ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
       ctx.supabase.from("broadcast_settings").select("*").eq("company_id", companyId).maybeSingle(),
-      ctx.supabase
-        .from("whatsapp_connections")
-        .select("id, name, status, connection_type, phone_number")
-        .eq("company_id", companyId)
-        .eq("connection_type", "BROADCAST"),
+      (() => {
+        let q = ctx.supabase
+          .from("whatsapp_connections")
+          .select("id, name, status, connection_type, phone_number")
+          .eq("company_id", companyId)
+          .eq("connection_type", "BROADCAST");
+        if (!access.isAdmin) q = q.in("id", access.instanceIds);
+        return q;
+      })(),
     ]);
 
     const startOfDay = new Date();
