@@ -306,7 +306,7 @@ function DisparosPage({ isAdmin }: { isAdmin: boolean }) {
       }
     >
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-        <TabsList className="flex w-full flex-wrap justify-start gap-1">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="visao">Visão geral</TabsTrigger>
           <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
           <TabsTrigger value="nova">
