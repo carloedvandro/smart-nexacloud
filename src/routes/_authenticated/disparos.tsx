@@ -1780,6 +1780,46 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
 /* Histórico                                                         */
 /* ---------------------------------------------------------------- */
 
+const PAGE_SIZE = 10;
+
+function Pager({
+  page,
+  total,
+  onChange,
+}: {
+  page: number;
+  total: number;
+  onChange: (page: number) => void;
+}) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total <= PAGE_SIZE) return null;
+  return (
+    <div className="flex items-center justify-center gap-3 pt-2">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page <= 1}
+        onClick={() => onChange(page - 1)}
+        aria-label="Página anterior"
+      >
+        <ChevronLeft className="size-4" />
+      </Button>
+      <span className="text-xs text-muted-foreground">
+        Página {page} de {pages}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page >= pages}
+        onClick={() => onChange(page + 1)}
+        aria-label="Próxima página"
+      >
+        <ChevronRight className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
 function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances: Instance[] }) {
   const historyFn = useServerFn(listBroadcastHistory);
   const logsFn = useServerFn(listBroadcastLogs);
@@ -1787,6 +1827,9 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
   const [status, setStatus] = useState("todos");
   const [instanceId, setInstanceId] = useState("todas");
   const [days, setDays] = useState("30");
+  const [phone, setPhone] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
+  const [logsPage, setLogsPage] = useState(1);
 
   const history = useQuery({
     queryKey: ["broadcast", "history", campaignId, status, instanceId, days],
@@ -1803,7 +1846,23 @@ function HistoryTab({ campaigns, instances }: { campaigns: Campaign[]; instances
 
   const logs = useQuery({ queryKey: ["broadcast", "logs"], queryFn: () => logsFn({}) });
 
-  const rows: HistoryRow[] = history.data ?? [];
+  const allRows: HistoryRow[] = history.data ?? [];
+  const digits = phone.replace(/\D/g, "");
+  const rows = useMemo(
+    () =>
+      digits
+        ? allRows.filter((r) => (r.contact?.whatsapp ?? "").replace(/\D/g, "").includes(digits))
+        : allRows,
+    [allRows, digits],
+  );
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [campaignId, status, instanceId, days, digits]);
+
+  const pageRows = rows.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
+  const logRows: LogRow[] = (logs.data ?? []) as LogRow[];
+  const logPageRows = logRows.slice((logsPage - 1) * PAGE_SIZE, logsPage * PAGE_SIZE);
   const totals = {
     total: rows.length,
     sent: rows.filter((r: HistoryRow) => r.status === "SENT").length,
