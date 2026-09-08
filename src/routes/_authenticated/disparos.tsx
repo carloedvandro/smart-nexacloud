@@ -60,6 +60,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { PhoneNormalizationService } from "@/lib/nexa/phone";
 import {
   cancelBroadcastCampaign,
+  getBroadcastAccessInfo,
+  listBroadcastOperators,
+  setBroadcastAccess,
   connectBroadcastInstance,
   deleteBroadcastCampaign,
   deleteBroadcastContacts,
@@ -176,14 +179,37 @@ function formatDate(value: string | null | undefined) {
 }
 
 function GuardedDisparosPage() {
-  return (
-    <AdminOnly title="Disparos" description="Campanhas de WhatsApp">
-      <DisparosPage />
-    </AdminOnly>
-  );
+  const accessFn = useServerFn(getBroadcastAccessInfo);
+  const access = useQuery({ queryKey: ["broadcast", "access"], queryFn: () => accessFn({}) });
+
+  if (access.isLoading) {
+    return (
+      <AppShell title="Disparos" description="Campanhas de WhatsApp">
+        <Skeleton className="h-64 w-full" />
+      </AppShell>
+    );
+  }
+
+  if (!access.data?.allowed) {
+    return (
+      <AppShell title="Disparos" description="Campanhas de WhatsApp">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+            <ShieldCheck className="size-8 text-muted-foreground" />
+            <p className="text-base font-medium">Área restrita</p>
+            <p className="max-w-md text-sm text-muted-foreground">
+              Peça a um administrador para liberar o seu acesso aos disparos.
+            </p>
+          </CardContent>
+        </Card>
+      </AppShell>
+    );
+  }
+
+  return <DisparosPage isAdmin={Boolean(access.data.isAdmin)} />;
 }
 
-function DisparosPage() {
+function DisparosPage({ isAdmin }: { isAdmin: boolean }) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("visao");
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
@@ -289,7 +315,8 @@ function DisparosPage() {
           <TabsTrigger value="mensagens">Mensagens</TabsTrigger>
           <TabsTrigger value="instancias">Instâncias de disparo</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
-          <TabsTrigger value="config">Configurações</TabsTrigger>
+          {isAdmin ? <TabsTrigger value="acesso">Acesso</TabsTrigger> : null}
+          {isAdmin ? <TabsTrigger value="config">Configurações</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="visao">
@@ -330,16 +357,28 @@ function DisparosPage() {
         </TabsContent>
 
         <TabsContent value="instancias">
-          <InstancesTab instances={instances.data ?? []} loading={instances.isLoading} />
+          <InstancesTab
+            instances={instances.data ?? []}
+            loading={instances.isLoading}
+            isAdmin={isAdmin}
+          />
         </TabsContent>
 
         <TabsContent value="historico">
           <HistoryTab campaigns={campaigns.data ?? []} instances={broadcastInstances} />
         </TabsContent>
 
-        <TabsContent value="config">
-          <SettingsTab />
-        </TabsContent>
+        {isAdmin ? (
+          <TabsContent value="acesso">
+            <AccessTab />
+          </TabsContent>
+        ) : null}
+
+        {isAdmin ? (
+          <TabsContent value="config">
+            <SettingsTab />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </AppShell>
   );
@@ -1630,7 +1669,15 @@ function MessagesTab({ messages }: { messages: Message[] }) {
 /* Instâncias                                                        */
 /* ---------------------------------------------------------------- */
 
-function InstancesTab({ instances, loading }: { instances: Instance[]; loading: boolean }) {
+function InstancesTab({
+  instances,
+  loading,
+  isAdmin,
+}: {
+  instances: Instance[];
+  loading: boolean;
+  isAdmin: boolean;
+}) {
   const queryClient = useQueryClient();
   const setTypeFn = useServerFn(setInstanceConnectionType);
   const connectFn = useServerFn(connectBroadcastInstance);
@@ -1735,20 +1782,22 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
                     >
                       Desconectar
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        run(
-                          setTypeFn({ data: { connectionId: instance.id, type: "TRUNK" } }),
-                          "Instância devolvida ao atendimento.",
-                        )
-                      }
-                    >
-                      Remover dos disparos
-                    </Button>
+                    {isAdmin ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          run(
+                            setTypeFn({ data: { connectionId: instance.id, type: "TRUNK" } }),
+                            "Instância devolvida ao atendimento.",
+                          )
+                        }
+                      >
+                        Remover dos disparos
+                      </Button>
+                    ) : null}
                   </>
-                ) : (
+                ) : isAdmin ? (
                   <Button
                     size="sm"
                     onClick={() =>
@@ -1760,7 +1809,7 @@ function InstancesTab({ instances, loading }: { instances: Instance[]; loading: 
                   >
                     Usar em disparos
                   </Button>
-                )}
+                ) : null}
               </div>
             )}
 
