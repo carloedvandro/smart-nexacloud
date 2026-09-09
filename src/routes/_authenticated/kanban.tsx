@@ -191,7 +191,8 @@ function KanbanPage() {
 
   const consultantName = useMemo(() => {
     const map = new Map<string, string>();
-    for (const c of consultants ?? []) map.set(c.id, c.full_name ?? c.email ?? "Consultor");
+    for (const c of Array.isArray(consultants) ? consultants : [])
+      map.set(c.id, c.full_name ?? c.email ?? "Consultor");
     return map;
   }, [consultants]);
 

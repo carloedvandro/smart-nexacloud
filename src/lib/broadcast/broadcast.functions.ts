@@ -407,6 +407,17 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     const list = (rows ?? []) as Record<string, any>[];
 
+    // Nome do responsável por cada contato (usado para separar a lista por consultor).
+    if (list.length) {
+      const owners = await ownerNames(
+        ctx,
+        list.map((r) => r["created_by"] as string),
+      );
+      for (const row of list) {
+        row["ownerName"] = owners[row["created_by"] as string] ?? "Sem responsável";
+      }
+    }
+
     // Marca quais números também estão na lista de outra pessoa da empresa.
     if (list.length) {
       const numbers = [...new Set(list.map((r) => r["whatsapp"] as string))];
