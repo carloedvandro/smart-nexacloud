@@ -1397,6 +1397,21 @@ function ContactsTab() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  // Agrupa por responsável — o administrador vê a lista separada por consultor.
+  const groups = useMemo(() => {
+    const map = new Map<string, Contact[]>();
+    for (const contact of contacts.data ?? []) {
+      const owner = (contact as Contact & { ownerName?: string }).ownerName ?? "Sem responsável";
+      const bucket = map.get(owner) ?? [];
+      bucket.push(contact);
+      map.set(owner, bucket);
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "pt-BR"));
+  }, [contacts.data]);
+
+  const [owner, setOwner] = useState("todos");
+  const visibleGroups = owner === "todos" ? groups : groups.filter(([name]) => name === owner);
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
       <Card className="h-fit">
