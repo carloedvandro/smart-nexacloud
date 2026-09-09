@@ -1517,9 +1517,24 @@ function ContactsTab() {
                 ))}
               </SelectContent>
             </Select>
+            {groups.length > 1 ? (
+              <Select value={owner} onValueChange={setOwner}>
+                <SelectTrigger className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os consultores</SelectItem>
+                  {groups.map(([name, rows]) => (
+                    <SelectItem key={name} value={name}>
+                      {name} ({rows.length})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-4">
           {contacts.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : (contacts.data ?? []).length === 0 ? (
@@ -1527,7 +1542,13 @@ function ContactsTab() {
               Nenhum contato encontrado.
             </p>
           ) : (
-            (contacts.data ?? []).map((contact: Contact) => (
+            visibleGroups.map(([ownerName, rows]) => (
+            <section key={ownerName} className="space-y-2">
+              <div className="flex items-center justify-between border-b border-border pb-1">
+                <p className="text-sm font-semibold">{ownerName}</p>
+                <span className="text-xs text-muted-foreground">{rows.length} contato(s)</span>
+              </div>
+              {rows.map((contact: Contact) => (
               <div
                 key={contact.id}
                 className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
