@@ -1596,6 +1596,8 @@ function ContactsTab() {
                   </Button>
                 </div>
               </div>
+              ))}
+            </section>
             ))
           )}
         </CardContent>
