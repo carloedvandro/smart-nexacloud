@@ -185,21 +185,51 @@ async function coolDownIdleHumanRequests(): Promise<void> {
   const conversations = activeConvs ?? [];
   if (conversations.length === 0) return;
 
+  const since = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
+  const convIds = conversations.map((c) => c.id);
+
   const { data: exhausted } = await supabaseAdmin
     .from("conversation_events")
-    .select("conversation_id")
+    .select("conversation_id, created_at")
     .eq("event_type", "QUEUE_NO_CONSULTANT")
-    .in(
-      "conversation_id",
-      conversations.map((c) => c.id),
-    )
-    .gte("created_at", new Date(Date.now() - 24 * 60 * 60_000).toISOString());
+    .in("conversation_id", convIds)
+    .gte("created_at", since);
 
-  const exhaustedSet = new Set((exhausted ?? []).map((e) => e.conversation_id));
+  // Devolução deliberada para a IA (arrastar o card para "Em qualificação (IA)")
+  // encerra o pedido humano: o card não pode voltar sozinho para "Aguardando
+  // consultor" depois que a Ana responde.
+  const { data: resumed } = await supabaseAdmin
+    .from("conversation_events")
+    .select("conversation_id, created_at, metadata")
+    .eq("event_type", "AI_RESUMED")
+    .in("conversation_id", convIds)
+    .gte("created_at", since);
+
+  const lastExhaustion = new Map<string, number>();
+  for (const row of exhausted ?? []) {
+    const at = new Date(row.created_at).getTime();
+    if (at > (lastExhaustion.get(row.conversation_id) ?? 0))
+      lastExhaustion.set(row.conversation_id, at);
+  }
+  const lastManualResume = new Map<string, number>();
+  for (const row of resumed ?? []) {
+    const reason = String((row.metadata as { reason?: string } | null)?.reason ?? "");
+    if (reason.includes("rodízio")) continue; // retomada automática não cancela o pedido
+    const at = new Date(row.created_at).getTime();
+    if (at > (lastManualResume.get(row.conversation_id) ?? 0))
+      lastManualResume.set(row.conversation_id, at);
+  }
+
+  const exhaustedSet = new Set(
+    [...lastExhaustion.entries()]
+      .filter(([id, at]) => (lastManualResume.get(id) ?? 0) <= at)
+      .map(([id]) => id),
+  );
   const leadIds = conversations
     .filter((c) => exhaustedSet.has(c.id))
     .map((c) => c.lead_id as string);
   if (leadIds.length === 0) return;
+
 
   const { data: qualifying } = await supabaseAdmin
     .from("leads")
