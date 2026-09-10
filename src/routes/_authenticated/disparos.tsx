@@ -1019,6 +1019,22 @@ function NewCampaignTab({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <Label>Bloco de contatos</Label>
+              <Select value={blockFilter} onValueChange={setBlockFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os blocos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os blocos ({contacts.length})</SelectItem>
+                  {blockOptions.map((block) => (
+                    <SelectItem key={block.id} value={block.id}>
+                      {block.name} ({block.total})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-3">
               <Switch checked={requireOptIn} onCheckedChange={setRequireOptIn} id="optin" />
               <Label htmlFor="optin" className="text-sm font-normal">
@@ -1030,10 +1046,17 @@ function NewCampaignTab({
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  setSelected(contacts.filter((c) => c.status === "ATIVO").map((c) => c.id))
+                  setSelected((prev) => [
+                    ...new Set([
+                      ...prev,
+                      ...blockContacts.filter((c) => c.status === "ATIVO").map((c) => c.id),
+                    ]),
+                  ])
                 }
               >
-                Selecionar todos os ativos
+                {blockFilter === "todos"
+                  ? "Selecionar todos os ativos"
+                  : "Selecionar ativos do bloco"}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
                 Limpar
@@ -1066,12 +1089,14 @@ function NewCampaignTab({
               ) : null}
             </div>
             <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-              {contacts.length === 0 ? (
+              {blockContacts.length === 0 ? (
                 <p className="p-3 text-sm text-muted-foreground">
-                  Cadastre contatos na aba “Contatos”.
+                  {contacts.length === 0
+                    ? "Cadastre contatos na aba “Contatos”."
+                    : "Nenhum contato neste bloco."}
                 </p>
               ) : (
-                contacts
+                blockContacts
                   .filter((contact) => {
                     const term = contactSearch.trim().toLowerCase();
                     if (!term) return true;
