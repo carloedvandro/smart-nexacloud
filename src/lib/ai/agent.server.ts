@@ -684,10 +684,13 @@ async function runRespondWithAI(input: {
     /\b(falar|conversar|atendimento|transferir|transfere|transfira|transfer(ê|e)ncia|passar|passa|chamar|encaminhar|me\s+manda)\b[^.?!]{0,40}\b(consultor(?:a)?|atendente|corretor(?:a)?|vendedor(?:a)?|humano|humana|pessoa\s+(real|de\s+verdade)|algu(é|e)m\s+(real|de\s+verdade)?)\b/i;
   const humanRequestShort =
     /\b(quero|gostaria|preciso|pode|poderia|posso)\b[^.?!]{0,30}\b(consultor(?:a)?|atendente|corretor(?:a)?|atendimento\s+humano|humano|humana)\b/i;
-  // Mesmo em conversa interna, se a pessoa pede um humano de forma explícita
-  // nós transferimos: quem pede atendimento humano não pode ficar com a IA.
+  // Consultor interno NUNCA é transferido: ele é a própria equipe. Frases como
+  // "quando um consultor te chamar..." não podem virar pedido de atendimento
+  // humano e jogar o card para "Aguardando consultor".
   const explicitHumanRequest =
-    humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText);
+    !isConsultantChat &&
+    (humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText));
+
 
   // "Registrar e seguir": se o rodízio esgotou há pouco nesta conversa (todos
   // os consultores já foram acionados sem sucesso) e não há oferta em aberto,
