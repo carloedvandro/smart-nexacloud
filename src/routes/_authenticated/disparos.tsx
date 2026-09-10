@@ -1110,27 +1110,17 @@ function NewCampaignTab({
                 </Button>
               ) : null}
             </div>
-            <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-              {blockFilter !== "todos" && blockContactsQuery.isLoading ? (
-                <p className="p-3 text-sm text-muted-foreground">Carregando contatos do bloco…</p>
-              ) : blockContacts.length === 0 ? (
+            <div className="space-y-1 rounded-lg border border-border p-2">
+              {contactsPage.isLoading ? (
+                <p className="p-3 text-sm text-muted-foreground">Carregando contatos…</p>
+              ) : pageRows.length === 0 ? (
                 <p className="p-3 text-sm text-muted-foreground">
-                  {contacts.length === 0
-                    ? "Cadastre contatos na aba “Contatos”."
+                  {contactSearch.trim()
+                    ? "Nenhum contato encontrado para esta busca."
                     : "Nenhum contato neste bloco."}
                 </p>
               ) : (
-                blockContacts
-                  .filter((contact) => {
-                    const term = contactSearch.trim().toLowerCase();
-                    if (!term) return true;
-                    const digits = term.replace(/\D/g, "");
-                    return (
-                      (contact.name ?? "").toLowerCase().includes(term) ||
-                      (digits ? contact.whatsapp.includes(digits) : false)
-                    );
-                  })
-                  .map((contact) => (
+                pageRows.map((contact) => (
                   <div
                     key={contact.id}
                     className="flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
@@ -1138,13 +1128,17 @@ function NewCampaignTab({
                     <label className="flex flex-1 cursor-pointer items-center gap-3 truncate">
                       <Checkbox
                         checked={selected.includes(contact.id)}
-                        onCheckedChange={(checked) =>
+                        onCheckedChange={(checked) => {
                           setSelected((prev) =>
                             checked
-                              ? [...prev, contact.id]
+                              ? [...new Set([...prev, contact.id])]
                               : prev.filter((id) => id !== contact.id),
-                          )
-                        }
+                          );
+                          setSelectedInfo((prev) => ({
+                            ...prev,
+                            [contact.id]: { name: contact.name, opt_in: contact.opt_in },
+                          }));
+                        }}
                       />
                       <span className="flex-1 truncate">{contact.name ?? "Sem nome"}</span>
                       <span className="text-xs text-muted-foreground">
@@ -1171,9 +1165,33 @@ function NewCampaignTab({
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
-                  ))
+                ))
               )}
             </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                {totalContacts} contato(s) · página {contactPage} de {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={contactPage <= 1}
+                  onClick={() => setContactPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={contactPage >= totalPages}
+                  onClick={() => setContactPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+
           </CardContent>
         </Card>
 
