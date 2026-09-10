@@ -814,28 +814,40 @@ function NewCampaignTab({
   const getCampaignFn = useServerFn(getBroadcastCampaign);
   const deleteContactsFn = useServerFn(deleteBroadcastContacts);
   const campaignBlocksFn = useServerFn(listBroadcastContactBlocks);
-  const blockContactsFn = useServerFn(listBroadcastContacts);
+  const contactsPageFn = useServerFn(listBroadcastContactsPage);
+  const picksFn = useServerFn(listBroadcastContactPicks);
   const [contactSearch, setContactSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState("todos");
+  const [contactPage, setContactPage] = useState(1);
+  const CONTACT_PAGE_SIZE = 10;
 
   const campaignBlocks = useQuery({
     queryKey: ["broadcast", "contact-blocks"],
     queryFn: () => campaignBlocksFn(),
   });
   const blockOptions = campaignBlocks.data ?? [];
-  // Contatos do bloco vêm direto do servidor: a lista geral pode não trazer todos.
-  const blockContactsQuery = useQuery({
-    queryKey: ["broadcast", "contacts", "block", blockFilter],
-    queryFn: () => blockContactsFn({ data: { blockId: blockFilter } }),
-    enabled: blockFilter !== "todos",
+  // Página de contatos vinda do servidor: nunca carregamos milhares de linhas de uma vez.
+  const contactsPage = useQuery({
+    queryKey: ["broadcast", "campaign-contacts", blockFilter, contactPage, contactSearch],
+    queryFn: () =>
+      contactsPageFn({
+        data: {
+          blockId: blockFilter === "todos" ? null : blockFilter,
+          page: contactPage,
+          pageSize: CONTACT_PAGE_SIZE,
+          search: contactSearch.trim() || undefined,
+        },
+      }),
   });
-  const blockContacts = blockFilter === "todos" ? contacts : (blockContactsQuery.data ?? []);
-  const contactPool = (() => {
-    const map = new Map<string, Contact>();
-    for (const c of contacts) map.set(c.id, c);
-    for (const c of blockContacts) map.set(c.id, c);
-    return [...map.values()];
-  })();
+  const pageRows = contactsPage.data?.rows ?? [];
+  const totalContacts = contactsPage.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalContacts / CONTACT_PAGE_SIZE));
+
+  // Guarda apenas os dados dos contatos selecionados (nome / opt-in) para montar o público.
+  const [selectedInfo, setSelectedInfo] = useState<
+    Record<string, { name: string | null; opt_in: boolean }>
+  >({});
+
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
