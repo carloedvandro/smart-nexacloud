@@ -688,6 +688,7 @@ export const exportBroadcastContactBlock = createServerFn({ method: "POST" })
       .eq("company_id", access.companyId)
       .eq("block_id", data.blockId)
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .limit(CONTACT_BLOCK_CAPACITY);
     if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
     const { data: rows, error } = await query;
