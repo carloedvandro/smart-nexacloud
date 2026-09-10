@@ -716,6 +716,7 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
       .select("*")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(5000);
     // Operador enxerga apenas os contatos que ele mesmo cadastrou.
     if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
