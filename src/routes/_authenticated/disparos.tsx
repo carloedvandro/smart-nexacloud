@@ -851,6 +851,12 @@ function NewCampaignTab({
     Record<string, { name: string | null; opt_in: boolean }>
   >({});
 
+  // Volta para a primeira página sempre que muda o bloco ou a busca.
+  useEffect(() => {
+    setContactPage(1);
+  }, [blockFilter, contactSearch]);
+
+
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
