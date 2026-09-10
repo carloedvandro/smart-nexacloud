@@ -80,6 +80,8 @@ import {
   listBroadcastContacts,
   listBroadcastContactBlocks,
   listBroadcastContactsPage,
+  listBroadcastContactPicks,
+
   createBroadcastContactBlock,
   renameBroadcastContactBlock,
   deleteBroadcastContactBlock,
