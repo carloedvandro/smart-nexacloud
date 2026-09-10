@@ -641,9 +641,13 @@ export const listBroadcastContactsPage = createServerFn({ method: "POST" })
     const access = await requireAccess(ctx);
     const pageSize = Math.min(Math.max(data.pageSize ?? 10, 1), 100);
     const page = Math.max(data.page ?? 1, 1);
+    // Só as colunas usadas na tela: payload menor = paginação mais rápida.
     let query = ctx.supabase
       .from("broadcast_contacts")
-      .select("*", { count: "exact" })
+      .select(
+        "id,name,whatsapp,phone,company_name,tags,status,opt_in,source,block_id,created_at,created_by",
+        { count: "exact" },
+      )
       .eq("company_id", access.companyId)
       .order("created_at", { ascending: false });
     if (data.blockId) query = query.eq("block_id", data.blockId);
