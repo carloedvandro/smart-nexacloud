@@ -1143,7 +1143,12 @@ function NewCampaignTab({
                 </Button>
               ) : null}
             </div>
-            <div className="space-y-1 rounded-lg border border-border p-2">
+            <div className="relative min-h-[26rem] space-y-1 rounded-lg border border-border p-2">
+              {contactsPage.isFetching && !contactsPage.isLoading ? (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-lg bg-background/50 pt-16">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : null}
               {contactsPage.isLoading ? (
                 <p className="p-3 text-sm text-muted-foreground">Carregando contatos…</p>
               ) : pageRows.length === 0 ? (
