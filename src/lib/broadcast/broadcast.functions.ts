@@ -649,10 +649,8 @@ export const listBroadcastContactsPage = createServerFn({ method: "POST" })
         { count: "exact" },
       )
       .eq("company_id", access.companyId)
-      // Desempate por id: sem isso, contatos importados com o mesmo created_at
-      // trocam de posição entre páginas e alguns repetem/somem.
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      // Ordem fixa de cadastro: garante paginação estável, sem repetir contatos.
+      .order("seq", { ascending: true });
     if (data.blockId) query = query.eq("block_id", data.blockId);
     if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
 
@@ -687,8 +685,7 @@ export const exportBroadcastContactBlock = createServerFn({ method: "POST" })
       .select("*")
       .eq("company_id", access.companyId)
       .eq("block_id", data.blockId)
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true })
+      .order("seq", { ascending: true })
       .limit(CONTACT_BLOCK_CAPACITY);
     if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
     const { data: rows, error } = await query;
@@ -715,8 +712,7 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
       .from("broadcast_contacts")
       .select("*")
       .eq("company_id", companyId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
+      .order("seq", { ascending: true })
       .limit(5000);
     // Operador enxerga apenas os contatos que ele mesmo cadastrou.
     if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
