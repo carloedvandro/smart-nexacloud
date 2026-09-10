@@ -814,6 +814,7 @@ function NewCampaignTab({
   const getCampaignFn = useServerFn(getBroadcastCampaign);
   const deleteContactsFn = useServerFn(deleteBroadcastContacts);
   const campaignBlocksFn = useServerFn(listBroadcastContactBlocks);
+  const blockContactsFn = useServerFn(listBroadcastContacts);
   const [contactSearch, setContactSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState("todos");
 
@@ -822,10 +823,19 @@ function NewCampaignTab({
     queryFn: () => campaignBlocksFn(),
   });
   const blockOptions = campaignBlocks.data ?? [];
-  const blockContacts =
-    blockFilter === "todos"
-      ? contacts
-      : contacts.filter((c) => (c as { block_id?: string | null }).block_id === blockFilter);
+  // Contatos do bloco vêm direto do servidor: a lista geral pode não trazer todos.
+  const blockContactsQuery = useQuery({
+    queryKey: ["broadcast", "contacts", "block", blockFilter],
+    queryFn: () => blockContactsFn({ data: { blockId: blockFilter } }),
+    enabled: blockFilter !== "todos",
+  });
+  const blockContacts = blockFilter === "todos" ? contacts : (blockContactsQuery.data ?? []);
+  const contactPool = (() => {
+    const map = new Map<string, Contact>();
+    for (const c of contacts) map.set(c.id, c);
+    for (const c of blockContacts) map.set(c.id, c);
+    return [...map.values()];
+  })();
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
