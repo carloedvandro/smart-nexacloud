@@ -524,16 +524,21 @@ export async function respondWithAI(input: {
       (message.metadata as { origin?: string } | null)?.origin === "device",
   );
   // O eco do aparelho também traz de volta o que o PRÓPRIO sistema enviou
-  // (IA e mensagens automáticas, como a pesquisa de avaliação). Sem incluir
-  // "system" aqui, o eco da avaliação era lido como "consultor assumiu" e a
+  // (IA, mensagens automáticas como a pesquisa de avaliação e também o que o
+  // consultor escreveu pelo painel). Sem considerar tudo isso, um eco que chega
+  // depois da devolução para a IA era lido como "consultor assumiu agora" e a
   // Ana ficava 12h em silêncio mesmo sem nenhum humano na conversa.
-  const { data: aiReplies } = deviceReplies.length
+  const { data: systemSentRaw } = deviceReplies.length
     ? await supabaseAdmin
         .from("messages")
-        .select("content, message_type, created_at")
+        .select("content, message_type, created_at, sender_type, sender_id")
         .eq("conversation_id", conversationId)
-        .in("sender_type", ["ai", "system"])
+        .in("sender_type", ["ai", "system", "consultant", "admin"])
     : { data: [] };
+  const aiReplies = (systemSentRaw ?? []).filter(
+    (m) => m.sender_type === "ai" || m.sender_type === "system" || Boolean(m.sender_id),
+  );
+
 
   // A "tomada" humana vale enquanto o atendimento está em andamento. Depois de
   // muitas horas sem qualquer resposta humana, uma nova mensagem do cliente
