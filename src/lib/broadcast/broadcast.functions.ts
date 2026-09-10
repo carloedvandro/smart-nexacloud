@@ -794,10 +794,11 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
 
 export const importBroadcastContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { rows: BroadcastContactInput[] }) => data)
+  .inputValidator((data: { rows: BroadcastContactInput[]; blockId?: string | null }) => data)
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
-    const { companyId, userName } = await requireAccess(ctx);
+    const access = await requireAccess(ctx);
+    const { companyId, userName } = access;
 
     const seen = new Set<string>();
     const payload: Record<string, unknown>[] = [];
