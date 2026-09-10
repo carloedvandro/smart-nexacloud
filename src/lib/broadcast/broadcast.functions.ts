@@ -649,7 +649,10 @@ export const listBroadcastContactsPage = createServerFn({ method: "POST" })
         { count: "exact" },
       )
       .eq("company_id", access.companyId)
-      .order("created_at", { ascending: false });
+      // Desempate por id: sem isso, contatos importados com o mesmo created_at
+      // trocam de posição entre páginas e alguns repetem/somem.
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
     if (data.blockId) query = query.eq("block_id", data.blockId);
     if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
 
