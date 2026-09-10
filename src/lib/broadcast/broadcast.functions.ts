@@ -825,7 +825,8 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
         created_by: ctx.userId,
       });
     }
-    if (!payload.length) return { imported: 0, invalid, duplicates: [] as DuplicateInfo[] };
+    if (!payload.length)
+      return { imported: 0, invalid, duplicates: [] as DuplicateInfo[], blocks: 0 };
 
     // Duplicados não bloqueiam: importa tudo e apenas informa de quem já são.
     const numbers = payload.map((p) => p["whatsapp"] as string);
