@@ -813,7 +813,19 @@ function NewCampaignTab({
   const startFn = useServerFn(startBroadcastCampaign);
   const getCampaignFn = useServerFn(getBroadcastCampaign);
   const deleteContactsFn = useServerFn(deleteBroadcastContacts);
+  const campaignBlocksFn = useServerFn(listBroadcastContactBlocks);
   const [contactSearch, setContactSearch] = useState("");
+  const [blockFilter, setBlockFilter] = useState("todos");
+
+  const campaignBlocks = useQuery({
+    queryKey: ["broadcast", "contact-blocks"],
+    queryFn: () => campaignBlocksFn(),
+  });
+  const blockOptions = campaignBlocks.data ?? [];
+  const blockContacts =
+    blockFilter === "todos"
+      ? contacts
+      : contacts.filter((c) => (c as { block_id?: string | null }).block_id === blockFilter);
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
