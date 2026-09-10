@@ -50,7 +50,7 @@ async function requireAccess(context: Ctx): Promise<BroadcastAccess> {
     return null;
   }
 
-  const [adminRpc, platformRpc, profile, { data: roleRows }] = await Promise.all([
+  const [adminRpc, platformRpc, profile, rolesRes] = await Promise.all([
     context.supabase.rpc("is_company_admin"),
     context.supabase.rpc("is_platform_admin"),
     loadProfile(),
@@ -62,8 +62,7 @@ async function requireAccess(context: Ctx): Promise<BroadcastAccess> {
   const companyId = profile.company_id as string;
   const userName = (profile.full_name ?? profile.email ?? null) as string | null;
 
-
-  const roles = (roleRows ?? []).map((r: { role: string }) => r.role);
+  const roles = (rolesRes?.data ?? []).map((r: { role: string }) => r.role);
   const isAdmin = adminRpc.data === true || roles.includes("ADMIN");
   const isPlatformAdmin = platformRpc.data === true || roles.includes("PLATFORM_ADMIN");
 
@@ -71,11 +70,20 @@ async function requireAccess(context: Ctx): Promise<BroadcastAccess> {
     return { companyId, userName, isAdmin: true, instanceIds: [] };
   }
 
-  const { data: grants } = await context.supabase
+  // Quando o banco recusa a leitura de papéis/liberações (pool cheio), não dá
+  // para concluir que a pessoa não tem acesso — isso seria um bloqueio falso.
+  if (rolesRes?.error && adminRpc.error && platformRpc.error) {
+    throw new Error("O sistema está sobrecarregado neste momento. Tente novamente.");
+  }
+
+  const { data: grants, error: grantsError } = await context.supabase
     .from("broadcast_access")
     .select("connection_id")
     .eq("user_id", context.userId)
     .eq("company_id", companyId);
+  if (grantsError) {
+    throw new Error("O sistema está sobrecarregado neste momento. Tente novamente.");
+  }
   const instanceIds = (grants ?? []).map((g: { connection_id: string }) => g.connection_id);
   if (!instanceIds.length) {
     throw new Error("Você não tem acesso ao módulo de Disparos.");
