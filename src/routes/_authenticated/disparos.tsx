@@ -1676,6 +1676,9 @@ function ContactBlockCard({ block, status }: { block: ContactBlock; status: stri
           ...(status !== "todos" ? { status } : {}),
         },
       }),
+    // Mantém a página anterior visível enquanto a próxima carrega.
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   function refresh() {
