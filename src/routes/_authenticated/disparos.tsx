@@ -832,8 +832,10 @@ function NewCampaignTab({
           pageSize: CONTACT_PAGE_SIZE,
           ...(contactSearch.trim() ? { search: contactSearch.trim() } : {}),
         },
-
       }),
+    // Não esvazia a lista ao trocar de página: mantém o conteúdo e mostra o giro.
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
   const pageRows = contactsPage.data?.rows ?? [];
   const totalContacts = contactsPage.data?.total ?? 0;
