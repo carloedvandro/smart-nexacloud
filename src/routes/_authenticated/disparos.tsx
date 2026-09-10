@@ -934,7 +934,7 @@ function NewCampaignTab({
           name,
           instanceId,
           messageId,
-          contactIds: audience.map((c) => c.id),
+          contactIds: audience,
           requireOptIn,
           messagesPerMinute: perMinute,
           minIntervalSeconds: minInterval,
