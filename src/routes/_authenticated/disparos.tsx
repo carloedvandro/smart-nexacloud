@@ -814,6 +814,7 @@ function NewCampaignTab({
   const getCampaignFn = useServerFn(getBroadcastCampaign);
   const deleteContactsFn = useServerFn(deleteBroadcastContacts);
   const campaignBlocksFn = useServerFn(listBroadcastContactBlocks);
+  const blockContactsFn = useServerFn(listBroadcastContacts);
   const [contactSearch, setContactSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState("todos");
 
@@ -822,10 +823,19 @@ function NewCampaignTab({
     queryFn: () => campaignBlocksFn(),
   });
   const blockOptions = campaignBlocks.data ?? [];
-  const blockContacts =
-    blockFilter === "todos"
-      ? contacts
-      : contacts.filter((c) => (c as { block_id?: string | null }).block_id === blockFilter);
+  // Contatos do bloco vêm direto do servidor: a lista geral pode não trazer todos.
+  const blockContactsQuery = useQuery({
+    queryKey: ["broadcast", "contacts", "block", blockFilter],
+    queryFn: () => blockContactsFn({ data: { blockId: blockFilter } }),
+    enabled: blockFilter !== "todos",
+  });
+  const blockContacts = blockFilter === "todos" ? contacts : (blockContactsQuery.data ?? []);
+  const contactPool = (() => {
+    const map = new Map<string, Contact>();
+    for (const c of contacts) map.set(c.id, c);
+    for (const c of blockContacts) map.set(c.id, c);
+    return [...map.values()];
+  })();
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
@@ -871,7 +881,7 @@ function NewCampaignTab({
   }, [editingId, getCampaignFn]);
 
   const message = messages.find((m) => m.id === messageId);
-  const audience = contacts.filter(
+  const audience = contactPool.filter(
     (c) => selected.includes(c.id) && c.status === "ATIVO" && (!requireOptIn || c.opt_in),
   );
   const preview = message
@@ -1089,7 +1099,9 @@ function NewCampaignTab({
               ) : null}
             </div>
             <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-              {blockContacts.length === 0 ? (
+              {blockFilter !== "todos" && blockContactsQuery.isLoading ? (
+                <p className="p-3 text-sm text-muted-foreground">Carregando contatos do bloco…</p>
+              ) : blockContacts.length === 0 ? (
                 <p className="p-3 text-sm text-muted-foreground">
                   {contacts.length === 0
                     ? "Cadastre contatos na aba “Contatos”."
