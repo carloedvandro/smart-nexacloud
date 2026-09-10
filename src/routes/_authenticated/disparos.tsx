@@ -896,16 +896,16 @@ function NewCampaignTab({
   }, [editingId, getCampaignFn]);
 
   const message = messages.find((m) => m.id === messageId);
-  const audience = contactPool.filter(
-    (c) => selected.includes(c.id) && c.status === "ATIVO" && (!requireOptIn || c.opt_in),
-  );
+  const audience = selected.filter((id) => {
+    const info = selectedInfo[id];
+    return !requireOptIn || !info || info.opt_in;
+  });
+  const firstName = selectedInfo[audience[0] ?? ""]?.name?.trim() || "cliente";
   const preview = message
     ? (message.content ?? "")
-        .replace(/\{\{nome\}\}/g, audience[0]?.name?.trim() || "cliente")
-        .replace(
-          /\{\{primeiro_nome\}\}/g,
-          (audience[0]?.name?.trim() || "cliente").split(" ")[0] ?? "cliente",
-        )
+        .replace(/\{\{nome\}\}/g, firstName)
+        .replace(/\{\{primeiro_nome\}\}/g, firstName.split(" ")[0] ?? "cliente")
+
     : "";
 
   async function submit(startNow: boolean) {
