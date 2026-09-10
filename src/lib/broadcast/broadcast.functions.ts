@@ -752,7 +752,7 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
       warning = `Este contato já está no disparo de ${owners.join(", ")}.`;
     }
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       company_id: companyId,
       name: data.name ?? null,
       phone: whatsapp,
@@ -766,6 +766,11 @@ export const saveBroadcastContact = createServerFn({ method: "POST" })
       opt_in_source: data.optInSource ?? null,
       created_by: ctx.userId,
     };
+    if (!data.id) {
+      payload["block_id"] = await resolveBlockFor(ctx, access, data.blockId ?? null, 1);
+    } else if (data.blockId) {
+      payload["block_id"] = data.blockId;
+    }
 
     if (data.id) {
       const { error } = await ctx.supabase
