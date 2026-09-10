@@ -851,6 +851,25 @@ function NewCampaignTab({
     setContactPage(1);
   }, [blockFilter, contactSearch]);
 
+  // Adianta a próxima página em segundo plano para o clique em "Próxima" ser instantâneo.
+  useEffect(() => {
+    if (contactPage >= totalPages) return;
+    const next = contactPage + 1;
+    void queryClient.prefetchQuery({
+      queryKey: ["broadcast", "campaign-contacts", blockFilter, next, contactSearch],
+      queryFn: () =>
+        contactsPageFn({
+          data: {
+            blockId: blockFilter === "todos" ? null : blockFilter,
+            page: next,
+            pageSize: CONTACT_PAGE_SIZE,
+            ...(contactSearch.trim() ? { search: contactSearch.trim() } : {}),
+          },
+        }),
+      staleTime: 30_000,
+    });
+  }, [contactPage, totalPages, blockFilter, contactSearch, queryClient, contactsPageFn]);
+
 
 
   const [name, setName] = useState("");
