@@ -716,6 +716,41 @@ async function runRespondWithAI(input: {
   const humanRequestAlreadyRegistered = explicitHumanRequest && humanRequestOpen;
   const effectiveHumanRequest = explicitHumanRequest && !humanRequestAlreadyRegistered;
 
+  // Dizer "seu pedido já está registrado" e deixar o card em "Em qualificação
+  // (IA)" é contraditório: o administrador não vê ninguém esperando. Sempre que
+  // a IA reconhece o pedido, o lead e a conversa vão para "Aguardando consultor"
+  // e tentamos enfileirar de novo — se alguém ficou livre, ele recebe a oferta.
+  if (humanRequestAlreadyRegistered) {
+    const { data: waitingConv } = await supabaseAdmin
+      .from("conversations")
+      .select("lead_id")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (waitingConv?.lead_id) {
+      await supabaseAdmin
+        .from("leads")
+        .update({ status: "WAITING_HUMAN" })
+        .eq("id", waitingConv.lead_id)
+        .eq("company_id", companyId)
+        .in("status", ["NEW", "AI_QUALIFYING", "QUALIFIED", "WAITING_CUSTOMER"]);
+    }
+    await supabaseAdmin
+      .from("conversations")
+      .update({ status: "WAITING_HUMAN" })
+      .eq("id", conversationId)
+      .eq("company_id", companyId)
+      .in("status", ["AI_ACTIVE", "WAITING_CUSTOMER"]);
+    const { error: requeueError } = await supabaseAdmin.rpc("enqueue_conversation", {
+      _conversation_id: conversationId,
+      _reason: "pedido de atendimento humano reiterado",
+    });
+    if (requeueError) log(`refila ignorada: ${requeueError.message}`);
+    else {
+      const { notifyQueueOffers } = await import("@/lib/queue/bridge.server");
+      await notifyQueueOffers(companyId).catch(() => undefined);
+    }
+  }
+
   // Anti-loop: outro robô/IA do outro lado responderia para sempre. Paramos
   // assim que o interlocutor se identifica como automático, ou quando a troca
   // fica longa demais para um atendimento humano real.
