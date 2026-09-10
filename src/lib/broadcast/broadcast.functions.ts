@@ -30,14 +30,30 @@ export type BroadcastAccess = {
  * A RLS do banco repete as mesmas regras — esconder botões nunca é a proteção.
  */
 async function requireAccess(context: Ctx): Promise<BroadcastAccess> {
-  const [adminRpc, platformRpc, { data: profile }, { data: roleRows }] = await Promise.all([
+  // O banco pode recusar conexões por instantes (pool cheio). Nesses casos a
+  // consulta volta vazia e o usuário via "Usuário sem empresa" sem motivo.
+  async function loadProfile() {
+    let last: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const { data, error } = await context.supabase
+        .from("profiles")
+        .select("company_id, full_name, email")
+        .eq("id", context.userId)
+        .maybeSingle();
+      if (data?.company_id) return data;
+      last = error;
+      await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    }
+    if (last) {
+      throw new Error("O sistema está sobrecarregado neste momento. Tente novamente.");
+    }
+    return null;
+  }
+
+  const [adminRpc, platformRpc, profile, { data: roleRows }] = await Promise.all([
     context.supabase.rpc("is_company_admin"),
     context.supabase.rpc("is_platform_admin"),
-    context.supabase
-      .from("profiles")
-      .select("company_id, full_name, email")
-      .eq("id", context.userId)
-      .maybeSingle(),
+    loadProfile(),
     // Rede de segurança: se a função do banco não puder ser chamada, o papel
     // ainda é lido direto da tabela de papéis.
     context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
@@ -45,6 +61,7 @@ async function requireAccess(context: Ctx): Promise<BroadcastAccess> {
   if (!profile?.company_id) throw new Error("Usuário sem empresa.");
   const companyId = profile.company_id as string;
   const userName = (profile.full_name ?? profile.email ?? null) as string | null;
+
 
   const roles = (roleRows ?? []).map((r: { role: string }) => r.role);
   const isAdmin = adminRpc.data === true || roles.includes("ADMIN");
