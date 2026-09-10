@@ -845,22 +845,36 @@ export const importBroadcastContacts = createServerFn({ method: "POST" })
       whatsapp: row.whatsapp as string,
       owner: names[row.created_by as string] ?? "outro usuário",
     }));
-    const toImport = payload;
-
-    if (toImport.length) {
+    // Grava em blocos de até 1000; quando o bloco enche, cria o próximo.
+    const remaining = [...payload];
+    let imported = 0;
+    const blocksUsed: string[] = [];
+    let targetId = await resolveBlockFor(ctx, access, data.blockId ?? null, 1);
+    while (remaining.length) {
+      const free = CONTACT_BLOCK_CAPACITY - (await blockCount(ctx, targetId));
+      if (free <= 0) {
+        targetId = (await createBlock(ctx, access)).id;
+        continue;
+      }
+      const chunk = remaining
+        .splice(0, free)
+        .map((row) => ({ ...row, block_id: targetId }));
       const { error } = await ctx.supabase
         .from("broadcast_contacts")
-        .upsert(toImport, { onConflict: "company_id,created_by,whatsapp" });
+        .upsert(chunk, { onConflict: "company_id,created_by,whatsapp" });
       if (error) throw new Error(error.message);
+      imported += chunk.length;
+      if (!blocksUsed.includes(targetId)) blocksUsed.push(targetId);
+      if (remaining.length) targetId = (await createBlock(ctx, access)).id;
     }
 
-
     await log(ctx, companyId, userName, "CONTACTS_IMPORTED", null, {
-      total: toImport.length,
+      total: imported,
       invalidos: invalid,
       duplicados: duplicates.length,
+      blocos: blocksUsed.length,
     });
-    return { imported: toImport.length, invalid, duplicates };
+    return { imported, invalid, duplicates, blocks: blocksUsed.length };
   });
 
 export const deleteBroadcastContacts = createServerFn({ method: "POST" })
