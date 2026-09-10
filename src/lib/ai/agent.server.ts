@@ -416,6 +416,10 @@ async function handoff(
 /**
  * Gera e envia a resposta da IA para uma mensagem recebida.
  * Nunca lança: qualquer falha resulta em transferência para humano.
+ *
+ * Toda vez que a IA decide NÃO responder, o motivo fica registrado no
+ * histórico da conversa (evento AI_SKIPPED) — assim dá para ver depois por
+ * que o cliente ficou sem resposta.
  */
 export async function respondWithAI(input: {
   companyId: string;
@@ -423,7 +427,31 @@ export async function respondWithAI(input: {
   leadId: string | null;
   connectionId: string;
 }): Promise<{ status: "skipped" | "replied" | "handoff"; reason?: string }> {
+  const result = await runRespondWithAI(input);
+  if (result.status === "skipped") {
+    await supabaseAdmin
+      .from("conversation_events")
+      .insert({
+        company_id: input.companyId,
+        conversation_id: input.conversationId,
+        event_type: "AI_SKIPPED",
+        metadata: { reason: result.reason ?? "desconhecido" },
+      })
+      .then(({ error }) => {
+        if (error) console.error("[ia] falha ao registrar motivo do silêncio", error.message);
+      });
+  }
+  return result;
+}
+
+async function runRespondWithAI(input: {
+  companyId: string;
+  conversationId: string;
+  leadId: string | null;
+  connectionId: string;
+}): Promise<{ status: "skipped" | "replied" | "handoff"; reason?: string }> {
   const { companyId, conversationId, connectionId } = input;
+
 
   const log = (...args: unknown[]) => console.info("[ia]", conversationId, ...args);
 
@@ -524,16 +552,21 @@ export async function respondWithAI(input: {
       (message.metadata as { origin?: string } | null)?.origin === "device",
   );
   // O eco do aparelho também traz de volta o que o PRÓPRIO sistema enviou
-  // (IA e mensagens automáticas, como a pesquisa de avaliação). Sem incluir
-  // "system" aqui, o eco da avaliação era lido como "consultor assumiu" e a
+  // (IA, mensagens automáticas como a pesquisa de avaliação e também o que o
+  // consultor escreveu pelo painel). Sem considerar tudo isso, um eco que chega
+  // depois da devolução para a IA era lido como "consultor assumiu agora" e a
   // Ana ficava 12h em silêncio mesmo sem nenhum humano na conversa.
-  const { data: aiReplies } = deviceReplies.length
+  const { data: systemSentRaw } = deviceReplies.length
     ? await supabaseAdmin
         .from("messages")
-        .select("content, message_type, created_at")
+        .select("content, message_type, created_at, sender_type, sender_id")
         .eq("conversation_id", conversationId)
-        .in("sender_type", ["ai", "system"])
+        .in("sender_type", ["ai", "system", "consultant", "admin"])
     : { data: [] };
+  const aiReplies = (systemSentRaw ?? []).filter(
+    (m) => m.sender_type === "ai" || m.sender_type === "system" || Boolean(m.sender_id),
+  );
+
 
   // A "tomada" humana vale enquanto o atendimento está em andamento. Depois de
   // muitas horas sem qualquer resposta humana, uma nova mensagem do cliente
@@ -550,7 +583,8 @@ export async function respondWithAI(input: {
     return !(aiReplies ?? []).some((ai) => {
       const closeInTime =
         Math.abs(new Date(ai.created_at).getTime() - new Date(message.created_at).getTime()) <=
-        120_000;
+        600_000;
+
       const samePayload =
         ai.message_type === message.message_type &&
         (message.message_type !== "text" ||
