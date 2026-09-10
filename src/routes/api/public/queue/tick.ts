@@ -188,12 +188,18 @@ async function coolDownIdleHumanRequests(): Promise<void> {
   const since = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
   const convIds = conversations.map((c) => c.id);
 
+  // O pedido de humano "esfria" o card só enquanto ele é recente. Antes a
+  // janela era de 24h: um rodízio esgotado de madrugada jogava o lead de volta
+  // para "Aguardando consultor" horas depois, mesmo com o administrador tendo
+  // devolvido o card para a IA e o cliente só dizendo "ok, obrigado".
+  const exhaustionSince = new Date(Date.now() - 20 * 60_000).toISOString();
+
   const { data: exhausted } = await supabaseAdmin
     .from("conversation_events")
     .select("conversation_id, created_at")
     .eq("event_type", "QUEUE_NO_CONSULTANT")
     .in("conversation_id", convIds)
-    .gte("created_at", since);
+    .gte("created_at", exhaustionSince);
 
   // Devolução deliberada para a IA (arrastar o card para "Em qualificação (IA)")
   // encerra o pedido humano: o card não pode voltar sozinho para "Aguardando
