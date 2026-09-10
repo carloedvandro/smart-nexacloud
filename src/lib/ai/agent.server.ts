@@ -416,6 +416,10 @@ async function handoff(
 /**
  * Gera e envia a resposta da IA para uma mensagem recebida.
  * Nunca lança: qualquer falha resulta em transferência para humano.
+ *
+ * Toda vez que a IA decide NÃO responder, o motivo fica registrado no
+ * histórico da conversa (evento AI_SKIPPED) — assim dá para ver depois por
+ * que o cliente ficou sem resposta.
  */
 export async function respondWithAI(input: {
   companyId: string;
@@ -423,7 +427,31 @@ export async function respondWithAI(input: {
   leadId: string | null;
   connectionId: string;
 }): Promise<{ status: "skipped" | "replied" | "handoff"; reason?: string }> {
+  const result = await runRespondWithAI(input);
+  if (result.status === "skipped") {
+    await supabaseAdmin
+      .from("conversation_events")
+      .insert({
+        company_id: input.companyId,
+        conversation_id: input.conversationId,
+        event_type: "AI_SKIPPED",
+        metadata: { reason: result.reason ?? "desconhecido" },
+      })
+      .then(({ error }) => {
+        if (error) console.error("[ia] falha ao registrar motivo do silêncio", error.message);
+      });
+  }
+  return result;
+}
+
+async function runRespondWithAI(input: {
+  companyId: string;
+  conversationId: string;
+  leadId: string | null;
+  connectionId: string;
+}): Promise<{ status: "skipped" | "replied" | "handoff"; reason?: string }> {
   const { companyId, conversationId, connectionId } = input;
+
 
   const log = (...args: unknown[]) => console.info("[ia]", conversationId, ...args);
 
