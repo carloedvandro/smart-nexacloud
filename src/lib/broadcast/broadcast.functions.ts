@@ -374,10 +374,273 @@ async function ownerNames(ctx: Ctx, ids: string[]): Promise<Record<string, strin
   return map;
 }
 
+/** Limite de contatos por bloco. Blocos podem ser criados sem limite. */
+export const CONTACT_BLOCK_CAPACITY = 1000;
+
+/** Operador só enxerga os próprios blocos; administrador vê os da empresa. */
+function blockScope(query: any, access: BroadcastAccess, ctx: Ctx) {
+  return access.isAdmin ? query : query.eq("created_by", ctx.userId);
+}
+
+async function blockCount(ctx: Ctx, blockId: string): Promise<number> {
+  const { count } = await ctx.supabase
+    .from("broadcast_contacts")
+    .select("id", { count: "exact", head: true })
+    .eq("block_id", blockId);
+  return count ?? 0;
+}
+
+async function createBlock(ctx: Ctx, access: BroadcastAccess, name?: string) {
+  let finalName = name?.trim();
+  if (!finalName) {
+    const { count } = await blockScope(
+      ctx.supabase
+        .from("broadcast_contact_blocks")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", access.companyId),
+      access,
+      ctx,
+    );
+    finalName = `Bloco ${(count ?? 0) + 1}`;
+  }
+  const { data, error } = await ctx.supabase
+    .from("broadcast_contact_blocks")
+    .insert({ company_id: access.companyId, name: finalName, created_by: ctx.userId })
+    .select("id, name")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as { id: string; name: string };
+}
+
+/** Garante um bloco com espaço para `needed` contatos, criando novos quando encher. */
+async function resolveBlockFor(
+  ctx: Ctx,
+  access: BroadcastAccess,
+  blockId: string | null | undefined,
+  needed: number,
+): Promise<string> {
+  if (blockId) {
+    const { data: block } = await blockScope(
+      ctx.supabase
+        .from("broadcast_contact_blocks")
+        .select("id")
+        .eq("id", blockId)
+        .eq("company_id", access.companyId),
+      access,
+      ctx,
+    ).maybeSingle();
+    if (!block) throw new Error("Bloco inexistente ou fora do seu acesso.");
+    const used = await blockCount(ctx, blockId);
+    if (used + needed > CONTACT_BLOCK_CAPACITY) {
+      throw new Error(
+        `Este bloco já tem ${used} de ${CONTACT_BLOCK_CAPACITY} contatos. Crie um novo bloco.`,
+      );
+    }
+    return blockId;
+  }
+  // Sem bloco escolhido: usa o último com espaço ou cria um novo.
+  const { data: blocks } = await blockScope(
+    ctx.supabase
+      .from("broadcast_contact_blocks")
+      .select("id")
+      .eq("company_id", access.companyId)
+      .order("created_at", { ascending: false }),
+    access,
+    ctx,
+  );
+  for (const block of (blocks ?? []) as { id: string }[]) {
+    const used = await blockCount(ctx, block.id);
+    if (used + needed <= CONTACT_BLOCK_CAPACITY) return block.id;
+  }
+  const created = await createBlock(ctx, access);
+  return created.id;
+}
+
+export const listBroadcastContactBlocks = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    const { data, error } = await blockScope(
+      ctx.supabase
+        .from("broadcast_contact_blocks")
+        .select("*")
+        .eq("company_id", access.companyId)
+        .order("created_at", { ascending: true }),
+      access,
+      ctx,
+    );
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Record<string, any>[];
+    const owners = await ownerNames(
+      ctx,
+      rows.map((r) => r["created_by"] as string),
+    );
+    return Promise.all(
+      rows.map(async (row) => ({
+        id: row["id"] as string,
+        name: row["name"] as string,
+        created_by: (row["created_by"] ?? null) as string | null,
+        ownerName: owners[row["created_by"] as string] ?? "Sem responsável",
+        created_at: row["created_at"] as string,
+        total: await blockCount(ctx, row["id"] as string),
+        capacity: CONTACT_BLOCK_CAPACITY,
+      })),
+    );
+  });
+
+export const createBroadcastContactBlock = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { name?: string }) => data ?? {})
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    const block = await createBlock(ctx, access, data.name);
+    await log(ctx, access.companyId, access.userName, "CONTACT_BLOCK_CREATED", null, {
+      bloco: block.name,
+    });
+    return block;
+  });
+
+export const renameBroadcastContactBlock = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { id: string; name: string }) => {
+    if (!data.name?.trim()) throw new Error("Informe o nome do bloco.");
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    const { error } = await blockScope(
+      ctx.supabase
+        .from("broadcast_contact_blocks")
+        .update({ name: data.name.trim() })
+        .eq("id", data.id)
+        .eq("company_id", access.companyId),
+      access,
+      ctx,
+    );
+    if (error) throw new Error(error.message);
+    await log(ctx, access.companyId, access.userName, "CONTACT_BLOCK_RENAMED", null, {
+      bloco: data.name.trim(),
+    });
+    return { ok: true };
+  });
+
+export const deleteBroadcastContactBlock = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { id: string; onlyContacts?: boolean }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    const { data: block } = await blockScope(
+      ctx.supabase
+        .from("broadcast_contact_blocks")
+        .select("id, name")
+        .eq("id", data.id)
+        .eq("company_id", access.companyId),
+      access,
+      ctx,
+    ).maybeSingle();
+    if (!block) throw new Error("Bloco inexistente ou fora do seu acesso.");
+
+    let contacts = ctx.supabase.from("broadcast_contacts").delete().eq("block_id", data.id);
+    if (!access.isAdmin) contacts = contacts.eq("created_by", ctx.userId);
+    const { error: delError } = await contacts;
+    if (delError) throw new Error(delError.message);
+
+    if (!data.onlyContacts) {
+      const { error } = await ctx.supabase
+        .from("broadcast_contact_blocks")
+        .delete()
+        .eq("id", data.id)
+        .eq("company_id", access.companyId);
+      if (error) throw new Error(error.message);
+    }
+    await log(
+      ctx,
+      access.companyId,
+      access.userName,
+      data.onlyContacts ? "CONTACT_BLOCK_CLEARED" : "CONTACT_BLOCK_DELETED",
+      null,
+      { bloco: (block as { name: string }).name },
+    );
+    return { ok: true };
+  });
+
+/** Lista paginada de um bloco (usada na aba Contatos). */
+export const listBroadcastContactsPage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (data: {
+      blockId: string;
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      status?: string;
+    }) => data,
+  )
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    const pageSize = Math.min(Math.max(data.pageSize ?? 10, 1), 100);
+    const page = Math.max(data.page ?? 1, 1);
+    let query = ctx.supabase
+      .from("broadcast_contacts")
+      .select("*", { count: "exact" })
+      .eq("company_id", access.companyId)
+      .eq("block_id", data.blockId)
+      .order("created_at", { ascending: false });
+    if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
+    if (data.status) query = query.eq("status", data.status);
+    if (data.search?.trim()) {
+      const term = data.search.trim();
+      const digits = term.replace(/\D/g, "");
+      const parts = [`name.ilike.%${term}%`, `company_name.ilike.%${term}%`];
+      if (digits) parts.push(`whatsapp.ilike.%${digits}%`, `phone.ilike.%${digits}%`);
+      query = query.or(parts.join(","));
+    }
+    const from = (page - 1) * pageSize;
+    const { data: rows, count, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    return {
+      rows: (rows ?? []) as BroadcastContactRow[],
+      total: count ?? 0,
+      page,
+      pageSize,
+    };
+  });
+
+/** Todos os contatos de um bloco, para gerar o CSV. */
+export const exportBroadcastContactBlock = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { blockId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    let query = ctx.supabase
+      .from("broadcast_contacts")
+      .select("*")
+      .eq("company_id", access.companyId)
+      .eq("block_id", data.blockId)
+      .order("created_at", { ascending: true })
+      .limit(CONTACT_BLOCK_CAPACITY);
+    if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
+    const { data: rows, error } = await query;
+    if (error) throw new Error(error.message);
+    return (rows ?? []) as BroadcastContactRow[];
+  });
+
 export const listBroadcastContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (data: { search?: string; status?: string; tag?: string; optIn?: boolean }) => data ?? {},
+    (data: {
+      search?: string;
+      status?: string;
+      tag?: string;
+      optIn?: boolean;
+      blockId?: string;
+    }) => data ?? {},
   )
   .handler(async ({ data, context }) => {
     const ctx = context as unknown as Ctx;
@@ -388,11 +651,13 @@ export const listBroadcastContacts = createServerFn({ method: "POST" })
       .select("*")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
-      .limit(1000);
+      .limit(5000);
     // Operador enxerga apenas os contatos que ele mesmo cadastrou.
     if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
+    if (data.blockId) query = query.eq("block_id", data.blockId);
 
     if (data.status) query = query.eq("status", data.status);
+
     if (typeof data.optIn === "boolean") query = query.eq("opt_in", data.optIn);
     if (data.tag) query = query.contains("tags", [data.tag]);
     if (data.search?.trim()) {
