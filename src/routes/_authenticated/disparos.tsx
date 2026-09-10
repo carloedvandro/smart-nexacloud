@@ -832,8 +832,10 @@ function NewCampaignTab({
           pageSize: CONTACT_PAGE_SIZE,
           ...(contactSearch.trim() ? { search: contactSearch.trim() } : {}),
         },
-
       }),
+    // Não esvazia a lista ao trocar de página: mantém o conteúdo e mostra o giro.
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
   const pageRows = contactsPage.data?.rows ?? [];
   const totalContacts = contactsPage.data?.total ?? 0;
@@ -848,6 +850,25 @@ function NewCampaignTab({
   useEffect(() => {
     setContactPage(1);
   }, [blockFilter, contactSearch]);
+
+  // Adianta a próxima página em segundo plano para o clique em "Próxima" ser instantâneo.
+  useEffect(() => {
+    if (contactPage >= totalPages) return;
+    const next = contactPage + 1;
+    void queryClient.prefetchQuery({
+      queryKey: ["broadcast", "campaign-contacts", blockFilter, next, contactSearch],
+      queryFn: () =>
+        contactsPageFn({
+          data: {
+            blockId: blockFilter === "todos" ? null : blockFilter,
+            page: next,
+            pageSize: CONTACT_PAGE_SIZE,
+            ...(contactSearch.trim() ? { search: contactSearch.trim() } : {}),
+          },
+        }),
+      staleTime: 30_000,
+    });
+  }, [contactPage, totalPages, blockFilter, contactSearch, queryClient, contactsPageFn]);
 
 
 
@@ -1141,7 +1162,12 @@ function NewCampaignTab({
                 </Button>
               ) : null}
             </div>
-            <div className="space-y-1 rounded-lg border border-border p-2">
+            <div className="relative min-h-[26rem] space-y-1 rounded-lg border border-border p-2">
+              {contactsPage.isFetching && !contactsPage.isLoading ? (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-lg bg-background/50 pt-16">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : null}
               {contactsPage.isLoading ? (
                 <p className="p-3 text-sm text-muted-foreground">Carregando contatos…</p>
               ) : pageRows.length === 0 ? (
@@ -1676,6 +1702,9 @@ function ContactBlockCard({ block, status }: { block: ContactBlock; status: stri
           ...(status !== "todos" ? { status } : {}),
         },
       }),
+    // Mantém a página anterior visível enquanto a próxima carrega.
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   function refresh() {
@@ -1789,7 +1818,12 @@ function ContactBlockCard({ block, status }: { block: ContactBlock; status: stri
           }}
         />
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="relative space-y-2">
+        {contacts.isFetching && !contacts.isLoading ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-lg bg-background/50 pt-10">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : null}
         {contacts.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : rows.length === 0 ? (
