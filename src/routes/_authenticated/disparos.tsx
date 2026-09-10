@@ -77,7 +77,6 @@ import {
   getBroadcastSettings,
   importBroadcastContacts,
   listBroadcastCampaigns,
-  listBroadcastContacts,
   listBroadcastContactBlocks,
   listBroadcastContactsPage,
   listBroadcastContactPicks,
@@ -228,7 +227,6 @@ function DisparosPage({ isAdmin }: { isAdmin: boolean }) {
   const overviewFn = useServerFn(getBroadcastOverview);
   const campaignsFn = useServerFn(listBroadcastCampaigns);
   const instancesFn = useServerFn(listBroadcastInstances);
-  const contactsFn = useServerFn(listBroadcastContacts);
   const messagesFn = useServerFn(listBroadcastMessages);
   const stopAllFn = useServerFn(stopAllBroadcasts);
 
@@ -242,10 +240,6 @@ function DisparosPage({ isAdmin }: { isAdmin: boolean }) {
     queryFn: () => instancesFn({}),
   });
   const messages = useQuery({ queryKey: ["broadcast", "messages"], queryFn: () => messagesFn({}) });
-  const contacts = useQuery({
-    queryKey: ["broadcast", "contacts"],
-    queryFn: () => contactsFn({ data: {} }),
-  });
 
   // Tempo real: progresso, pausas e conclusões chegam sem atualizar a página.
   useEffect(() => {
@@ -351,7 +345,7 @@ function DisparosPage({ isAdmin }: { isAdmin: boolean }) {
           <NewCampaignTab
             instances={broadcastInstances}
             messages={messages.data ?? []}
-            contacts={contacts.data ?? []}
+            contactsTotal={overview.data?.contacts.total ?? 0}
             settings={overview.data?.settings}
             editingId={editingCampaignId}
             onCreated={() => {
@@ -793,19 +787,18 @@ function CampaignsTab({
 
 type Instance = Awaited<ReturnType<typeof listBroadcastInstances>>[number];
 type Message = Awaited<ReturnType<typeof listBroadcastMessages>>[number];
-type Contact = Awaited<ReturnType<typeof listBroadcastContacts>>[number];
 
 function NewCampaignTab({
   instances,
   messages,
-  contacts,
+  contactsTotal,
   settings,
   editingId,
   onCreated,
 }: {
   instances: Instance[];
   messages: Message[];
-  contacts: Contact[];
+  contactsTotal: number;
   settings: Overview["settings"] | undefined;
   editingId: string | null;
   onCreated: () => void;
@@ -1068,7 +1061,7 @@ function NewCampaignTab({
                   <SelectValue placeholder="Todos os blocos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos os blocos ({contacts.length})</SelectItem>
+                  <SelectItem value="todos">Todos os blocos ({contactsTotal})</SelectItem>
                   {blockOptions.map((block) => (
                     <SelectItem key={block.id} value={block.id}>
                       {block.name} ({block.total})
