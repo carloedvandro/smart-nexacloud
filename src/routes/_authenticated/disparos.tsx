@@ -881,7 +881,7 @@ function NewCampaignTab({
   }, [editingId, getCampaignFn]);
 
   const message = messages.find((m) => m.id === messageId);
-  const audience = contacts.filter(
+  const audience = contactPool.filter(
     (c) => selected.includes(c.id) && c.status === "ATIVO" && (!requireOptIn || c.opt_in),
   );
   const preview = message
