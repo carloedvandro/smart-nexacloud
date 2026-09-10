@@ -1790,53 +1790,88 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
     );
     const campaignIds = (campaigns ?? []).map((c: { id: string }) => c.id);
 
-    const [{ data: queue }, { data: contacts }, { data: settings }, { data: instances }] =
-      await Promise.all([
-        (async () => {
-          // Operador só enxerga os envios das campanhas dele.
-          if (!access.isAdmin && !campaignIds.length) return { data: [] as any[] };
-          let q = ctx.supabase
-            .from("broadcast_queue")
-            .select("status, sent_at, created_at")
-            .eq("company_id", companyId)
-            .limit(20000);
-          if (!access.isAdmin) q = q.in("campaign_id", campaignIds);
-          return q;
-        })(),
-        own(
-          ctx.supabase.from("broadcast_contacts").select("id, status").eq("company_id", companyId),
-          access,
-          ctx,
-        ),
+    // Contagens são feitas no banco (head + count). Trazer as linhas limita em
+    // 1000 pelo PostgREST e os cards mostravam números menores que a realidade.
+    const queueCount = (build: (q: any) => any) => {
+      if (!access.isAdmin && !campaignIds.length) return Promise.resolve({ count: 0 });
+      let q = ctx.supabase
+        .from("broadcast_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      if (!access.isAdmin) q = q.in("campaign_id", campaignIds);
+      return build(q);
+    };
+
+    // Início do dia no fuso de São Paulo (UTC-3).
+    const now = new Date();
+    const spNow = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const startOfDay = new Date(
+      Date.UTC(spNow.getUTCFullYear(), spNow.getUTCMonth(), spNow.getUTCDate(), 3, 0, 0),
+    );
+
+    const [
+      contactsTotal,
+      contactsActive,
+      pendingCount,
+      failedCount,
+      sentTotalCount,
+      sentTodayCount,
+      lastSentRow,
+      { data: settings },
+      { data: instances },
+    ] = await Promise.all([
+      own(
         ctx.supabase
-          .from("broadcast_settings")
-          .select("*")
+          .from("broadcast_contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId),
+        access,
+        ctx,
+      ),
+      own(
+        ctx.supabase
+          .from("broadcast_contacts")
+          .select("id", { count: "exact", head: true })
           .eq("company_id", companyId)
-          .maybeSingle(),
-        (() => {
-          let q = ctx.supabase
-            .from("whatsapp_connections")
-            .select("id, name, status, connection_type, phone_number")
-            .eq("company_id", companyId)
-            .eq("connection_type", "BROADCAST");
-          if (!access.isAdmin) q = q.in("id", access.instanceIds);
-          return q;
-        })(),
-      ]);
+          .eq("status", "ATIVO"),
+        access,
+        ctx,
+      ),
+      queueCount((q) => q.in("status", ["PENDING", "PROCESSING"])),
+      queueCount((q) => q.eq("status", "FAILED")),
+      queueCount((q) => q.eq("status", "SENT")),
+      queueCount((q) => q.eq("status", "SENT").gte("sent_at", startOfDay.toISOString())),
+      (async () => {
+        if (!access.isAdmin && !campaignIds.length) return { data: null };
+        let q = ctx.supabase
+          .from("broadcast_queue")
+          .select("sent_at")
+          .eq("company_id", companyId)
+          .not("sent_at", "is", null)
+          .order("sent_at", { ascending: false })
+          .limit(1);
+        if (!access.isAdmin) q = q.in("campaign_id", campaignIds);
+        const { data } = await q;
+        return { data: (data ?? [])[0] ?? null };
+      })(),
+      ctx.supabase
+        .from("broadcast_settings")
+        .select("*")
+        .eq("company_id", companyId)
+        .maybeSingle(),
+      (() => {
+        let q = ctx.supabase
+          .from("whatsapp_connections")
+          .select("id, name, status, connection_type, phone_number")
+          .eq("company_id", companyId)
+          .eq("connection_type", "BROADCAST");
+        if (!access.isAdmin) q = q.in("id", access.instanceIds);
+        return q;
+      })(),
+    ]);
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const rows = queue ?? [];
-    const sentToday = rows.filter(
-      (r: { status: string; sent_at: string | null }) =>
-        r.status === "SENT" && r.sent_at && new Date(r.sent_at) >= startOfDay,
-    ).length;
-    const lastSent = rows
-      .filter((r: { sent_at: string | null }) => r.sent_at)
-      .map((r: { sent_at: string }) => r.sent_at)
-      .sort()
-      .pop();
+    const sentToday = sentTodayCount.count ?? 0;
+    const lastSent = (lastSentRow.data as { sent_at: string } | null)?.sent_at;
 
     const byStatus = (status: string) =>
       (campaigns ?? []).filter((c: { status: string }) => c.status === status).length;
@@ -1849,18 +1884,18 @@ export const getBroadcastOverview = createServerFn({ method: "GET" })
         total: (campaigns ?? []).length,
       },
       contacts: {
-        total: (contacts ?? []).length,
-        active: (contacts ?? []).filter((c: { status: string }) => c.status === "ATIVO").length,
+        total: contactsTotal.count ?? 0,
+        active: contactsActive.count ?? 0,
       },
       messages: {
         sentToday,
-        pending: rows.filter(
-          (r: { status: string }) => r.status === "PENDING" || r.status === "PROCESSING",
-        ).length,
-        failed: rows.filter((r: { status: string }) => r.status === "FAILED").length,
-        sentTotal: rows.filter((r: { status: string }) => r.status === "SENT").length,
-        total: rows.length,
+        pending: pendingCount.count ?? 0,
+        failed: failedCount.count ?? 0,
+        sentTotal: sentTotalCount.count ?? 0,
+        total:
+          (pendingCount.count ?? 0) + (failedCount.count ?? 0) + (sentTotalCount.count ?? 0),
       },
+
       lastSentAt: (lastSent as string | undefined) ?? null,
       settings: { ...DEFAULT_SETTINGS, ...(settings ?? {}) },
       instances: (instances ?? []).map((i: Record<string, unknown>) => ({
