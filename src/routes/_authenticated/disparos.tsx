@@ -879,7 +879,18 @@ function NewCampaignTab({
         setName(String(campaign["name"] ?? ""));
         setInstanceId(String(campaign["instance_id"] ?? ""));
         setMessageId(String(campaign["message_id"] ?? ""));
-        setSelected((campaign["contactIds"] as string[] | undefined) ?? []);
+        const ids = (campaign["contactIds"] as string[] | undefined) ?? [];
+        setSelected(ids);
+        if (ids.length) {
+          void picksFn({ data: { ids } })
+            .then((rows) => {
+              const next: Record<string, { name: string | null; opt_in: boolean }> = {};
+              for (const r of rows) next[r.id] = { name: r.name, opt_in: r.opt_in };
+              setSelectedInfo(next);
+            })
+            .catch(() => undefined);
+        }
+
         setRequireOptIn(Boolean(campaign["require_opt_in"]));
         setPerMinute(Number(campaign["messages_per_minute"] ?? 5));
         setMinInterval(Number(campaign["min_interval_seconds"] ?? 10));
