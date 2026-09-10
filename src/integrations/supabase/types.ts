@@ -549,8 +549,51 @@ export type Database = {
           },
         ]
       }
+      broadcast_contact_blocks: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_contact_blocks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcast_contact_blocks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       broadcast_contacts: {
         Row: {
+          block_id: string | null
           company_id: string
           company_name: string | null
           created_at: string
@@ -569,6 +612,7 @@ export type Database = {
           whatsapp: string
         }
         Insert: {
+          block_id?: string | null
           company_id: string
           company_name?: string | null
           created_at?: string
@@ -587,6 +631,7 @@ export type Database = {
           whatsapp: string
         }
         Update: {
+          block_id?: string | null
           company_id?: string
           company_name?: string | null
           created_at?: string
@@ -605,6 +650,13 @@ export type Database = {
           whatsapp?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "broadcast_contacts_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "broadcast_contact_blocks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "broadcast_contacts_company_id_fkey"
             columns: ["company_id"]

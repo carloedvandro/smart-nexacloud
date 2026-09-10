@@ -78,6 +78,12 @@ import {
   importBroadcastContacts,
   listBroadcastCampaigns,
   listBroadcastContacts,
+  listBroadcastContactBlocks,
+  listBroadcastContactsPage,
+  createBroadcastContactBlock,
+  renameBroadcastContactBlock,
+  deleteBroadcastContactBlock,
+  exportBroadcastContactBlock,
   listBroadcastHistory,
   listBroadcastInstances,
   listBroadcastLogs,
@@ -1268,13 +1274,13 @@ function NewCampaignTab({
 
 function ContactsTab() {
   const queryClient = useQueryClient();
-  const listFn = useServerFn(listBroadcastContacts);
   const saveFn = useServerFn(saveBroadcastContact);
   const importFn = useServerFn(importBroadcastContacts);
-  const deleteFn = useServerFn(deleteBroadcastContacts);
+  const blocksFn = useServerFn(listBroadcastContactBlocks);
+  const createBlockFn = useServerFn(createBroadcastContactBlock);
 
-  const [search, setSearch] = useState("");
   const [status, setStatus] = useState("todos");
+  const [targetBlock, setTargetBlock] = useState("auto");
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -1286,10 +1292,13 @@ function ContactsTab() {
     optInSource: "",
   });
 
-  const contacts = useQuery({
-    queryKey: ["broadcast", "contacts", search, status],
-    queryFn: () => listFn({ data: { search, ...(status !== "todos" ? { status } : {}) } }),
+  const blocks = useQuery({
+    queryKey: ["broadcast", "contact-blocks"],
+    queryFn: () => blocksFn(),
   });
+
+  const blockList = blocks.data ?? [];
+  const destination = targetBlock === "auto" ? null : targetBlock;
 
   async function handleCsv(file: File) {
     const text = await file.text();
@@ -1310,8 +1319,10 @@ function ContactsTab() {
       };
     });
     try {
-      const result = await importFn({ data: { rows } });
-      toast.success(`${result.imported} contato(s) importado(s). ${result.invalid} inválido(s).`);
+      const result = await importFn({ data: { rows, blockId: destination } });
+      toast.success(
+        `${result.imported} contato(s) importado(s) em ${result.blocks} bloco(s). ${result.invalid} inválido(s).`,
+      );
       const dups = result.duplicates ?? [];
       if (dups.length) {
         const detalhe = dups
@@ -1324,38 +1335,10 @@ function ContactsTab() {
           { duration: 10000 },
         );
       }
-
       void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao importar.");
     }
-  }
-
-  function exportCsv() {
-    const rows = contacts.data ?? [];
-    const csv = [
-      "nome,telefone,empresa,tags,status,opt_in,origem,cadastro",
-      ...rows.map((c: Contact) =>
-        [
-          c.name ?? "",
-          c.whatsapp,
-          c.company_name ?? "",
-          (c.tags ?? []).join("|"),
-          c.status,
-          c.opt_in ? "sim" : "nao",
-          c.source ?? "",
-          c.created_at,
-        ]
-          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-          .join(","),
-      ),
-    ].join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "contatos-disparos.csv";
-    link.click();
-    URL.revokeObjectURL(url);
   }
 
   const save = useMutation({
@@ -1365,6 +1348,7 @@ function ContactsTab() {
           name: form.name || null,
           phone: form.phone,
           companyName: form.companyName || null,
+          blockId: destination,
           tags: form.tags
             ? form.tags
                 .split(",")
@@ -1381,7 +1365,6 @@ function ContactsTab() {
       const warning = (result as { warning?: string | null } | undefined)?.warning;
       toast.success("Contato salvo.");
       if (warning) toast.warning(warning, { duration: 8000 });
-
       setForm({
         name: "",
         phone: "",
@@ -1397,20 +1380,14 @@ function ContactsTab() {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  // Agrupa por responsável — o administrador vê a lista separada por consultor.
-  const groups = useMemo(() => {
-    const map = new Map<string, Contact[]>();
-    for (const contact of contacts.data ?? []) {
-      const owner = (contact as Contact & { ownerName?: string }).ownerName ?? "Sem responsável";
-      const bucket = map.get(owner) ?? [];
-      bucket.push(contact);
-      map.set(owner, bucket);
-    }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "pt-BR"));
-  }, [contacts.data]);
-
-  const [owner, setOwner] = useState("todos");
-  const visibleGroups = owner === "todos" ? groups : groups.filter(([name]) => name === owner);
+  const createBlock = useMutation({
+    mutationFn: (name?: string) => createBlockFn({ data: name ? { name } : {} }),
+    onSuccess: (block) => {
+      toast.success(`Bloco “${block.name}” criado.`);
+      void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
@@ -1418,10 +1395,27 @@ function ContactsTab() {
         <CardHeader>
           <CardTitle className="text-base">Novo contato</CardTitle>
           <CardDescription>
-            O telefone é normalizado pelo mesmo padrão do atendimento.
+            Cada bloco guarda até 1000 contatos. Quando um enche, o próximo é criado
+            automaticamente.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs uppercase text-muted-foreground">Bloco de destino</Label>
+            <Select value={targetBlock} onValueChange={setTargetBlock}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Automático (último com espaço)</SelectItem>
+                {blockList.map((block) => (
+                  <SelectItem key={block.id} value={block.id}>
+                    {block.name} ({block.total}/{block.capacity})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Input
             placeholder="Nome"
             value={form.name}
@@ -1486,123 +1480,256 @@ function ContactsTab() {
             />
             <p className="text-xs text-muted-foreground">
               Colunas: nome, telefone, empresa, tags (separadas por |), consentimento (sim/nao).
+              Listas maiores que 1000 são divididas em novos blocos automaticamente.
             </p>
-            <Button variant="outline" className="w-full" onClick={exportCsv}>
-              <Upload className="size-4 rotate-180" /> Exportar lista atual
-            </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="space-y-3">
-          <CardTitle className="text-base">Contatos ({contacts.data?.length ?? 0})</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              className="max-w-xs"
-              placeholder="Buscar por nome, empresa ou número"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os status</SelectItem>
-                {CONTACT_STATUS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {groups.length > 1 ? (
-              <Select value={owner} onValueChange={setOwner}>
-                <SelectTrigger className="w-56">
+      <div className="space-y-4">
+        <Card>
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle className="text-base">Blocos de contatos</CardTitle>
+              <CardDescription>
+                {blockList.length} bloco(s) ·{" "}
+                {blockList.reduce((sum, b) => sum + b.total, 0)} contato(s)
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos os consultores</SelectItem>
-                  {groups.map(([name, rows]) => (
-                    <SelectItem key={name} value={name}>
-                      {name} ({rows.length})
+                  <SelectItem value="todos">Todos os status</SelectItem>
+                  {CONTACT_STATUS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            ) : null}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {contacts.isLoading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (contacts.data ?? []).length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum contato encontrado.
-            </p>
-          ) : (
-            visibleGroups.map(([ownerName, rows]) => (
-            <section key={ownerName} className="space-y-2">
-              <div className="flex items-center justify-between border-b border-border pb-1">
-                <p className="text-sm font-semibold">{ownerName}</p>
-                <span className="text-xs text-muted-foreground">{rows.length} contato(s)</span>
-              </div>
-              {rows.map((contact: Contact) => (
-              <div
-                key={contact.id}
-                className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
-                  (contact.sharedWith ?? []).length
-                    ? "border-amber-500/50 bg-amber-500/10"
-                    : "border-border"
-                }`}
+              <Button
+                onClick={() => {
+                  const name = prompt("Nome do novo bloco (deixe vazio para numerar):") ?? "";
+                  createBlock.mutate(name.trim() || undefined);
+                }}
+                disabled={createBlock.isPending}
               >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{contact.name ?? "Sem nome"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {PhoneNormalizationService.format(contact.whatsapp)}
-                    {contact.company_name ? ` · ${contact.company_name}` : ""}
-                  </p>
-                  {(contact.sharedWith ?? []).length ? (
-                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                      Também está no disparo de {(contact.sharedWith ?? []).join(", ")}
-                    </p>
-                  ) : null}
-                </div>
+                <Plus className="size-4" /> Novo bloco
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
 
-                <div className="flex items-center gap-2">
-                  {(contact.tags ?? []).slice(0, 3).map((tag: string) => (
-                    <Badge key={tag} variant="outline">
-                      {tag}
-                    </Badge>
-                  ))}
-                  <Badge variant={contact.status === "ATIVO" ? "secondary" : "outline"}>
-                    {contact.status}
-                  </Badge>
-                  {contact.opt_in ? <Badge>opt-in</Badge> : null}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() =>
-                      deleteFn({ data: { ids: [contact.id] } })
-                        .then(() => {
-                          toast.success("Contato excluído.");
-                          void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
-                        })
-                        .catch((error: Error) => toast.error(error.message))
-                    }
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              </div>
-              ))}
-            </section>
-            ))
-          )}
-        </CardContent>
-      </Card>
+        {blocks.isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : blockList.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum bloco ainda. Crie o primeiro bloco e cadastre seus contatos.
+            </CardContent>
+          </Card>
+        ) : (
+          blockList.map((block) => (
+            <ContactBlockCard key={block.id} block={block} status={status} />
+          ))
+        )}
+      </div>
     </div>
+  );
+}
+
+type ContactBlock = Awaited<ReturnType<typeof listBroadcastContactBlocks>>[number];
+
+function ContactBlockCard({ block, status }: { block: ContactBlock; status: string }) {
+  const queryClient = useQueryClient();
+  const pageFn = useServerFn(listBroadcastContactsPage);
+  const deleteFn = useServerFn(deleteBroadcastContacts);
+  const renameFn = useServerFn(renameBroadcastContactBlock);
+  const removeBlockFn = useServerFn(deleteBroadcastContactBlock);
+  const exportFn = useServerFn(exportBroadcastContactBlock);
+
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+
+  const contacts = useQuery({
+    queryKey: ["broadcast", "contacts", block.id, page, search, status],
+    queryFn: () =>
+      pageFn({
+        data: {
+          blockId: block.id,
+          page,
+          pageSize: PAGE_SIZE,
+          search,
+          ...(status !== "todos" ? { status } : {}),
+        },
+      }),
+  });
+
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: ["broadcast"] });
+  }
+
+  async function exportCsv() {
+    try {
+      const rows = await exportFn({ data: { blockId: block.id } });
+      const csv = [
+        "nome,telefone,empresa,tags,status,opt_in,origem,cadastro",
+        ...rows.map((c) =>
+          [
+            c.name ?? "",
+            c.whatsapp,
+            c.company_name ?? "",
+            (c.tags ?? []).join("|"),
+            c.status,
+            c.opt_in ? "sim" : "nao",
+            c.source ?? "",
+            c.created_at,
+          ]
+            .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+            .join(","),
+        ),
+      ].join("\n");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${block.name.replace(/[^\w-]+/g, "-").toLowerCase()}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao gerar o CSV.");
+    }
+  }
+
+  const rows = contacts.data?.rows ?? [];
+  const total = contacts.data?.total ?? 0;
+
+  return (
+    <Card>
+      <CardHeader className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="text-base">{block.name}</CardTitle>
+            <CardDescription>
+              {block.total} de {block.capacity} contatos · {block.ownerName}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void exportCsv()}>
+              <Upload className="size-4 rotate-180" /> CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const name = prompt("Novo nome do bloco:", block.name);
+                if (!name?.trim()) return;
+                renameFn({ data: { id: block.id, name: name.trim() } })
+                  .then(() => {
+                    toast.success("Bloco renomeado.");
+                    refresh();
+                  })
+                  .catch((error: Error) => toast.error(error.message));
+              }}
+            >
+              <Pencil className="size-4" /> Renomear
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (!confirm(`Apagar todos os contatos de “${block.name}”?`)) return;
+                removeBlockFn({ data: { id: block.id, onlyContacts: true } })
+                  .then(() => {
+                    toast.success("Contatos do bloco apagados.");
+                    setPage(1);
+                    refresh();
+                  })
+                  .catch((error: Error) => toast.error(error.message));
+              }}
+            >
+              Esvaziar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (!confirm(`Excluir o bloco “${block.name}” e todos os contatos dele?`)) return;
+                removeBlockFn({ data: { id: block.id } })
+                  .then(() => {
+                    toast.success("Bloco excluído.");
+                    refresh();
+                  })
+                  .catch((error: Error) => toast.error(error.message));
+              }}
+            >
+              <Trash2 className="size-4" /> Excluir bloco
+            </Button>
+          </div>
+        </div>
+        <Input
+          className="max-w-xs"
+          placeholder="Buscar neste bloco"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+        />
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {contacts.isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : rows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Nenhum contato neste bloco.
+          </p>
+        ) : (
+          rows.map((contact) => (
+            <div
+              key={contact.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-medium">{contact.name ?? "Sem nome"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {PhoneNormalizationService.format(contact.whatsapp)}
+                  {contact.company_name ? ` · ${contact.company_name}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {(contact.tags ?? []).slice(0, 3).map((tag: string) => (
+                  <Badge key={tag} variant="outline">
+                    {tag}
+                  </Badge>
+                ))}
+                <Badge variant={contact.status === "ATIVO" ? "secondary" : "outline"}>
+                  {contact.status}
+                </Badge>
+                {contact.opt_in ? <Badge>opt-in</Badge> : null}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() =>
+                    deleteFn({ data: { ids: [contact.id] } })
+                      .then(() => {
+                        toast.success("Contato excluído.");
+                        refresh();
+                      })
+                      .catch((error: Error) => toast.error(error.message))
+                  }
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+        <Pager page={page} total={total} onChange={setPage} />
+      </CardContent>
+    </Card>
   );
 }
 
