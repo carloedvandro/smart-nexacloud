@@ -570,12 +570,41 @@ export const deleteBroadcastContactBlock = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Dados mínimos de contatos para seleção em campanhas (por bloco ou por ids). */
+export const listBroadcastContactPicks = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (data: { blockId?: string | null; ids?: string[]; onlyActive?: boolean }) => data ?? {},
+  )
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const access = await requireAccess(ctx);
+    let query = ctx.supabase
+      .from("broadcast_contacts")
+      .select("id, name, whatsapp, status, opt_in")
+      .eq("company_id", access.companyId)
+      .limit(5000);
+    if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
+    if (data.blockId) query = query.eq("block_id", data.blockId);
+    if (data.ids?.length) query = query.in("id", data.ids.slice(0, 5000));
+    if (data.onlyActive) query = query.eq("status", "ATIVO");
+    const { data: rows, error } = await query;
+    if (error) throw new Error(error.message);
+    return (rows ?? []) as {
+      id: string;
+      name: string | null;
+      whatsapp: string;
+      status: string;
+      opt_in: boolean;
+    }[];
+  });
+
 /** Lista paginada de um bloco (usada na aba Contatos). */
 export const listBroadcastContactsPage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
     (data: {
-      blockId: string;
+      blockId?: string | null;
       page?: number;
       pageSize?: number;
       search?: string;
@@ -591,9 +620,10 @@ export const listBroadcastContactsPage = createServerFn({ method: "POST" })
       .from("broadcast_contacts")
       .select("*", { count: "exact" })
       .eq("company_id", access.companyId)
-      .eq("block_id", data.blockId)
       .order("created_at", { ascending: false });
+    if (data.blockId) query = query.eq("block_id", data.blockId);
     if (!access.isAdmin) query = query.eq("created_by", ctx.userId);
+
     if (data.status) query = query.eq("status", data.status);
     if (data.search?.trim()) {
       const term = data.search.trim();
