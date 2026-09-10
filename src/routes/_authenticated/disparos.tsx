@@ -1070,22 +1070,40 @@ function NewCampaignTab({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
-                  setSelected((prev) => [
-                    ...new Set([
-                      ...prev,
-                      ...blockContacts.filter((c) => c.status === "ATIVO").map((c) => c.id),
-                    ]),
-                  ])
-                }
+                onClick={() => {
+                  void picksFn({
+                    data: {
+                      blockId: blockFilter === "todos" ? null : blockFilter,
+                      onlyActive: true,
+                    },
+                  })
+                    .then((rows) => {
+                      setSelected((prev) => [...new Set([...prev, ...rows.map((r) => r.id)])]);
+                      setSelectedInfo((prev) => {
+                        const next = { ...prev };
+                        for (const r of rows) next[r.id] = { name: r.name, opt_in: r.opt_in };
+                        return next;
+                      });
+                      toast.success(`${rows.length} contato(s) selecionado(s).`);
+                    })
+                    .catch((error: Error) => toast.error(error.message));
+                }}
               >
                 {blockFilter === "todos"
                   ? "Selecionar todos os ativos"
                   : "Selecionar ativos do bloco"}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSelected([]);
+                  setSelectedInfo({});
+                }}
+              >
                 Limpar
               </Button>
+
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Input
