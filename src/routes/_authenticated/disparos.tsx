@@ -80,6 +80,8 @@ import {
   listBroadcastContacts,
   listBroadcastContactBlocks,
   listBroadcastContactsPage,
+  listBroadcastContactPicks,
+
   createBroadcastContactBlock,
   renameBroadcastContactBlock,
   deleteBroadcastContactBlock,
@@ -814,28 +816,47 @@ function NewCampaignTab({
   const getCampaignFn = useServerFn(getBroadcastCampaign);
   const deleteContactsFn = useServerFn(deleteBroadcastContacts);
   const campaignBlocksFn = useServerFn(listBroadcastContactBlocks);
-  const blockContactsFn = useServerFn(listBroadcastContacts);
+  const contactsPageFn = useServerFn(listBroadcastContactsPage);
+  const picksFn = useServerFn(listBroadcastContactPicks);
   const [contactSearch, setContactSearch] = useState("");
   const [blockFilter, setBlockFilter] = useState("todos");
+  const [contactPage, setContactPage] = useState(1);
+  const CONTACT_PAGE_SIZE = 10;
 
   const campaignBlocks = useQuery({
     queryKey: ["broadcast", "contact-blocks"],
     queryFn: () => campaignBlocksFn(),
   });
   const blockOptions = campaignBlocks.data ?? [];
-  // Contatos do bloco vêm direto do servidor: a lista geral pode não trazer todos.
-  const blockContactsQuery = useQuery({
-    queryKey: ["broadcast", "contacts", "block", blockFilter],
-    queryFn: () => blockContactsFn({ data: { blockId: blockFilter } }),
-    enabled: blockFilter !== "todos",
+  // Página de contatos vinda do servidor: nunca carregamos milhares de linhas de uma vez.
+  const contactsPage = useQuery({
+    queryKey: ["broadcast", "campaign-contacts", blockFilter, contactPage, contactSearch],
+    queryFn: () =>
+      contactsPageFn({
+        data: {
+          blockId: blockFilter === "todos" ? null : blockFilter,
+          page: contactPage,
+          pageSize: CONTACT_PAGE_SIZE,
+          ...(contactSearch.trim() ? { search: contactSearch.trim() } : {}),
+        },
+
+      }),
   });
-  const blockContacts = blockFilter === "todos" ? contacts : (blockContactsQuery.data ?? []);
-  const contactPool = (() => {
-    const map = new Map<string, Contact>();
-    for (const c of contacts) map.set(c.id, c);
-    for (const c of blockContacts) map.set(c.id, c);
-    return [...map.values()];
-  })();
+  const pageRows = contactsPage.data?.rows ?? [];
+  const totalContacts = contactsPage.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalContacts / CONTACT_PAGE_SIZE));
+
+  // Guarda apenas os dados dos contatos selecionados (nome / opt-in) para montar o público.
+  const [selectedInfo, setSelectedInfo] = useState<
+    Record<string, { name: string | null; opt_in: boolean }>
+  >({});
+
+  // Volta para a primeira página sempre que muda o bloco ou a busca.
+  useEffect(() => {
+    setContactPage(1);
+  }, [blockFilter, contactSearch]);
+
+
 
   const [name, setName] = useState("");
   const [instanceId, setInstanceId] = useState("");
@@ -864,7 +885,18 @@ function NewCampaignTab({
         setName(String(campaign["name"] ?? ""));
         setInstanceId(String(campaign["instance_id"] ?? ""));
         setMessageId(String(campaign["message_id"] ?? ""));
-        setSelected((campaign["contactIds"] as string[] | undefined) ?? []);
+        const ids = (campaign["contactIds"] as string[] | undefined) ?? [];
+        setSelected(ids);
+        if (ids.length) {
+          void picksFn({ data: { ids } })
+            .then((rows) => {
+              const next: Record<string, { name: string | null; opt_in: boolean }> = {};
+              for (const r of rows) next[r.id] = { name: r.name, opt_in: r.opt_in };
+              setSelectedInfo(next);
+            })
+            .catch(() => undefined);
+        }
+
         setRequireOptIn(Boolean(campaign["require_opt_in"]));
         setPerMinute(Number(campaign["messages_per_minute"] ?? 5));
         setMinInterval(Number(campaign["min_interval_seconds"] ?? 10));
@@ -881,16 +913,16 @@ function NewCampaignTab({
   }, [editingId, getCampaignFn]);
 
   const message = messages.find((m) => m.id === messageId);
-  const audience = contactPool.filter(
-    (c) => selected.includes(c.id) && c.status === "ATIVO" && (!requireOptIn || c.opt_in),
-  );
+  const audience = selected.filter((id) => {
+    const info = selectedInfo[id];
+    return !requireOptIn || !info || info.opt_in;
+  });
+  const firstName = selectedInfo[audience[0] ?? ""]?.name?.trim() || "cliente";
   const preview = message
     ? (message.content ?? "")
-        .replace(/\{\{nome\}\}/g, audience[0]?.name?.trim() || "cliente")
-        .replace(
-          /\{\{primeiro_nome\}\}/g,
-          (audience[0]?.name?.trim() || "cliente").split(" ")[0] ?? "cliente",
-        )
+        .replace(/\{\{nome\}\}/g, firstName)
+        .replace(/\{\{primeiro_nome\}\}/g, firstName.split(" ")[0] ?? "cliente")
+
     : "";
 
   async function submit(startNow: boolean) {
@@ -919,7 +951,7 @@ function NewCampaignTab({
           name,
           instanceId,
           messageId,
-          contactIds: audience.map((c) => c.id),
+          contactIds: audience,
           requireOptIn,
           messagesPerMinute: perMinute,
           minIntervalSeconds: minInterval,
@@ -1055,22 +1087,40 @@ function NewCampaignTab({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
-                  setSelected((prev) => [
-                    ...new Set([
-                      ...prev,
-                      ...blockContacts.filter((c) => c.status === "ATIVO").map((c) => c.id),
-                    ]),
-                  ])
-                }
+                onClick={() => {
+                  void picksFn({
+                    data: {
+                      blockId: blockFilter === "todos" ? null : blockFilter,
+                      onlyActive: true,
+                    },
+                  })
+                    .then((rows) => {
+                      setSelected((prev) => [...new Set([...prev, ...rows.map((r) => r.id)])]);
+                      setSelectedInfo((prev) => {
+                        const next = { ...prev };
+                        for (const r of rows) next[r.id] = { name: r.name, opt_in: r.opt_in };
+                        return next;
+                      });
+                      toast.success(`${rows.length} contato(s) selecionado(s).`);
+                    })
+                    .catch((error: Error) => toast.error(error.message));
+                }}
               >
                 {blockFilter === "todos"
                   ? "Selecionar todos os ativos"
                   : "Selecionar ativos do bloco"}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSelected([]);
+                  setSelectedInfo({});
+                }}
+              >
                 Limpar
               </Button>
+
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Input
@@ -1098,27 +1148,17 @@ function NewCampaignTab({
                 </Button>
               ) : null}
             </div>
-            <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-              {blockFilter !== "todos" && blockContactsQuery.isLoading ? (
-                <p className="p-3 text-sm text-muted-foreground">Carregando contatos do bloco…</p>
-              ) : blockContacts.length === 0 ? (
+            <div className="space-y-1 rounded-lg border border-border p-2">
+              {contactsPage.isLoading ? (
+                <p className="p-3 text-sm text-muted-foreground">Carregando contatos…</p>
+              ) : pageRows.length === 0 ? (
                 <p className="p-3 text-sm text-muted-foreground">
-                  {contacts.length === 0
-                    ? "Cadastre contatos na aba “Contatos”."
+                  {contactSearch.trim()
+                    ? "Nenhum contato encontrado para esta busca."
                     : "Nenhum contato neste bloco."}
                 </p>
               ) : (
-                blockContacts
-                  .filter((contact) => {
-                    const term = contactSearch.trim().toLowerCase();
-                    if (!term) return true;
-                    const digits = term.replace(/\D/g, "");
-                    return (
-                      (contact.name ?? "").toLowerCase().includes(term) ||
-                      (digits ? contact.whatsapp.includes(digits) : false)
-                    );
-                  })
-                  .map((contact) => (
+                pageRows.map((contact) => (
                   <div
                     key={contact.id}
                     className="flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
@@ -1126,13 +1166,17 @@ function NewCampaignTab({
                     <label className="flex flex-1 cursor-pointer items-center gap-3 truncate">
                       <Checkbox
                         checked={selected.includes(contact.id)}
-                        onCheckedChange={(checked) =>
+                        onCheckedChange={(checked) => {
                           setSelected((prev) =>
                             checked
-                              ? [...prev, contact.id]
+                              ? [...new Set([...prev, contact.id])]
                               : prev.filter((id) => id !== contact.id),
-                          )
-                        }
+                          );
+                          setSelectedInfo((prev) => ({
+                            ...prev,
+                            [contact.id]: { name: contact.name, opt_in: contact.opt_in },
+                          }));
+                        }}
                       />
                       <span className="flex-1 truncate">{contact.name ?? "Sem nome"}</span>
                       <span className="text-xs text-muted-foreground">
@@ -1159,9 +1203,33 @@ function NewCampaignTab({
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
-                  ))
+                ))
               )}
             </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                {totalContacts} contato(s) · página {contactPage} de {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={contactPage <= 1}
+                  onClick={() => setContactPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={contactPage >= totalPages}
+                  onClick={() => setContactPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+
           </CardContent>
         </Card>
 
