@@ -336,6 +336,8 @@ export type BroadcastContactInput = {
   status?: "ATIVO" | "PAUSADO" | "BLOQUEADO" | "DESCADASTRADO";
   optIn?: boolean;
   optInSource?: string | null;
+  /** Bloco de destino; quando vazio usa o último bloco com espaço. */
+  blockId?: string | null;
 };
 
 export type DuplicateInfo = { whatsapp: string; owner: string };
