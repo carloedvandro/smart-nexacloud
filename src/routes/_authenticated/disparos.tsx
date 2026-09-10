@@ -1792,7 +1792,12 @@ function ContactBlockCard({ block, status }: { block: ContactBlock; status: stri
           }}
         />
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="relative space-y-2">
+        {contacts.isFetching && !contacts.isLoading ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-lg bg-background/50 pt-10">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : null}
         {contacts.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : rows.length === 0 ? (
