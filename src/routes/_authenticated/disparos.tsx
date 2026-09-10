@@ -1099,7 +1099,9 @@ function NewCampaignTab({
               ) : null}
             </div>
             <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-              {blockContacts.length === 0 ? (
+              {blockFilter !== "todos" && blockContactsQuery.isLoading ? (
+                <p className="p-3 text-sm text-muted-foreground">Carregando contatos do bloco…</p>
+              ) : blockContacts.length === 0 ? (
                 <p className="p-3 text-sm text-muted-foreground">
                   {contacts.length === 0
                     ? "Cadastre contatos na aba “Contatos”."
