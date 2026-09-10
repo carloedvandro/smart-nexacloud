@@ -837,8 +837,9 @@ function NewCampaignTab({
           blockId: blockFilter === "todos" ? null : blockFilter,
           page: contactPage,
           pageSize: CONTACT_PAGE_SIZE,
-          search: contactSearch.trim() || undefined,
+          ...(contactSearch.trim() ? { search: contactSearch.trim() } : {}),
         },
+
       }),
   });
   const pageRows = contactsPage.data?.rows ?? [];
