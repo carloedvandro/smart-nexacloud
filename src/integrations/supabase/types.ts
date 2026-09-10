@@ -605,6 +605,7 @@ export type Database = {
           opt_in: boolean
           opt_in_source: string | null
           phone: string | null
+          seq: number
           source: string | null
           status: Database["public"]["Enums"]["broadcast_contact_status"]
           tags: string[]
@@ -624,6 +625,7 @@ export type Database = {
           opt_in?: boolean
           opt_in_source?: string | null
           phone?: string | null
+          seq?: number
           source?: string | null
           status?: Database["public"]["Enums"]["broadcast_contact_status"]
           tags?: string[]
@@ -643,6 +645,7 @@ export type Database = {
           opt_in?: boolean
           opt_in_source?: string | null
           phone?: string | null
+          seq?: number
           source?: string | null
           status?: Database["public"]["Enums"]["broadcast_contact_status"]
           tags?: string[]
