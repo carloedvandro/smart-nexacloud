@@ -231,8 +231,9 @@ function buildConsultantPrompt(
     `TRATAMENTO OBRIGATÓRIO: sempre chame-o pelo cargo antes do nome — "consultor ${consultant.firstName}". Na PRIMEIRA mensagem de cada conversa, cumprimente exatamente assim: "Olá, consultor ${consultant.firstName}! Em que posso ajudar?". Nunca cumprimente apenas com o nome ("Olá, ${consultant.firstName}") nem trate-o como cliente.`,
     "Trate-o como colega de equipe: direto, profissional e objetivo nas respostas.",
     "Ele pode perguntar sobre produtos, operadoras, regras, processos internos, argumentos de venda, objeções e procedimentos. Use toda a base de conhecimento para ajudar, especialmente consultores novos.",
-    "Nunca qualifique-o como lead, nunca pergunte quantas vidas ele quer contratar e nunca ofereça transferir para um consultor humano — ele já é um consultor.",
-    "NUNCA use o marcador de transferência. Você mesma resolve a dúvida; se a informação não estiver na base, diga com clareza que não consta na base e oriente-o a confirmar com a coordenação.",
+    "Nunca qualifique-o como lead e nunca pergunte quantas vidas ele quer contratar — ele já é um consultor.",
+    "Não ofereça transferência por conta própria. Mas se ELE pedir expressamente para ser transferido para um consultor/atendimento humano, isso é possível: confirme que vai encaminhar para a fila de atendimento. Nunca diga que você é incapaz de transferir.",
+
     "Responda em português do Brasil, direto ao ponto, estilo WhatsApp, podendo usar até 600 caracteres quando a dúvida exigir detalhe.",
     settings.extraInstructions ? `Instruções da empresa: ${settings.extraInstructions}` : "",
     "",
@@ -685,12 +686,16 @@ async function runRespondWithAI(input: {
     /\b(falar|conversar|atendimento|transferir|transfere|transfira|transfer(ê|e)ncia|passar|passa|chamar|encaminhar|me\s+manda)\b[^.?!]{0,40}\b(consultor(?:a)?|atendente|corretor(?:a)?|vendedor(?:a)?|humano|humana|pessoa\s+(real|de\s+verdade)|algu(é|e)m\s+(real|de\s+verdade)?)\b/i;
   const humanRequestShort =
     /\b(quero|gostaria|preciso|pode|poderia|posso)\b[^.?!]{0,30}\b(consultor(?:a)?|atendente|corretor(?:a)?|atendimento\s+humano|humano|humana)\b/i;
-  // Consultor interno NUNCA é transferido: ele é a própria equipe. Frases como
-  // "quando um consultor te chamar..." não podem virar pedido de atendimento
-  // humano e jogar o card para "Aguardando consultor".
-  const explicitHumanRequest =
-    !isConsultantChat &&
-    (humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText));
+  // Consultor interno não é transferido por frases soltas ("quando um consultor
+  // te chamar..."). Mas quando ELE MESMO pede em primeira pessoa ("me transfira
+  // para um consultor", "quero falar com um humano"), a transferência acontece
+  // normalmente — inclusive em teste de produção.
+  const consultantSelfRequest =
+    /\b(me\s+(transfira|transfere|transferir|passa|passe|passar|encaminha|encaminhe|encaminhar|direciona|direcione|direcionar)|quero\s+(falar|ser\s+transferido|atendimento)|preciso\s+falar|pode\s+me\s+(transferir|passar|encaminhar))\b[^.?!]{0,60}\b(consultor(?:a)?|atendente|corretor(?:a)?|humano|humana|pessoa\s+(real|de\s+verdade))\b/i;
+  const explicitHumanRequest = isConsultantChat
+    ? consultantSelfRequest.test(customerText)
+    : humanRequestPhrase.test(customerText) || humanRequestShort.test(customerText);
+
 
 
   // "Registrar e seguir": se o rodízio esgotou há pouco nesta conversa (todos
