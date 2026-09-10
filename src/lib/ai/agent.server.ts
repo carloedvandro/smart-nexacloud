@@ -555,7 +555,8 @@ export async function respondWithAI(input: {
     return !(aiReplies ?? []).some((ai) => {
       const closeInTime =
         Math.abs(new Date(ai.created_at).getTime() - new Date(message.created_at).getTime()) <=
-        120_000;
+        600_000;
+
       const samePayload =
         ai.message_type === message.message_type &&
         (message.message_type !== "text" ||
