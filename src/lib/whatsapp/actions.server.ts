@@ -297,7 +297,37 @@ async function resolveConnection(input: {
     .order("instance_number", { ascending: true })
     .limit(1)
     .maybeSingle();
-  return fallback?.id ?? null;
+  if (fallback?.id) return fallback.id;
+
+  // Nenhuma marcada como conectada: o painel pode estar desatualizado por uma
+  // oscilação da MEGA. Confere ao vivo a instância da conversa e o tronco antes
+  // de recusar o envio, e corrige o status quando a MEGA confirma a conexão.
+  const candidates: string[] = [];
+  if (typeof fromConversation === "string") candidates.push(fromConversation);
+  const { data: trunkAny } = await supabaseAdmin
+    .from("whatsapp_connections")
+    .select("id")
+    .eq("company_id", input.companyId)
+    .eq("is_trunk", true)
+    .maybeSingle();
+  if (trunkAny?.id && !candidates.includes(trunkAny.id)) candidates.push(trunkAny.id);
+
+  const { confirmInstanceConnected } = await import("@/lib/whatsapp/mega.server");
+  for (const candidate of candidates) {
+    const { data: owned } = await supabaseAdmin
+      .from("whatsapp_connections")
+      .select("id, connection_type")
+      .eq("id", candidate)
+      .eq("company_id", input.companyId)
+      .maybeSingle();
+    if (!owned || owned.connection_type !== "TRUNK") continue;
+    const creds = await loadMegaCredentials(candidate);
+    if (!creds || !(await confirmInstanceConnected(creds))) continue;
+    await persistState(candidate, "CONNECTED", { qrStatus: "connected" });
+    console.info("[whatsapp] instância reativada após conferência ao vivo", { instancia: candidate });
+    return candidate;
+  }
+  return null;
 }
 
 
