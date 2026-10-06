@@ -1121,14 +1121,7 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
     return <audio controls src={url} className="mb-1 w-60 max-w-full sm:w-64" />;
   }
   if (type === "sticker") {
-    return (
-      <img
-        src={url}
-        alt="Figurinha enviada na conversa"
-        loading="lazy"
-        className="mb-1 max-h-40 w-40 object-contain"
-      />
-    );
+    return <StickerMedia url={url} />;
   }
   if (type === "image") {
     return (
@@ -1146,6 +1139,86 @@ function MessageMedia({ type, url }: { type: string; url: string | null }) {
     return <video controls src={url} className="mb-1 max-h-72 w-64 max-w-full rounded-lg" />;
   }
   return <DocumentMedia url={url} />;
+}
+
+/**
+ * O WhatsApp também envia figurinhas animadas como um ZIP com animation.json
+ * (Lottie), não somente como WebP. Tentamos a imagem normal primeiro e, caso o
+ * navegador não consiga abri-la, extraímos e reproduzimos a animação.
+ */
+function StickerMedia({ url }: { url: string }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [animationFailed, setAnimationFailed] = useState(false);
+
+  useEffect(() => {
+    if (!imageFailed || !containerRef.current) return;
+    let disposed = false;
+    let animation: { destroy: () => void } | null = null;
+    const container = containerRef.current;
+
+    async function loadAnimation() {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Mídia respondeu ${response.status}`);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const [{ unzipSync, strFromU8 }, { default: lottie }] = await Promise.all([
+          import("fflate"),
+          import("lottie-web/build/player/lottie_light"),
+        ]);
+        if (disposed) return;
+        const files = unzipSync(bytes);
+        const animationFile = Object.entries(files).find(([name]) =>
+          /(^|\/)animation\.json$/i.test(name),
+        );
+        if (!animationFile) throw new Error("Pacote sem animação");
+        const animationData = JSON.parse(strFromU8(animationFile[1])) as Record<string, unknown>;
+        if (disposed) return;
+        animation = lottie.loadAnimation({
+          container,
+          renderer: "svg",
+          loop: true,
+          autoplay: true,
+          animationData,
+        });
+      } catch (error) {
+        console.error("[figurinha] animação não pôde ser exibida", error);
+        if (!disposed) setAnimationFailed(true);
+      }
+    }
+
+    void loadAnimation();
+    return () => {
+      disposed = true;
+      animation?.destroy();
+      container.replaceChildren();
+    };
+  }, [imageFailed, url]);
+
+  if (!imageFailed) {
+    return (
+      <img
+        src={url}
+        alt="Figurinha enviada na conversa"
+        loading="lazy"
+        className="mb-1 max-h-40 w-40 object-contain"
+        onError={() => setImageFailed(true)}
+      />
+    );
+  }
+
+  if (animationFailed) {
+    return <p className="mb-1 text-xs text-chat-ink-muted">Figurinha indisponível</p>;
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      role="img"
+      aria-label="Figurinha animada enviada na conversa"
+      className="mb-1 size-40 max-w-full"
+    />
+  );
 }
 
 /** Documentos são entregues como anexo pelo próprio domínio do app. */
