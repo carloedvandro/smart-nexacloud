@@ -20,3 +20,7 @@
 
 - Render WhatsApp animated-sticker ZIP payloads by extracting `animation/animation.json` and playing it with Lottie, because these files are not browser images.
 
+
+## Status da instância MEGA
+
+- Never mark an instance LOGGED_OUT from a single "Instance not logged in" response; confirm via the live status endpoint first, retry sends once, and revive to CONNECTED when an inbound message arrives — MEGA returns that error transiently while the number is still connected.
