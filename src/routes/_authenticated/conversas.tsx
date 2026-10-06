@@ -422,6 +422,11 @@ function ConversationThread({
     },
     enabled: mediaPaths.length > 0,
     staleTime: 30 * 60_000,
+    // Mídia ainda sem link (download pendente ou em recuperação): tenta de novo.
+    refetchInterval: (query) => {
+      const current = query.state.data as Record<string, string> | undefined;
+      return current && mediaPaths.some((path) => !current[path]) ? 45_000 : false;
+    },
     placeholderData: (previous) => previous,
   });
 
