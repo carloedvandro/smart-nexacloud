@@ -35,6 +35,17 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook/$token")({
           return new Response(JSON.stringify({ error: "payload inválido" }), jsonInit(400));
         }
 
+        // Mensagem recebida prova que o número está conectado (oscilação da MEGA).
+        const data = (payload["data"] as Record<string, unknown> | undefined) ?? payload;
+        const key = data["key"] as Record<string, unknown> | undefined;
+        if (typeof key?.["id"] === "string" && typeof key?.["remoteJid"] === "string" &&
+          ["LOGGED_OUT", "ERROR", "DISCONNECTED"].includes(String(connection.status))) {
+          await supabaseAdmin
+            .from("whatsapp_connections")
+            .update({ status: "CONNECTED", last_connected_at: new Date().toISOString() })
+            .eq("id", connection.id);
+        }
+
         const externalEventId = extractEventId(payload);
 
         // Idempotência: o índice único (connection_id, external_event_id) barra repetições.
