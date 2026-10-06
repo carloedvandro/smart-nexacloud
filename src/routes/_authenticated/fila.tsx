@@ -40,7 +40,7 @@ export const Route = createFileRoute("/_authenticated/fila")({
   component: GuardedFilaPage,
   errorComponent: ({ error }) => (
     <div className="p-8 text-sm text-muted-foreground">
-      Não foi possível carregar a fila: {error.message}
+      Não foi possível carregar a fila: {error instanceof Error ? error.message : String(error)}
     </div>
   ),
 });
