@@ -16,3 +16,7 @@
 - Neste projeto, o usuário precisou aplicar manualmente migrations recebidas via GitHub. Não afirmar que um push aplicou o SQL; confirmar a aplicação no Lovable Cloud separadamente.
 - No iPhone, ativar os avisos dentro do app instalado em Configurações → Perfil → Avisos no celular. Instalar apenas o ícone não concede permissão de push.
 
+## Mídia do WhatsApp
+
+- Render WhatsApp animated-sticker ZIP payloads by extracting `animation/animation.json` and playing it with Lottie, because these files are not browser images.
+
