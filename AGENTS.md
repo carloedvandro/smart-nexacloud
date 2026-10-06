@@ -19,6 +19,8 @@
 ## Mídia do WhatsApp
 
 - Render WhatsApp animated-sticker ZIP payloads by extracting `animation/animation.json` and playing it with Lottie, because these files are not browser images.
+- Media repair may delete the original object only after copying it to a different path; rewriting the same path and then removing it destroyed stored photos and stickers.
+- Never mark an instance offline from media-download failures; MEGA returns "not logged in" there during brief reconnects.
 
 
 ## Status da instância MEGA
