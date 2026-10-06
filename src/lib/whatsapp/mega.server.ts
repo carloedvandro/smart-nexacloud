@@ -137,7 +137,32 @@ export async function confirmInstanceConnected(creds: MegaCredentials): Promise<
   return connected === true;
 }
 
+/**
+ * Envios que recebem "Instance not logged in" ganham UMA nova tentativa após
+ * uma pausa curta, desde que a MEGA confirme que o número segue conectado —
+ * cobre a oscilação momentânea do servidor deles sem duplicar mensagens.
+ */
 async function request<T>(
+  creds: MegaCredentials,
+  path: string,
+  init?: { method?: string; body?: unknown },
+): Promise<MegaResult<T>> {
+  const first = await requestOnce<T>(creds, path, init);
+  if (
+    first.ok ||
+    !path.startsWith("/rest/sendMessage/") ||
+    !isLoggedOutMessage(first.error)
+  ) {
+    return first;
+  }
+  const stillConnected = await confirmInstanceConnected(creds);
+  if (!stillConnected) return first;
+  await new Promise((resolve) => setTimeout(resolve, 2_000));
+  console.info("[mega] nova tentativa após 'not logged in' momentâneo", { path });
+  return requestOnce<T>(creds, path, init);
+}
+
+async function requestOnce<T>(
   creds: MegaCredentials,
   path: string,
   init?: { method?: string; body?: unknown },
