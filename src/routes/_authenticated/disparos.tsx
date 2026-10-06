@@ -121,7 +121,7 @@ export const Route = createFileRoute("/_authenticated/disparos")({
   component: GuardedDisparosPage,
   errorComponent: ({ error }) => (
     <div className="p-8 text-sm text-muted-foreground">
-      Não foi possível carregar os disparos: {error.message}
+      Não foi possível carregar os disparos: {error instanceof Error ? error.message : String(error)}
     </div>
   ),
 });

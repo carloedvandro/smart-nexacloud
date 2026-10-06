@@ -409,7 +409,17 @@ function ConversationThread({
   const fetchMediaUrls = useServerFn(getConversationMediaUrls);
   const { data: freshMediaUrls } = useQuery({
     queryKey: ["media-urls", conversation.id, mediaPaths.join("|")],
-    queryFn: () => fetchMediaUrls({ data: { paths: mediaPaths } }),
+    // Em blocos de 60 (limite do servidor), começando pelas mais recentes,
+    // para que nenhuma mídia nova fique sem link em conversas longas.
+    queryFn: async () => {
+      const ordered = [...mediaPaths].reverse();
+      const chunks: string[][] = [];
+      for (let i = 0; i < ordered.length; i += 60) chunks.push(ordered.slice(i, i + 60));
+      const results = await Promise.all(
+        chunks.map((paths) => fetchMediaUrls({ data: { paths } }).catch(() => ({}))),
+      );
+      return Object.assign({}, ...results) as Record<string, string>;
+    },
     enabled: mediaPaths.length > 0,
     staleTime: 30 * 60_000,
     placeholderData: (previous) => previous,
