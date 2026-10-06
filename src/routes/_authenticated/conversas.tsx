@@ -407,7 +407,7 @@ function ConversationThread({
     return Array.from(new Set([...fromMessages, ...favorites.map((f) => f.path)]));
   }, [messages, favorites]);
   const fetchMediaUrls = useServerFn(getConversationMediaUrls);
-  const { data: freshMediaUrls } = useQuery({
+  const { data: freshMediaUrls, isFetching: mediaFetching } = useQuery({
     queryKey: ["media-urls", conversation.id, mediaPaths.join("|")],
     // Em blocos de 60 (limite do servidor), começando pelas mais recentes,
     // para que nenhuma mídia nova fique sem link em conversas longas.
@@ -422,6 +422,11 @@ function ConversationThread({
     },
     enabled: mediaPaths.length > 0,
     staleTime: 30 * 60_000,
+    // Mídia ainda sem link (download pendente ou em recuperação): tenta de novo.
+    refetchInterval: (query) => {
+      const current = query.state.data as Record<string, string> | undefined;
+      return current && mediaPaths.some((path) => !current[path]) ? 45_000 : false;
+    },
     placeholderData: (previous) => previous,
   });
 
@@ -763,6 +768,7 @@ function ConversationThread({
               key={m.id}
               message={m}
               mediaUrl={m.media_url ? (mediaUrls?.[m.media_url] ?? null) : null}
+              mediaPending={mediaFetching}
               isFavorite={m.media_url ? isFavorite(m.media_url) : false}
               onToggleFavorite={() =>
                 m.media_url &&
@@ -1008,11 +1014,13 @@ function MediaComposer({
 function MessageBubble({
   message,
   mediaUrl,
+  mediaPending,
   isFavorite,
   onToggleFavorite,
 }: {
   message: MessageRow;
   mediaUrl?: string | null;
+  mediaPending?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
 }) {
@@ -1050,7 +1058,11 @@ function MessageBubble({
         ) : null}
         {message.media_url ? (
           <>
-            <MessageMedia type={message.message_type} url={mediaUrl ?? null} />
+            <MessageMedia
+              type={message.message_type}
+              url={mediaUrl ?? null}
+              pending={mediaPending ?? false}
+            />
             {mediaUrl && message.message_type !== "audio" ? (
               <div className="mb-1 flex items-center gap-1">
                 <button
@@ -1113,9 +1125,21 @@ function MessageBubble({
 export const CONVERSATION_LABELS = CONVERSATION_STATUS_LABEL;
 
 /** Renderiza áudio, imagem, vídeo ou documento da mensagem. */
-function MessageMedia({ type, url }: { type: string; url: string | null }) {
+function MessageMedia({
+  type,
+  url,
+  pending,
+}: {
+  type: string;
+  url: string | null;
+  pending: boolean;
+}) {
   if (!url) {
-    return <p className="mb-1 text-xs text-chat-ink-muted">Carregando mídia…</p>;
+    return (
+      <p className="mb-1 text-xs text-chat-ink-muted">
+        {pending ? "Carregando mídia…" : "Mídia indisponível no momento"}
+      </p>
+    );
   }
   if (type === "audio") {
     return <audio controls src={url} className="mb-1 w-60 max-w-full sm:w-64" />;

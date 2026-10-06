@@ -238,7 +238,14 @@ async function isUsableConnection(companyId: string, connectionId: string): Prom
     .eq("id", connectionId)
     .eq("company_id", companyId)
     .maybeSingle();
-  return data?.status === "CONNECTED";
+  if (data?.status === "CONNECTED") return true;
+  // Marcada como caída por oscilação da MEGA? Confere ao vivo antes de desistir.
+  if (data && ["LOGGED_OUT", "ERROR", "DISCONNECTED"].includes(String(data.status))) {
+    const creds = await loadMegaCredentials(connectionId);
+    const { reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
+    if (creds && (await reviveIfConnected(creds).catch(() => false))) return true;
+  }
+  return false;
 }
 
 async function resolveConnection(input: {
