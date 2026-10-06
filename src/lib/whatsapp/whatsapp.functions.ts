@@ -418,13 +418,15 @@ export const getConversationMediaUrls = createServerFn({ method: "POST" })
     const allowed = data.paths.filter((path) => path.startsWith(`${profile.company_id}/`));
     const { signedMediaUrl, repairMediaContentType } = await import("@/lib/whatsapp/media.server");
     const { mediaProxyUrl } = await import("@/lib/whatsapp/media-token.server");
-    const streamable = /\.(ogg|mp3|m4a|wav|webm|mp4|jpg|jpeg|png|gif|webp)$/i;
+    const streamable = /\.(ogg|mp3|m4a|wav|webm|mp4|jpg|jpeg|png|gif)$/i;
     const entries = await Promise.all(
       allowed.map(async (path) => {
         // Corrige arquivos antigos salvos sem o tipo correto (PDF abrindo em branco).
         const fixed = await repairMediaContentType(path);
-        // Documentos são servidos pelo próprio domínio, com o tipo correto,
-        // porque o link do storage abria em branco no Safari.
+        // Documentos e WebP (inclusive figurinhas animadas) são servidos pelo
+        // próprio domínio, com o tipo detectado pelos bytes. O Safari/iOS pode
+        // recusar WebP animado quando o link externo vem com Content-Type
+        // genérico, embora uma figurinha WebP estática ainda apareça.
         const url = streamable.test(fixed) ? await signedMediaUrl(fixed) : mediaProxyUrl(fixed);
         return [path, url] as const;
       }),
