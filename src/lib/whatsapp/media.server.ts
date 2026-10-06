@@ -34,6 +34,7 @@ export function extensionFor(kind: MediaKind, mimeType: string | null | undefine
     "video/mp4": "mp4",
     "video/webm": "webm",
     "application/pdf": "pdf",
+    "application/zip": "zip",
   };
   return map[clean] ?? EXTENSION_BY_KIND[kind];
 }
@@ -90,14 +91,18 @@ export async function storeMedia(input: {
   mimeType: string | null;
   kind: MediaKind;
   fileName?: string | null;
+  /** Regrava num caminho já existente (recuperação de arquivo perdido). */
+  targetPath?: string | null;
 }): Promise<string | null> {
   const sniffed = sniffMimeType(input.bytes);
   const mimeType = isGeneric(input.mimeType) ? (sniffed ?? input.mimeType) : input.mimeType;
   const extension = extensionFor(input.kind, mimeType);
-  const path = `${input.companyId}/${input.connectionId}/${crypto.randomUUID()}.${extension}`;
+  const path =
+    input.targetPath ??
+    `${input.companyId}/${input.connectionId}/${crypto.randomUUID()}.${extension}`;
   const { error } = await supabaseAdmin.storage.from(MEDIA_BUCKET).upload(path, input.bytes, {
     contentType: mimeType ?? "application/octet-stream",
-    upsert: false,
+    upsert: Boolean(input.targetPath),
   });
   if (error) {
     console.error("[midia] upload falhou", error.message);
@@ -161,24 +166,38 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+/** Caminhos já conferidos neste servidor: evita baixar o arquivo a cada abertura. */
+const checkedPaths = new Map<string, string>();
+
 /**
  * Arquivos antigos foram salvos como application/octet-stream, e por isso o
  * navegador abre uma aba em branco em vez do PDF. Aqui detectamos o tipo real
- * pelos bytes e regravamos o arquivo com o tipo e a extensão corretos,
- * devolvendo o novo caminho (ou o mesmo, quando nada precisa mudar).
+ * pelos bytes e regravamos o arquivo com o tipo e a extensão corretos.
+ * Devolve o caminho válido, ou null quando o arquivo não existe mais.
+ *
+ * IMPORTANTE: o arquivo original só é apagado quando o novo nome é DIFERENTE
+ * e a cópia foi gravada com sucesso — regravar no mesmo nome e depois apagar
+ * destruía a mídia (fotos e figurinhas sumiam da conversa).
  */
-export async function repairMediaContentType(path: string): Promise<string> {
+export async function repairMediaContentType(path: string): Promise<string | null> {
+  const cached = checkedPaths.get(path);
+  if (cached) return cached;
   // .jpg entra na lista porque figurinhas/GIFs (webp) eram salvos com essa
   // extensão padrão quando a MEGA não informava o mimetype.
   if (!/\.(bin|dat|jpg|jpeg)$/i.test(path)) return path;
   const file = await downloadStoredMedia(path);
-  if (!file) return path;
+  if (!file) return null;
   const detected = sniffMimeType(file.bytes);
-  if (!detected) return path;
   const currentExtension = (path.split(".").pop() ?? "").toLowerCase();
-  const jpegOk = detected === "image/jpeg" && (currentExtension === "jpg" || currentExtension === "jpeg");
-  if (jpegOk && !isGeneric(file.mimeType)) return path;
-
+  const remember = (value: string) => {
+    checkedPaths.set(path, value);
+    if (checkedPaths.size > 5000) checkedPaths.clear();
+    return value;
+  };
+  if (!detected) return remember(path);
+  if (detected === "image/jpeg" && (currentExtension === "jpg" || currentExtension === "jpeg")) {
+    return remember(path);
+  }
 
   const kind: MediaKind = detected.startsWith("image/")
     ? "image"
@@ -189,6 +208,7 @@ export async function repairMediaContentType(path: string): Promise<string> {
         : "document";
   const extension = extensionFor(kind, detected);
   const newPath = `${path.replace(/\.[^.]+$/, "")}.${extension}`;
+  if (newPath === path) return remember(path);
 
   const { error } = await supabaseAdmin.storage.from(MEDIA_BUCKET).upload(newPath, file.bytes, {
     contentType: detected,
@@ -207,5 +227,6 @@ export async function repairMediaContentType(path: string): Promise<string> {
     return newPath;
   }
   await supabaseAdmin.storage.from(MEDIA_BUCKET).remove([path]);
-  return newPath;
+  checkedPaths.set(newPath, newPath);
+  return remember(newPath);
 }

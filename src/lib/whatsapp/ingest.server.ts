@@ -721,6 +721,7 @@ async function downloadAndStoreMedia(input: {
   companyId: string;
   body: Json;
   messageType: MessageType;
+  targetPath?: string | null;
 }): Promise<{ path: string; mimeType: string | null } | null> {
   const { base64ToBytes, storeMedia } = await import("@/lib/whatsapp/media.server");
   const creds = await loadMegaCredentials(input.connectionId);
@@ -854,8 +855,52 @@ async function downloadAndStoreMedia(input: {
     bytes,
     mimeType,
     kind,
+    targetPath: input.targetPath ?? null,
   });
   return path ? { path, mimeType } : null;
+}
+
+const recoveryAttempts = new Map<string, number>();
+
+/**
+ * Recupera uma mídia cujo arquivo sumiu do armazenamento: baixa de novo pela
+ * MEGA usando o evento original guardado e regrava no MESMO caminho, sem
+ * alterar a mensagem. Cada caminho é tentado no máximo a cada 10 minutos.
+ */
+export async function recoverStoredMedia(path: string): Promise<boolean> {
+  const last = recoveryAttempts.get(path);
+  if (last && Date.now() - last < 10 * 60_000) return false;
+  recoveryAttempts.set(path, Date.now());
+  if (recoveryAttempts.size > 5000) recoveryAttempts.clear();
+
+  const { data: message } = await supabaseAdmin
+    .from("messages")
+    .select("company_id, connection_id, external_message_id, message_type")
+    .eq("media_url", path)
+    .limit(1)
+    .maybeSingle();
+  if (!message?.external_message_id || !message.connection_id) return false;
+
+  const { data: events } = await supabaseAdmin
+    .from("whatsapp_events")
+    .select("payload")
+    .eq("connection_id", message.connection_id)
+    .like("external_event_id", `%:${message.external_message_id}`)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const payload = events?.[0]?.payload as Json | undefined;
+  if (!payload) return false;
+  const body = (pick(payload, "data") as Json | undefined) ?? payload;
+
+  const stored = await downloadAndStoreMedia({
+    connectionId: message.connection_id,
+    companyId: message.company_id,
+    body,
+    messageType: message.message_type as MessageType,
+    targetPath: path,
+  });
+  if (stored) console.info("[midia] arquivo perdido recuperado", { path });
+  return Boolean(stored);
 }
 
 /**

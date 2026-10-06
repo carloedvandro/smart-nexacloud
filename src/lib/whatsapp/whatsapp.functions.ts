@@ -39,6 +39,25 @@ export const listWhatsAppInstances = createServerFn({ method: "GET" })
       : { data: [] as { connection_id: string }[] };
     const withCreds = new Set((creds ?? []).map((row) => row.connection_id));
 
+    // Quedas de poucos segundos da MEGA podem deixar a instância marcada como
+    // caída. Ao abrir o painel, conferimos na MEGA e corrigimos na hora.
+    const offline = (data ?? []).filter(
+      (row) =>
+        withCreds.has(row.id) && ["LOGGED_OUT", "ERROR", "DISCONNECTED"].includes(String(row.status)),
+    );
+    if (offline.length) {
+      const { loadMegaCredentials } = await import("@/lib/whatsapp/credentials.server");
+      const { reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
+      await Promise.all(
+        offline.map(async (row) => {
+          const megaCreds = await loadMegaCredentials(row.id);
+          if (megaCreds && (await reviveIfConnected(megaCreds).catch(() => false))) {
+            row.status = "CONNECTED";
+          }
+        }),
+      );
+    }
+
     return (data ?? []).map((row) => {
       const profile = row.profile as { full_name: string | null; email: string | null } | null;
       return {
@@ -418,16 +437,30 @@ export const getConversationMediaUrls = createServerFn({ method: "POST" })
     const allowed = data.paths.filter((path) => path.startsWith(`${profile.company_id}/`));
     const { signedMediaUrl, repairMediaContentType } = await import("@/lib/whatsapp/media.server");
     const { mediaProxyUrl } = await import("@/lib/whatsapp/media-token.server");
+    const { recoverStoredMedia } = await import("@/lib/whatsapp/ingest.server");
     const streamable = /\.(ogg|mp3|m4a|wav|webm|mp4|jpg|jpeg|png|gif)$/i;
+    // Recuperações (novo download na MEGA) são caras: no máximo 6 por chamada.
+    let recoveryBudget = 6;
+    const resolve = async (path: string): Promise<string | null> => {
+      // Corrige arquivos antigos salvos sem o tipo correto (PDF abrindo em branco).
+      const fixed = await repairMediaContentType(path);
+      if (!fixed) return null;
+      // Documentos e WebP (inclusive figurinhas animadas) são servidos pelo
+      // próprio domínio, com o tipo detectado pelos bytes.
+      if (!streamable.test(fixed)) return mediaProxyUrl(fixed);
+      return signedMediaUrl(fixed);
+    };
     const entries = await Promise.all(
       allowed.map(async (path) => {
-        // Corrige arquivos antigos salvos sem o tipo correto (PDF abrindo em branco).
-        const fixed = await repairMediaContentType(path);
-        // Documentos e WebP (inclusive figurinhas animadas) são servidos pelo
-        // próprio domínio, com o tipo detectado pelos bytes. O Safari/iOS pode
-        // recusar WebP animado quando o link externo vem com Content-Type
-        // genérico, embora uma figurinha WebP estática ainda apareça.
-        const url = streamable.test(fixed) ? await signedMediaUrl(fixed) : mediaProxyUrl(fixed);
+        let url = await resolve(path);
+        if (!url && recoveryBudget > 0) {
+          recoveryBudget -= 1;
+          const recovered = await Promise.race([
+            recoverStoredMedia(path).catch(() => false),
+            new Promise<boolean>((done) => setTimeout(() => done(false), 20_000)),
+          ]);
+          if (recovered) url = await resolve(path);
+        }
         return [path, url] as const;
       }),
     );

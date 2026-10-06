@@ -104,6 +104,13 @@ async function flagInstanceOffline(creds: MegaCredentials, message: string) {
       connected = cached.connected;
     } else {
       connected = await liveStatusIsConnected(creds);
+      // A MEGA se reconecta sozinha em poucos segundos: só aceitamos a queda
+      // quando ela continua após duas novas consultas espaçadas.
+      for (const wait of [5_000, 10_000]) {
+        if (connected !== false) break;
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        connected = await liveStatusIsConnected(creds);
+      }
       recentChecks.set(creds.connectionId, { at: Date.now(), connected });
     }
     if (connected !== false) {
@@ -128,6 +135,32 @@ async function flagInstanceOffline(creds: MegaCredentials, message: string) {
   } catch (error) {
     console.error("[mega] falha ao marcar instância offline", error);
   }
+}
+
+/**
+ * Painel: se a instância está marcada como caída mas a MEGA diz que está
+ * conectada, volta para "Conectada" (consulta no máximo a cada 30s).
+ */
+export async function reviveIfConnected(creds: MegaCredentials): Promise<boolean> {
+  const cached = recentChecks.get(creds.connectionId);
+  let connected: boolean | null;
+  if (cached && Date.now() - cached.at < 30_000) connected = cached.connected;
+  else {
+    connected = await liveStatusIsConnected(creds);
+    recentChecks.set(creds.connectionId, { at: Date.now(), connected });
+  }
+  if (connected !== true) return false;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { error } = await supabaseAdmin
+    .from("whatsapp_connections")
+    .update({ status: "CONNECTED", last_connected_at: new Date().toISOString() })
+    .eq("id", creds.connectionId)
+    .in("status", ["LOGGED_OUT", "ERROR", "DISCONNECTED"]);
+  if (error) {
+    console.error("[mega] falha ao reativar instância", error.message);
+    return false;
+  }
+  return true;
 }
 
 /** Confirma na MEGA se a instância está realmente conectada (uso externo). */
@@ -209,7 +242,11 @@ async function requestOnce<T>(
         name,
         body: text?.slice(0, 500),
       });
-      await flagInstanceOffline(creds, `${name} ${rawMessage} ${text ?? ""}`);
+      // Falha ao baixar mídia não prova queda do número: a MEGA devolve
+      // "not logged in" nesse endereço durante reconexões rápidas.
+      if (!/downloadMedia/i.test(path)) {
+        await flagInstanceOffline(creds, `${name} ${rawMessage} ${text ?? ""}`);
+      }
       return { ok: false, error: message, status: response.status };
     }
 
@@ -560,7 +597,11 @@ export const MegaApiService = {
         if (!result.ok) {
           last = result;
           if (result.status === 401 || result.status === 403) return result;
-          if (result.status === 404) break;
+          // A MEGA responde HTTP 200 com o erro no corpo: "not logged in" vale
+          // para todas as variações (não adianta insistir) e "Resource not
+          // found" indica que este endereço não existe nesta versão.
+          if (isLoggedOutMessage(result.error)) return result;
+          if (result.status === 404 || /resource .* not found/i.test(result.error)) break;
           continue;
         }
 
