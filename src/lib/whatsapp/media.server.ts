@@ -123,13 +123,33 @@ export async function signedMediaUrl(path: string, expiresIn = 60 * 60): Promise
 export async function downloadStoredMedia(
   path: string,
 ): Promise<{ bytes: Uint8Array; mimeType: string | null } | null> {
-  const { data, error } = await supabaseAdmin.storage.from(MEDIA_BUCKET).download(path);
-  if (error || !data) {
-    console.error("[midia] download interno falhou", error?.message);
-    return null;
+  const bucket = supabaseAdmin.storage.from(MEDIA_BUCKET);
+  const candidates = [path];
+  if (/\.(bin|dat|jpe?g)$/i.test(path)) {
+    const stem = path.replace(/\.[^.]+$/, "");
+    candidates.push(
+      `${stem}.zip`,
+      `${stem}.webp`,
+      `${stem}.gif`,
+      `${stem}.png`,
+      `${stem}.jpg`,
+      `${stem}.pdf`,
+      `${stem}.ogg`,
+      `${stem}.mp4`,
+    );
   }
-  const buffer = await data.arrayBuffer();
-  return { bytes: new Uint8Array(buffer), mimeType: data.type || null };
+
+  let lastError: string | undefined;
+  for (const candidate of candidates) {
+    const { data, error } = await bucket.download(candidate);
+    if (data) {
+      const buffer = await data.arrayBuffer();
+      return { bytes: new Uint8Array(buffer), mimeType: data.type || null };
+    }
+    lastError = error?.message;
+  }
+  console.error("[midia] download interno falhou", lastError);
+  return null;
 }
 
 export function bytesToBase64(bytes: Uint8Array): string {
@@ -178,10 +198,14 @@ export async function repairMediaContentType(path: string): Promise<string> {
     console.error("[midia] regravação falhou", error.message);
     return path;
   }
-  await supabaseAdmin
+  const { error: updateError } = await supabaseAdmin
     .from("messages")
     .update({ media_url: newPath })
     .eq("media_url", path);
+  if (updateError) {
+    console.error("[midia] atualização do caminho falhou", updateError.message);
+    return newPath;
+  }
   await supabaseAdmin.storage.from(MEDIA_BUCKET).remove([path]);
   return newPath;
 }
