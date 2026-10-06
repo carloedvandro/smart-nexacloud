@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { StickerMedia } from "./sticker-media";
 
 const EMOJI_KEY = "nexa:favoritos:emojis";
 const MEDIA_KEY = "nexa:favoritos:midias";
@@ -247,7 +248,7 @@ export function EmojiGifPicker({
                       onClick={() => setConfirmFavorite(item)}
                     >
                       {url ? (
-                        <img src={url} alt="" className="size-full object-cover" loading="lazy" />
+                        <StickerMedia url={url} alt="Figurinha favorita" className="size-full" />
                       ) : (
                         <span className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
                           prévia indisponível
@@ -281,11 +282,7 @@ export function EmojiGifPicker({
             {(() => {
               const url = resolveUrl(confirmFavorite.path);
               return url ? (
-                <img
-                  src={url}
-                  alt="Prévia do favorito"
-                  className="max-h-48 w-auto rounded-lg border object-contain"
-                />
+                <StickerMedia url={url} alt="Prévia do favorito" className="size-40" />
               ) : (
                 <span className="flex h-32 items-center text-xs text-muted-foreground">
                   prévia indisponível
