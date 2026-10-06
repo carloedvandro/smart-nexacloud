@@ -71,14 +71,23 @@ export async function syncInstanceStatus(connectionId: string): Promise<Instance
 
   const result = await MegaApiService.getInstanceStatus(creds);
   if (!result.ok) {
-    await persistState(connectionId, "ERROR", { qrStatus: result.error });
+    // Falha de rede/servidor da MEGA não prova que o número caiu: só marca
+    // deslogada quando a MEGA diz isso explicitamente.
+    const lower = result.error.toLowerCase();
+    if (lower.includes("not logged in") || lower.includes("not connected")) {
+      await persistState(connectionId, "LOGGED_OUT", { qrStatus: result.error });
+      return { status: "LOGGED_OUT", error: result.error };
+    }
+    if (lower.includes("instance not found")) {
+      await persistState(connectionId, "ERROR", { qrStatus: result.error });
+    }
     return { status: "ERROR", error: result.error };
   }
 
   const raw = JSON.stringify(result.data ?? {}).toUpperCase();
   const phone = extractConnectedPhone(result.data);
   let status: InstanceStateResult["status"] = "DISCONNECTED";
-  if (/OPEN|CONNECTED|ONLINE/.test(raw) && phone) status = "CONNECTED";
+  if (/"(STATE|STATUS)"\s*:\s*"(OPEN|CONNECTED|ONLINE)"/.test(raw) && phone) status = "CONNECTED";
   else if (/CONNECTING|PAIRING|QRCODE/.test(raw)) status = "CONNECTING";
   else if (/LOGGED_?OUT|LOGOUT/.test(raw)) status = "LOGGED_OUT";
 
@@ -297,7 +306,37 @@ async function resolveConnection(input: {
     .order("instance_number", { ascending: true })
     .limit(1)
     .maybeSingle();
-  return fallback?.id ?? null;
+  if (fallback?.id) return fallback.id;
+
+  // Nenhuma marcada como conectada: o painel pode estar desatualizado por uma
+  // oscilação da MEGA. Confere ao vivo a instância da conversa e o tronco antes
+  // de recusar o envio, e corrige o status quando a MEGA confirma a conexão.
+  const candidates: string[] = [];
+  if (typeof fromConversation === "string") candidates.push(fromConversation);
+  const { data: trunkAny } = await supabaseAdmin
+    .from("whatsapp_connections")
+    .select("id")
+    .eq("company_id", input.companyId)
+    .eq("is_trunk", true)
+    .maybeSingle();
+  if (trunkAny?.id && !candidates.includes(trunkAny.id)) candidates.push(trunkAny.id);
+
+  const { confirmInstanceConnected } = await import("@/lib/whatsapp/mega.server");
+  for (const candidate of candidates) {
+    const { data: owned } = await supabaseAdmin
+      .from("whatsapp_connections")
+      .select("id, connection_type")
+      .eq("id", candidate)
+      .eq("company_id", input.companyId)
+      .maybeSingle();
+    if (!owned || owned.connection_type !== "TRUNK") continue;
+    const creds = await loadMegaCredentials(candidate);
+    if (!creds || !(await confirmInstanceConnected(creds))) continue;
+    await persistState(candidate, "CONNECTED", { qrStatus: "connected" });
+    console.info("[whatsapp] instância reativada após conferência ao vivo", { instancia: candidate });
+    return candidate;
+  }
+  return null;
 }
 
 

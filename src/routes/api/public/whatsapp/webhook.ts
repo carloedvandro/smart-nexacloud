@@ -44,6 +44,19 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
           );
         }
 
+        // Mensagem chegando pela instância prova que o número está conectado:
+        // desfaz uma marcação de "deslogada" causada por oscilação da MEGA.
+        if (hasMessageKey(payload)) {
+          const { error: reviveError } = await supabaseAdmin
+            .from("whatsapp_connections")
+            .update({ status: "CONNECTED", last_connected_at: new Date().toISOString() })
+            .eq("id", credential.connection_id)
+            .in("status", ["LOGGED_OUT", "ERROR", "DISCONNECTED"]);
+          if (reviveError) {
+            console.error("[whatsapp] falha ao reativar status da instância", reviveError.message);
+          }
+        }
+
         const externalEventId = extractEventId(payload);
 
         // Idempotência: índice único (connection_id, external_event_id).
@@ -96,6 +109,13 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
 
 function jsonInit(status = 200): ResponseInit {
   return { status, headers: { "content-type": "application/json" } };
+}
+
+function hasMessageKey(payload: Record<string, unknown>): boolean {
+  const data = (payload["data"] as Record<string, unknown> | undefined) ?? payload;
+  const key = (data["key"] as Record<string, unknown> | undefined) ??
+    (payload["key"] as Record<string, unknown> | undefined);
+  return typeof key?.["id"] === "string" && typeof key?.["remoteJid"] === "string";
 }
 
 function extractEventId(payload: Record<string, unknown>): string | null {
