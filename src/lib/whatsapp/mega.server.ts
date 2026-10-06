@@ -56,17 +56,65 @@ function providerError(payload: unknown): string | null {
   return null;
 }
 
+function isLoggedOutMessage(message: string) {
+  const text = message.toLowerCase();
+  return text.includes("not logged in") || text.includes("instance not connected");
+}
+
 /**
- * A MEGA pode responder que a instância sumiu ("Instance not found") ou está
- * deslogada ("Instance not logged in"). Nesses casos o número precisa ser
- * reconectado pelo QR — refletimos isso no painel para o operador ver o
- * problema em vez de só ver mensagens falhando.
+ * Consulta direta da situação na MEGA, sem passar por `request` (evita que a
+ * própria confirmação marque a instância offline em loop).
+ */
+async function liveStatusIsConnected(creds: MegaCredentials): Promise<boolean | null> {
+  try {
+    const response = await fetch(`${baseUrl(creds.host)}/rest/instance/${creds.instanceKey}`, {
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${creds.apiKey}` },
+      signal: AbortSignal.timeout(8_000),
+    });
+    const text = (await response.text()).toUpperCase();
+    if (/"(STATE|STATUS)"\s*:\s*"(OPEN|CONNECTED|ONLINE)"/.test(text)) return true;
+    if (/NOT LOGGED IN|LOGGED_?OUT|"(STATE|STATUS)"\s*:\s*"(CLOSE|DISCONNECTED)"/.test(text)) {
+      return false;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+const recentChecks = new Map<string, { at: number; connected: boolean | null }>();
+
+/**
+ * A MEGA às vezes responde "Instance not logged in" por alguns segundos mesmo
+ * com o número conectado (oscilação do servidor deles). Antes de marcar a
+ * instância como deslogada no painel, confirmamos na consulta de status: só
+ * marcamos quando a MEGA confirma a queda. "Instance not found" continua
+ * marcando ERRO direto.
  */
 async function flagInstanceOffline(creds: MegaCredentials, message: string) {
   const text = message.toLowerCase();
   const notFound = text.includes("instance not found");
-  const loggedOut = text.includes("not logged in") || text.includes("instance not connected");
+  const loggedOut = isLoggedOutMessage(text);
   if (!notFound && !loggedOut) return;
+
+  if (!notFound) {
+    const cached = recentChecks.get(creds.connectionId);
+    let connected: boolean | null;
+    if (cached && Date.now() - cached.at < 30_000) {
+      connected = cached.connected;
+    } else {
+      connected = await liveStatusIsConnected(creds);
+      recentChecks.set(creds.connectionId, { at: Date.now(), connected });
+    }
+    if (connected !== false) {
+      console.warn("[mega] 'not logged in' momentâneo — status segue conectado, painel mantido", {
+        instancia: creds.connectionId,
+        status: connected === null ? "indefinido" : "conectado",
+      });
+      return;
+    }
+  }
+
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin
@@ -80,6 +128,13 @@ async function flagInstanceOffline(creds: MegaCredentials, message: string) {
   } catch (error) {
     console.error("[mega] falha ao marcar instância offline", error);
   }
+}
+
+/** Confirma na MEGA se a instância está realmente conectada (uso externo). */
+export async function confirmInstanceConnected(creds: MegaCredentials): Promise<boolean> {
+  const connected = await liveStatusIsConnected(creds);
+  recentChecks.set(creds.connectionId, { at: Date.now(), connected });
+  return connected === true;
 }
 
 async function request<T>(
