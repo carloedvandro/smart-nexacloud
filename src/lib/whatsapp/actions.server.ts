@@ -71,14 +71,23 @@ export async function syncInstanceStatus(connectionId: string): Promise<Instance
 
   const result = await MegaApiService.getInstanceStatus(creds);
   if (!result.ok) {
-    await persistState(connectionId, "ERROR", { qrStatus: result.error });
+    // Falha de rede/servidor da MEGA não prova que o número caiu: só marca
+    // deslogada quando a MEGA diz isso explicitamente.
+    const lower = result.error.toLowerCase();
+    if (lower.includes("not logged in") || lower.includes("not connected")) {
+      await persistState(connectionId, "LOGGED_OUT", { qrStatus: result.error });
+      return { status: "LOGGED_OUT", error: result.error };
+    }
+    if (lower.includes("instance not found")) {
+      await persistState(connectionId, "ERROR", { qrStatus: result.error });
+    }
     return { status: "ERROR", error: result.error };
   }
 
   const raw = JSON.stringify(result.data ?? {}).toUpperCase();
   const phone = extractConnectedPhone(result.data);
   let status: InstanceStateResult["status"] = "DISCONNECTED";
-  if (/OPEN|CONNECTED|ONLINE/.test(raw) && phone) status = "CONNECTED";
+  if (/"(STATE|STATUS)"\s*:\s*"(OPEN|CONNECTED|ONLINE)"/.test(raw) && phone) status = "CONNECTED";
   else if (/CONNECTING|PAIRING|QRCODE/.test(raw)) status = "CONNECTING";
   else if (/LOGGED_?OUT|LOGOUT/.test(raw)) status = "LOGGED_OUT";
 
