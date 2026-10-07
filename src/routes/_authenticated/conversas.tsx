@@ -441,6 +441,15 @@ function ConversationThread({
     return mediaCache.current;
   }, [freshMediaUrls]);
 
+  // Favoritos têm busca própria e rápida: não esperam as mídias desta
+  // conversa (que podem estar sendo recuperadas da MEGA e demorar).
+  const favoritePaths = useMemo(() => favorites.map((f) => f.path), [favorites]);
+  const { data: favoriteUrls } = useQuery({
+    queryKey: ["favorite-media-urls", favoritePaths.join("|")],
+    queryFn: () => fetchMediaUrls({ data: { paths: favoritePaths } }),
+    enabled: favoritePaths.length > 0,
+    staleTime: 30 * 60_000,
+  });
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["messages", conversation.id] });
