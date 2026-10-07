@@ -501,7 +501,7 @@ function ConversationThread({
         forward.mutate(favorite.messageId);
         return;
       }
-      const url = mediaUrls?.[favorite.path];
+      const url = favoriteUrls?.[favorite.path] ?? mediaUrls?.[favorite.path];
       if (!url) {
         toast.error("Não consegui carregar este favorito.");
         return;
@@ -514,7 +514,7 @@ function ConversationThread({
         toast.error("Não consegui enviar este favorito.");
       }
     },
-    [mediaUrls, sendMedia, forward],
+    [mediaUrls, favoriteUrls, sendMedia, forward],
   );
 
   // Rola para a última mensagem apenas quem já estava no fim da conversa.
