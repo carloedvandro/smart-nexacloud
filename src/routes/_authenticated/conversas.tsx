@@ -837,7 +837,7 @@ function ConversationThread({
             <EmojiGifPicker
               disabled={busy}
               onEmoji={(emoji) => setDraft((current) => `${current}${emoji}`)}
-              resolveUrl={(path) => mediaUrls?.[path] ?? null}
+              resolveUrl={(path) => favoriteUrls?.[path] ?? mediaUrls?.[path] ?? null}
               onSendFavorite={(favorite) => void sendFavorite(favorite)}
             />
             <Textarea
