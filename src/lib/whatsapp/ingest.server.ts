@@ -335,7 +335,17 @@ export async function processWebhookEvent(input: {
   const fromMe = Boolean(pick(body, "key.fromMe") ?? pick(payload, "key.fromMe"));
   const detected = detectMessageType(body);
   const messageType = detected === "text" ? detectMessageType(payload) : detected;
-  const content = extractText(body) ?? extractText(payload);
+  // O WhatsApp esconde algumas mensagens dos aparelhos conectados (ex.: contas
+  // verificadas como "Facebook"). Só o celular recebe o conteúdo real.
+  const isMaskedPlaceholder = Boolean(
+    pick(body, "message.placeholderMessage") ?? pick(payload, "message.placeholderMessage"),
+  );
+  const content =
+    extractText(body) ??
+    extractText(payload) ??
+    (isMaskedPlaceholder
+      ? "📱 O WhatsApp não liberou esta mensagem para o sistema. Abra no celular para ver o conteúdo."
+      : null);
   const mimeTypeHint: string | null = extractMimeType(body) ?? extractMimeType(payload);
 
   // Diagnóstico: evento sem texto e sem mídia identificada — registramos o
