@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { MessagesSquare, Users } from "lucide-react";
+import { BookOpen, Download, MessagesSquare, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 import { AppShell } from "@/components/nexa/app-shell";
 import { PlatformDashboard } from "@/components/nexa/platform-dashboard";
@@ -99,7 +100,7 @@ async function fetchMetrics(companyId: string): Promise<Metrics> {
 }
 
 function DashboardPage() {
-  const { companyId, profile, roles } = useAuth();
+  const { companyId, profile, roles, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const isPlatformAdmin = roles.includes("PLATFORM_ADMIN");
 
@@ -167,6 +168,31 @@ function DashboardPage() {
           </Card>
         ))}
       </div>
+      {isAdmin ? (
+        <Card className="mt-4 shadow-panel">
+          <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
+            <span className="bg-brand-gradient flex size-11 shrink-0 items-center justify-center rounded-xl text-primary-foreground">
+              <BookOpen className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">Manual do Administrador</p>
+              <p className="text-sm text-muted-foreground">
+                Guia completo, passo a passo, de todas as áreas do NexaAtende.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button asChild variant="outline">
+                <a href="/manual-administrador.pdf" target="_blank" rel="noreferrer">Abrir</a>
+              </Button>
+              <Button asChild>
+                <a href="/manual-administrador.pdf" download="Manual_NexaAtende_Administrador.pdf">
+                  <Download className="size-4" /> Baixar PDF
+                </a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </AppShell>
   );
 }
