@@ -11,6 +11,7 @@ import {
   extractWebhookUrl,
 } from "@/lib/whatsapp/mega.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
+import { readMegaInstanceStatus } from "@/lib/whatsapp/instance-status";
 
 export type InstanceStateResult = {
   status: "AVAILABLE" | "CONNECTING" | "CONNECTED" | "DISCONNECTED" | "LOGGED_OUT" | "ERROR" | "BLOCKED";
@@ -84,12 +85,8 @@ export async function syncInstanceStatus(connectionId: string): Promise<Instance
     return { status: "ERROR", error: result.error };
   }
 
-  const raw = JSON.stringify(result.data ?? {}).toUpperCase();
   const phone = extractConnectedPhone(result.data);
-  let status: InstanceStateResult["status"] = "DISCONNECTED";
-  if (/"(STATE|STATUS)"\s*:\s*"(OPEN|CONNECTED|ONLINE)"/.test(raw) && phone) status = "CONNECTED";
-  else if (/CONNECTING|PAIRING|QRCODE/.test(raw)) status = "CONNECTING";
-  else if (/LOGGED_?OUT|LOGOUT/.test(raw)) status = "LOGGED_OUT";
+  const status = readMegaInstanceStatus(result.data, phone);
 
   await persistState(connectionId, status, { phone, qrStatus: status.toLowerCase() });
   return { status, phoneNumber: phone };

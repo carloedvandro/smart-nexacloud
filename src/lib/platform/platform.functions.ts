@@ -187,19 +187,16 @@ export const listPlatformInstances = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     const withCreds = new Set((creds ?? []).map((row) => row.connection_id));
 
-    // O painel da plataforma também precisa recuperar status antigos após
-    // corrigir as credenciais; nunca presumir conexão só por salvar o token.
+    // Um webhook válido não significa WhatsApp conectado. Sincroniza também
+    // estados desconectados para não conservar um ERROR de credencial antiga.
     const offline = (rows ?? []).filter(
       (row) => withCreds.has(row.id) && ["ERROR", "LOGGED_OUT", "DISCONNECTED"].includes(row.status),
     );
     if (offline.length) {
-      const { loadMegaCredentials } = await import("@/lib/whatsapp/credentials.server");
-      const { reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
+      const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
       await Promise.all(offline.map(async (row) => {
-        const credentials = await loadMegaCredentials(row.id);
-        if (credentials && await reviveIfConnected(credentials).catch(() => false)) {
-          row.status = "CONNECTED";
-        }
+        const current = await syncInstanceStatus(row.id).catch(() => null);
+        if (current) row.status = current.status;
       }));
     }
 
@@ -284,14 +281,11 @@ export const updateInstanceCredentials = createServerFn({ method: "POST" })
       })
       .eq("connection_id", data.connectionId);
     if (error) throw new Error(error.message);
-    // Consulta fresca: o cache anterior pertence às credenciais substituídas.
-    const { loadMegaCredentials } = await import("@/lib/whatsapp/credentials.server");
-    const { confirmInstanceConnected, reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
-    const credentials = await loadMegaCredentials(data.connectionId);
-    if (credentials && await confirmInstanceConnected(credentials).catch(() => false)) {
-      await reviveIfConnected(credentials);
-    }
-    return { ok: true };
+    // Atualiza também LOGGED_OUT/DISCONNECTED: salvar um token válido não
+    // significa que o WhatsApp foi conectado, mas remove o ERROR antigo.
+    const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
+    const current = await syncInstanceStatus(data.connectionId);
+    return { ok: true, status: current.status, error: current.error ?? null };
   });
 
 /** Transfere uma instância provisionada de uma empresa para outra (super administrador). */
@@ -391,7 +385,7 @@ export const getPlatformWebhookUrl = createServerFn({ method: "GET" })
 export const configurePlatformWebhook = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { connectionId: string }) => data)
-  .handler(async ({ data, context }): Promise<{ ok: boolean; url: string; current: string | null; error?: string }> => {
+  .handler(async ({ data, context }): Promise<{ ok: boolean; url: string; current: string | null; status?: string; error?: string }> => {
     await assertPlatformAdmin(context.supabase as never);
     const { getPublicBaseUrl } = await import("@/lib/nexa/public-url");
     const url = `${getPublicBaseUrl()}/api/public/whatsapp/webhook`;
@@ -405,7 +399,9 @@ export const configurePlatformWebhook = createServerFn({ method: "POST" })
         return { ok: false, url, current: null, error: applied.error ?? "Falha ao configurar o webhook." };
       }
       const current = await readInstanceWebhook(data.connectionId);
-      return { ok: true, url, current: current.url ?? null };
+      const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
+      const state = await syncInstanceStatus(data.connectionId);
+      return { ok: true, url, current: current.url ?? null, status: state.status };
     } catch (error) {
       return {
         ok: false,
