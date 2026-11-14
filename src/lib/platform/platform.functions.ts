@@ -281,14 +281,11 @@ export const updateInstanceCredentials = createServerFn({ method: "POST" })
       })
       .eq("connection_id", data.connectionId);
     if (error) throw new Error(error.message);
-    // Consulta fresca: o cache anterior pertence às credenciais substituídas.
-    const { loadMegaCredentials } = await import("@/lib/whatsapp/credentials.server");
-    const { confirmInstanceConnected, reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
-    const credentials = await loadMegaCredentials(data.connectionId);
-    if (credentials && await confirmInstanceConnected(credentials).catch(() => false)) {
-      await reviveIfConnected(credentials);
-    }
-    return { ok: true };
+    // Atualiza também LOGGED_OUT/DISCONNECTED: salvar um token válido não
+    // significa que o WhatsApp foi conectado, mas remove o ERROR antigo.
+    const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
+    const current = await syncInstanceStatus(data.connectionId);
+    return { ok: true, status: current.status, error: current.error ?? null };
   });
 
 /** Transfere uma instância provisionada de uma empresa para outra (super administrador). */
@@ -388,7 +385,7 @@ export const getPlatformWebhookUrl = createServerFn({ method: "GET" })
 export const configurePlatformWebhook = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { connectionId: string }) => data)
-  .handler(async ({ data, context }): Promise<{ ok: boolean; url: string; current: string | null; error?: string }> => {
+  .handler(async ({ data, context }): Promise<{ ok: boolean; url: string; current: string | null; status?: string; error?: string }> => {
     await assertPlatformAdmin(context.supabase as never);
     const { getPublicBaseUrl } = await import("@/lib/nexa/public-url");
     const url = `${getPublicBaseUrl()}/api/public/whatsapp/webhook`;

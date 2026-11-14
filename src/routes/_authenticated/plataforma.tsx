@@ -339,8 +339,10 @@ function PlatformPage() {
       updateCredentialsFn({
         data: { connectionId: tokenTarget?.id ?? "", apiToken: tokenValue.trim() },
       }),
-    onSuccess: () => {
-      toast.success("Token da MEGA API atualizado para esta instância.");
+    onSuccess: (result) => {
+      toast.success(
+        `Token atualizado. Situação: ${WHATSAPP_INSTANCE_STATUS_LABEL[result.status] ?? result.status}.`,
+      );
       setTokenTarget(null);
       setTokenValue("");
       invalidate();
