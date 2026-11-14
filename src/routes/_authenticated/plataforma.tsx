@@ -573,7 +573,10 @@ function PlatformPage() {
                               return;
                             }
                             setWebhook({ id: instance.id, url: result.current ?? result.url });
-                            toast.success("Webhook configurado na MEGA API.");
+                            toast.success(
+                              `Webhook configurado. Situação: ${result.status ? (WHATSAPP_INSTANCE_STATUS_LABEL[result.status] ?? result.status) : "não confirmada"}.`,
+                            );
+                            invalidate();
                           } catch (error) {
                             toast.error(
                               error instanceof Error ? error.message : "Falha ao configurar.",

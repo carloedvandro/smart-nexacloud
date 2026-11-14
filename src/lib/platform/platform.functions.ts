@@ -399,7 +399,9 @@ export const configurePlatformWebhook = createServerFn({ method: "POST" })
         return { ok: false, url, current: null, error: applied.error ?? "Falha ao configurar o webhook." };
       }
       const current = await readInstanceWebhook(data.connectionId);
-      return { ok: true, url, current: current.url ?? null };
+      const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
+      const state = await syncInstanceStatus(data.connectionId);
+      return { ok: true, url, current: current.url ?? null, status: state.status };
     } catch (error) {
       return {
         ok: false,
