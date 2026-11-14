@@ -187,6 +187,22 @@ export const listPlatformInstances = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     const withCreds = new Set((creds ?? []).map((row) => row.connection_id));
 
+    // O painel da plataforma também precisa recuperar status antigos após
+    // corrigir as credenciais; nunca presumir conexão só por salvar o token.
+    const offline = (rows ?? []).filter(
+      (row) => withCreds.has(row.id) && ["ERROR", "LOGGED_OUT", "DISCONNECTED"].includes(row.status),
+    );
+    if (offline.length) {
+      const { loadMegaCredentials } = await import("@/lib/whatsapp/credentials.server");
+      const { reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
+      await Promise.all(offline.map(async (row) => {
+        const credentials = await loadMegaCredentials(row.id);
+        if (credentials && await reviveIfConnected(credentials).catch(() => false)) {
+          row.status = "CONNECTED";
+        }
+      }));
+    }
+
     return (rows ?? []).map((row) => {
       const company = row.company as { name: string } | null;
       const profile = row.profile as { full_name: string | null; email: string | null } | null;
@@ -268,6 +284,13 @@ export const updateInstanceCredentials = createServerFn({ method: "POST" })
       })
       .eq("connection_id", data.connectionId);
     if (error) throw new Error(error.message);
+    // Consulta fresca: o cache anterior pertence às credenciais substituídas.
+    const { loadMegaCredentials } = await import("@/lib/whatsapp/credentials.server");
+    const { confirmInstanceConnected, reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
+    const credentials = await loadMegaCredentials(data.connectionId);
+    if (credentials && await confirmInstanceConnected(credentials).catch(() => false)) {
+      await reviveIfConnected(credentials);
+    }
     return { ok: true };
   });
 
