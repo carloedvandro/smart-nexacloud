@@ -26,3 +26,4 @@
 ## Status da instância MEGA
 
 - Never mark an instance LOGGED_OUT from a single "Instance not logged in" response; confirm via the live status endpoint first, retry sends once, and revive to CONNECTED when an inbound message arrives — MEGA returns that error transiently while the number is still connected.
+- Platform instance lists recover stale offline states through live MEGA confirmation; credential updates bypass prior status caches before recovery so saving a token never implies connectivity.
