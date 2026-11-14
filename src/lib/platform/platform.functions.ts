@@ -187,19 +187,16 @@ export const listPlatformInstances = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     const withCreds = new Set((creds ?? []).map((row) => row.connection_id));
 
-    // O painel da plataforma também precisa recuperar status antigos após
-    // corrigir as credenciais; nunca presumir conexão só por salvar o token.
+    // Um webhook válido não significa WhatsApp conectado. Sincroniza também
+    // estados desconectados para não conservar um ERROR de credencial antiga.
     const offline = (rows ?? []).filter(
       (row) => withCreds.has(row.id) && ["ERROR", "LOGGED_OUT", "DISCONNECTED"].includes(row.status),
     );
     if (offline.length) {
-      const { loadMegaCredentials } = await import("@/lib/whatsapp/credentials.server");
-      const { reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
+      const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
       await Promise.all(offline.map(async (row) => {
-        const credentials = await loadMegaCredentials(row.id);
-        if (credentials && await reviveIfConnected(credentials).catch(() => false)) {
-          row.status = "CONNECTED";
-        }
+        const current = await syncInstanceStatus(row.id).catch(() => null);
+        if (current) row.status = current.status;
       }));
     }
 

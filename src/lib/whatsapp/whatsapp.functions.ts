@@ -39,21 +39,18 @@ export const listWhatsAppInstances = createServerFn({ method: "GET" })
       : { data: [] as { connection_id: string }[] };
     const withCreds = new Set((creds ?? []).map((row) => row.connection_id));
 
-    // Quedas de poucos segundos da MEGA podem deixar a instância marcada como
-    // caída. Ao abrir o painel, conferimos na MEGA e corrigimos na hora.
+    // Corrige tanto conexões recuperadas quanto um ERROR antigo de token:
+    // uma instância desconectada deve aparecer desconectada, não como erro.
     const offline = (data ?? []).filter(
       (row) =>
         withCreds.has(row.id) && ["LOGGED_OUT", "ERROR", "DISCONNECTED"].includes(String(row.status)),
     );
     if (offline.length) {
-      const { loadMegaCredentials } = await import("@/lib/whatsapp/credentials.server");
-      const { reviveIfConnected } = await import("@/lib/whatsapp/mega.server");
+      const { syncInstanceStatus } = await import("@/lib/whatsapp/actions.server");
       await Promise.all(
         offline.map(async (row) => {
-          const megaCreds = await loadMegaCredentials(row.id);
-          if (megaCreds && (await reviveIfConnected(megaCreds).catch(() => false))) {
-            row.status = "CONNECTED";
-          }
+          const current = await syncInstanceStatus(row.id).catch(() => null);
+          if (current) row.status = current.status;
         }),
       );
     }

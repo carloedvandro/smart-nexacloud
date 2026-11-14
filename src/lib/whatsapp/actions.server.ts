@@ -11,6 +11,7 @@ import {
   extractWebhookUrl,
 } from "@/lib/whatsapp/mega.server";
 import { WhatsAppIdentifierService } from "@/lib/whatsapp/jid";
+import { readMegaInstanceStatus } from "@/lib/whatsapp/instance-status";
 
 export type InstanceStateResult = {
   status: "AVAILABLE" | "CONNECTING" | "CONNECTED" | "DISCONNECTED" | "LOGGED_OUT" | "ERROR" | "BLOCKED";
