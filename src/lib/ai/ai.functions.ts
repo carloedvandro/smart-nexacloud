@@ -276,3 +276,42 @@ export const testAiReply = createServerFn({ method: "POST" })
     });
     return { status: result.status, reason: result.reason ?? "" };
   });
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<(script|style|noscript|svg|iframe)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/section|\/article)[^>]*>/gi, "\n")
+    .replace(/<(td|th)[^>]*>/gi, " | ")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/[ \t]+/g, " ")
+    .split("\n").map((l) => l.trim()).filter(Boolean).join("\n");
+}
+
+export const fetchWebsiteText = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { url: string }) => {
+    let u: URL;
+    try { u = new URL(data.url.trim().match(/^https?:\/\//i) ? data.url.trim() : `https://${data.url.trim()}`); }
+    catch { throw new Error("Link inválido."); }
+    if (!/^https?:$/.test(u.protocol)) throw new Error("Use um link http ou https.");
+    if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(u.hostname)) throw new Error("Link não permitido.");
+    return { url: u.toString() };
+  })
+  .handler(async ({ data }) => {
+    const res = await fetch(data.url, {
+      headers: { "User-Agent": "Mozilla/5.0 (NexaAtende)", Accept: "text/html,text/plain" },
+      redirect: "follow",
+    }).catch(() => null);
+    if (!res) throw new Error("Não consegui acessar o site.");
+    if (!res.ok) throw new Error(`O site respondeu com erro ${res.status}.`);
+    const html = (await res.text()).slice(0, 3_000_000);
+    const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() ?? "";
+    const text = htmlToText(html).slice(0, 60_000);
+    if (text.length < 40) throw new Error("O site não tem texto legível nesta página (pode ser montado só no navegador).");
+    return { title: htmlToText(title), text, url: data.url };
+  });

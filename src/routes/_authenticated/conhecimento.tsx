@@ -3,7 +3,7 @@ import { AdminOnly } from "@/components/nexa/admin-only";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { Bot, FileUp, Pencil, Plus, Trash2 } from "lucide-react";
+import { Bot, FileUp, Globe, Pencil, Plus, Trash2 } from "lucide-react";
 import { extractFileText, KNOWLEDGE_FILE_ACCEPT } from "@/lib/ai/extract-file-text";
 import { toast } from "sonner";
 
@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import {
   deleteKnowledge,
+  fetchWebsiteText,
   getAiConfig,
   getKnowledgeScope,
   listKnowledge,
@@ -89,6 +90,28 @@ function ConhecimentoPage() {
   const [editing, setEditing] = useState<KnowledgeItem | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [siteUrl, setSiteUrl] = useState("");
+  const readSite = useServerFn(fetchWebsiteText);
+
+  async function importSite(base: KnowledgeItem) {
+    if (!siteUrl.trim()) return;
+    setImporting(true);
+    try {
+      const r = await readSite({ data: { url: siteUrl } });
+      const text = `Fonte: ${r.url}\n${r.text}`;
+      setEditing({
+        ...base,
+        title: base.title || r.title || r.url,
+        content: base.content ? `${base.content}\n\n${text}` : text,
+      });
+      setSiteUrl("");
+      toast.success("Conteúdo do site carregado. Revise e clique em Salvar.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não consegui ler o site.");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   async function importFile(file: File, base: KnowledgeItem) {
     setImporting(true);
@@ -427,8 +450,22 @@ function ConhecimentoPage() {
                     </label>
                   </Button>
                 </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Ou cole o link do site (ex.: www.apsp.com.br/planos)"
+                    value={siteUrl}
+                    onChange={(e) => setSiteUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); void importSite(editing); }
+                    }}
+                  />
+                  <Button type="button" variant="outline" size="sm" className="h-10 shrink-0" disabled={importing || !siteUrl.trim()} onClick={() => void importSite(editing)}>
+                    <Globe className="mr-1.5 h-4 w-4" />
+                    Ler site
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Aceita PDF, Word (.docx), Excel (.xlsx/.xls), CSV e TXT. O texto entra aqui para você revisar antes de salvar.
+                  Aceita PDF, Word (.docx), Excel (.xlsx/.xls), CSV, TXT ou link de site (uma página por vez). O texto entra aqui para você revisar antes de salvar.
                 </p>
                 <Textarea
                   rows={12}

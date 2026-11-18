@@ -1,0 +1,2 @@
+- [x] Conhecimento IA: importar PDF/Word/Excel/CSV/TXT
+- [x] Conhecimento IA: importar conteúdo a partir do link do site
