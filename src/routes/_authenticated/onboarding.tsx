@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 import { NexaLogo } from "@/components/nexa/logo";
@@ -22,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
 });
 
 function OnboardingPage() {
-  const { profile, loading, profileLoaded, refresh } = useAuth();
+  const { profile, loading, profileLoaded, refresh, signOut } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -50,6 +51,11 @@ function OnboardingPage() {
     toast.success("Cadastro enviado. Aguarde a aprovação do administrador do sistema.");
     void navigate({ to: "/aguardando-aprovacao", replace: true });
 
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    void navigate({ to: "/auth", replace: true });
   }
 
   if (loading || !profileLoaded || profile?.company_id) {
@@ -91,6 +97,9 @@ function OnboardingPage() {
                 Criar empresa
               </Button>
             </form>
+            <Button type="button" variant="outline" className="mt-4 w-full" onClick={handleSignOut}>
+              <LogOut className="size-4" /> Sair e usar outra conta
+            </Button>
           </CardContent>
         </Card>
       </div>
