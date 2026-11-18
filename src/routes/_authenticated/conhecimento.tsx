@@ -3,7 +3,8 @@ import { AdminOnly } from "@/components/nexa/admin-only";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { Bot, Pencil, Plus, Trash2 } from "lucide-react";
+import { Bot, FileUp, Pencil, Plus, Trash2 } from "lucide-react";
+import { extractFileText, KNOWLEDGE_FILE_ACCEPT } from "@/lib/ai/extract-file-text";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/nexa/app-shell";
@@ -87,6 +88,25 @@ function ConhecimentoPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<KnowledgeItem | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  async function importFile(file: File, base: KnowledgeItem) {
+    setImporting(true);
+    try {
+      const text = await extractFileText(file);
+      if (!text) throw new Error("Não encontrei texto neste arquivo.");
+      setEditing({
+        ...base,
+        title: base.title || file.name.replace(/\.[^.]+$/, ""),
+        content: base.content ? `${base.content}\n\n${text}` : text,
+      });
+      toast.success("Texto do arquivo carregado. Revise e clique em Salvar.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não consegui ler o arquivo.");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const fetchList = useServerFn(listKnowledge);
   const fetchConfig = useServerFn(getAiConfig);
@@ -387,7 +407,29 @@ function ConhecimentoPage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label>Conteúdo</Label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label>Conteúdo</Label>
+                  <Button asChild variant="outline" size="sm" disabled={importing}>
+                    <label className="cursor-pointer">
+                      <FileUp className="mr-1.5 h-4 w-4" />
+                      {importing ? "Lendo arquivo..." : "Importar arquivo"}
+                      <input
+                        type="file"
+                        className="sr-only"
+                        accept={KNOWLEDGE_FILE_ACCEPT}
+                        disabled={importing}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = "";
+                          if (f) void importFile(f, editing);
+                        }}
+                      />
+                    </label>
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Aceita PDF, Word (.docx), Excel (.xlsx/.xls), CSV e TXT. O texto entra aqui para você revisar antes de salvar.
+                </p>
                 <Textarea
                   rows={12}
                   value={editing.content}
